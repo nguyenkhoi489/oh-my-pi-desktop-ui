@@ -1,4 +1,4 @@
-import { WorkspaceFile, FileDiffItem, ChatMessage, ArtifactDocument } from '../types';
+import type { WorkspaceFile, FileDiffItem, ChatMessage, ArtifactDocument, OmpUiRequest } from '../types/index.ts';
 
 export const DEMO_WORKSPACE_FILES: WorkspaceFile[] = [
   {
@@ -364,3 +364,27 @@ This project uses **oh-my-pi** (OMP) as a headless RPC engine wired directly int
 ];
 
 export const DEMO_ARTIFACT: ArtifactDocument = DEMO_ARTIFACTS[0];
+
+export const DEMO_TOOL_APPROVAL_REQUEST: OmpUiRequest = {
+  id: 'ui-demo-approval',
+  method: 'select',
+  title: 'Cho phép thực thi lệnh bash: "npm run build"',
+  message: 'Lệnh này sẽ biên dịch toàn bộ dự án sang thư mục dist/.',
+  options: ['Approve', 'Deny'],
+  isToolApproval: true,
+  timeout: 30000,
+};
+
+export const DEMO_GENERIC_SELECT_REQUEST: OmpUiRequest = {
+  id: 'ui-demo-select',
+  method: 'select',
+  title: 'Chọn chiến lược merge cho branch hiện tại',
+  message: 'Vui lòng chọn một tùy chọn bên dưới để tiếp tục:',
+  options: ['Create a merge commit', 'Squash and merge', 'Rebase and merge'],
+  optionDetails: [
+    { label: 'Create a merge commit', description: 'Tất cả commit từ branch sẽ được giữ lại' },
+    { label: 'Squash and merge', description: 'Gộp tất cả commit thành 1 commit duy nhất' },
+    { label: 'Rebase and merge', description: 'Thêm tuần tự từng commit vào main' },
+  ],
+  isToolApproval: false,
+};

@@ -165,6 +165,9 @@ export function useOmpRpc() {
         if (res.state.model) {
           setSelectedModel(res.state.model);
         }
+        if (res.state.thinkingLevel !== undefined && res.state.thinkingLevel !== null) {
+          setThinkingLevel(res.state.thinkingLevel as OmpThinkingLevel);
+        }
         if (res.state.approvalMode !== undefined) {
           setApprovalMode(res.state.approvalMode);
         }
@@ -210,11 +213,15 @@ export function useOmpRpc() {
 
   const changeThinkingLevel = useCallback(
     async (level: OmpThinkingLevel): Promise<boolean> => {
+      setThinkingLevel(level);
       if (window.electronAPI) {
         try {
+          if (window.electronAPI.setSettings) {
+            window.electronAPI.setSettings({ defaultThinkingLevel: level }).catch(() => {});
+          }
           const res = await window.electronAPI.setThinkingLevel(level);
           if (res.success) {
-            setThinkingLevel(level);
+            await refreshEngineState();
             return true;
           }
         } catch (err) {
@@ -222,11 +229,10 @@ export function useOmpRpc() {
         }
         return false;
       } else {
-        setThinkingLevel(level);
         return true;
       }
     },
-    []
+    [refreshEngineState]
   );
 
   const refreshSessions = useCallback(async (): Promise<OmpSessionInfo[]> => {
@@ -501,6 +507,16 @@ export function useOmpRpc() {
   useEffect(() => {
     checkInstallation();
   }, [checkInstallation]);
+  // Load initial thinking level from persisted settings
+  useEffect(() => {
+    if (window.electronAPI?.getSettings) {
+      window.electronAPI.getSettings().then((s) => {
+        if (s?.defaultThinkingLevel) {
+          setThinkingLevel(s.defaultThinkingLevel);
+        }
+      }).catch(() => {});
+    }
+  }, []);
 
   // Load models, engine state, and sessions when installed
   useEffect(() => {

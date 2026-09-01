@@ -285,6 +285,29 @@ export function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeDiff, acceptDiff]);
+  const isCurrentToolApproval = activeUiRequest
+    ? activeUiRequest.isToolApproval ||
+      (activeUiRequest.method === 'select' &&
+        Array.isArray(activeUiRequest.options) &&
+        activeUiRequest.options.length === 2 &&
+        activeUiRequest.options.includes('Approve') &&
+        activeUiRequest.options.includes('Deny'))
+    : false;
+
+  const handleApproveTool = useCallback(
+    (id: string) => {
+      respondUiSelect(id, 'Approve');
+    },
+    [respondUiSelect]
+  );
+
+  const handleDenyTool = useCallback(
+    (id: string) => {
+      respondUiSelect(id, 'Deny');
+    },
+    [respondUiSelect]
+  );
+
 
   return (
     <div className="h-screen w-screen flex flex-col bg-background text-slate-900 dark:text-zinc-100 overflow-hidden font-sans">
@@ -378,6 +401,10 @@ export function App() {
               engineWidgets={engineWidgets}
               workspaceFiles={files}
               availableCommands={availableCommands}
+              pendingToolApproval={isCurrentToolApproval ? activeUiRequest : null}
+              toolApprovalQueueLength={uiRequestQueue.length}
+              onApproveTool={handleApproveTool}
+              onDenyTool={handleDenyTool}
               onSendMessage={sendMessage}
               onBranchSession={branchFromMessage}
               onCollapsePanel={collapseRightSidebar}
@@ -392,10 +419,11 @@ export function App() {
         isOpen={isOmnibarOpen}
         onClose={() => setIsOmnibarOpen(false)}
         onSubmit={(prompt) => sendMessage(prompt)}
+        availableCommands={availableCommands}
       />
 
       <PermissionModal
-        request={activeUiRequest}
+        request={!isCurrentToolApproval ? activeUiRequest : null}
         queueLength={uiRequestQueue.length}
         onRespondSelect={respondUiSelect}
         onRespondConfirm={respondUiConfirm}
@@ -424,6 +452,8 @@ export function App() {
         onSelectBinaryFile={browseBinaryFile}
         onSetCustomBinaryPath={setCustomPath}
         availableModels={availableModels}
+        thinkingLevel={thinkingLevel}
+        onSelectThinkingLevel={changeThinkingLevel}
         onRestartEngine={handleRestartEngine}
         isEngineRunning={status !== 'idle'}
       />

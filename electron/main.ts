@@ -10,12 +10,14 @@ import {
   writeModelsConfig,
   fetchLoginProviders,
 } from './models-config.ts';
+import { AuthLoginManager, fetchAuthenticatedProviders } from './auth-login.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 let ompBridge: OmpBridge | null = null;
+const authLoginManager = new AuthLoginManager((url) => shell.openExternal(url));
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -53,6 +55,7 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    authLoginManager.dispose();
     if (ompBridge) {
       ompBridge.stopProcess();
     }
@@ -117,8 +120,13 @@ ipcMain.handle('settings:get', async () => {
 ipcMain.handle('settings:set', async (_, partial: Partial<AppSettings>) => {
   const store = getSettingsStore();
   const updated = store.set(partial);
-  if (ompBridge && ('customBinaryPath' in partial)) {
-    ompBridge.setCustomBinaryPath(updated.customBinaryPath);
+  if (ompBridge) {
+    if ('customBinaryPath' in partial) {
+      ompBridge.setCustomBinaryPath(updated.customBinaryPath);
+    }
+    if ('defaultThinkingLevel' in partial && partial.defaultThinkingLevel) {
+      ompBridge.setThinkingLevel(partial.defaultThinkingLevel).catch(() => {});
+    }
   }
   return updated;
 });
@@ -132,19 +140,47 @@ ipcMain.handle('omp:models-config-write', async (_, payload: { providers: any[] 
   return writeModelsConfig(payload?.providers || []);
 });
 
-ipcMain.handle('omp:login-providers', async () => {
-  let binaryPath: string | undefined;
+async function resolveOmpBinaryPath(): Promise<string | undefined> {
   if (ompBridge) {
     const installStatus = await ompBridge.checkInstallation();
     if (installStatus.installed && installStatus.binaryPath) {
-      binaryPath = installStatus.binaryPath;
+      return installStatus.binaryPath;
     }
   }
-  if (!binaryPath) {
-    const settingsStore = getSettingsStore();
-    binaryPath = settingsStore.get().customBinaryPath;
-  }
+  return getSettingsStore().get().customBinaryPath;
+}
+
+ipcMain.handle('omp:login-providers', async () => {
+  const binaryPath = await resolveOmpBinaryPath();
   return fetchLoginProviders(binaryPath);
+});
+
+// IPC Handlers: OAuth Login qua auth-broker
+ipcMain.handle('omp:auth-login-start', async (_, providerId: string) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  if (!binaryPath) {
+    return { success: false, error: 'Không tìm thấy file nhị phân omp để đăng nhập.' };
+  }
+  if (!mainWindow) {
+    return { success: false, error: 'Cửa sổ ứng dụng chưa sẵn sàng.' };
+  }
+  return authLoginManager.start(binaryPath, providerId, mainWindow);
+});
+
+ipcMain.handle('omp:auth-status', async () => {
+  const binaryPath = await resolveOmpBinaryPath();
+  if (!binaryPath) {
+    return { success: false, providers: [], error: 'Không tìm thấy file nhị phân omp.' };
+  }
+  return fetchAuthenticatedProviders(binaryPath);
+});
+
+ipcMain.handle('omp:auth-login-cancel', async () => {
+  return authLoginManager.cancel();
+});
+
+ipcMain.handle('omp:auth-login-input', async (_, text: string) => {
+  return authLoginManager.submitInput(String(text ?? ''));
 });
 
 // IPC Handlers: Model Catalog & Engine State (Phase 2 Additions)

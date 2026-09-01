@@ -17,6 +17,7 @@ import type {
   OmpSessionStats,
   OmpCommandInfo,
   AppSettings,
+  AuthLoginEvent,
 } from './types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -137,6 +138,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getLoginProviders: () =>
     ipcRenderer.invoke('omp:login-providers'),
+
+  // OAuth Login qua auth-broker
+  startAuthLogin: (providerId: string) =>
+    ipcRenderer.invoke('omp:auth-login-start', providerId),
+
+  cancelAuthLogin: () =>
+    ipcRenderer.invoke('omp:auth-login-cancel'),
+
+  getAuthStatus: () =>
+    ipcRenderer.invoke('omp:auth-status'),
+
+  sendAuthLoginInput: (text: string) =>
+    ipcRenderer.invoke('omp:auth-login-input', text),
+
+  onAuthLoginEvent: (callback: (event: AuthLoginEvent) => void) => {
+    const handler = (_: unknown, event: AuthLoginEvent) => callback(event);
+    ipcRenderer.on('omp:auth-login-event', handler);
+    return () => ipcRenderer.removeListener('omp:auth-login-event', handler);
+  },
 
   // IPC Event Listeners
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => {

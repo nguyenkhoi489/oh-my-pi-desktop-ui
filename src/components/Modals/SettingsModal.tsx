@@ -24,6 +24,10 @@ import {
   Boxes,
   Lock,
   Globe,
+  LogIn,
+  XCircle,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   ThemeMode,
@@ -34,8 +38,48 @@ import {
   AppSettings,
   CustomProviderConfig,
   CustomModelConfig,
+  CustomModelThinking,
+  CustomThinkingMode,
+  CustomProviderDiscoveryType,
+  OmpEffortLevel,
   LoginProviderItem,
+  AuthLoginEvent,
 } from '../../types';
+
+const EFFORT_LEVELS: OmpEffortLevel[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+const THINKING_MODE_OPTIONS: { id: CustomThinkingMode; label: string }[] = [
+  { id: 'effort', label: 'effort (OpenAI-style)' },
+  { id: 'budget', label: 'budget (token budget)' },
+  { id: 'google-level', label: 'google-level (Gemini)' },
+  { id: 'anthropic-adaptive', label: 'anthropic-adaptive' },
+  { id: 'anthropic-budget-effort', label: 'anthropic-budget-effort' },
+];
+
+const DISCOVERY_TYPE_OPTIONS: CustomProviderDiscoveryType[] = [
+  'ollama',
+  'llama.cpp',
+  'lm-studio',
+  'openai-models-list',
+  'proxy',
+  'litellm',
+];
+
+// Chuyển headers object <-> textarea dạng "Tên: Giá trị" mỗi dòng
+const headersToText = (headers?: Record<string, string>): string =>
+  headers ? Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join('\n') : '';
+
+const textToHeaders = (text: string): Record<string, string> | undefined => {
+  const headers: Record<string, string> = {};
+  for (const line of text.split('\n')) {
+    const idx = line.indexOf(':');
+    if (idx <= 0) continue;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (key && value) headers[key] = value;
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
+};
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -46,6 +90,8 @@ interface SettingsModalProps {
   onSelectBinaryFile?: () => Promise<string | null>;
   onSetCustomBinaryPath?: (path: string) => Promise<void | OmpInstallStatus>;
   availableModels: OmpModelInfo[];
+  thinkingLevel?: OmpThinkingLevel;
+  onSelectThinkingLevel?: (level: OmpThinkingLevel) => void;
   onRestartEngine?: () => Promise<void>;
   isEngineRunning?: boolean;
 }
@@ -117,6 +163,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSelectBinaryFile,
   onSetCustomBinaryPath,
   availableModels,
+  thinkingLevel,
+  onSelectThinkingLevel,
   onRestartEngine,
   isEngineRunning = false,
 }) => {
@@ -139,11 +187,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [configError, setConfigError] = useState<string | null>(null);
   const [loginProviders, setLoginProviders] = useState<LoginProviderItem[]>([]);
   const [loginSearchQuery, setLoginSearchQuery] = useState<string>('');
+  const [authLogin, setAuthLogin] = useState<AuthLoginEvent | null>(null);
+  const [authCodeInput, setAuthCodeInput] = useState<string>('');
   const [isEditingProvider, setIsEditingProvider] = useState<boolean>(false);
   const [editingProvider, setEditingProvider] = useState<CustomProviderConfig | null>(null);
   const [editingOriginalId, setEditingOriginalId] = useState<string | null>(null);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [modelsSaveSuccess, setModelsSaveSuccess] = useState<boolean>(false);
+  const [showApiKey, setShowApiKey] = useState<boolean>(false);
+  const [headersText, setHeadersText] = useState<string>('');
+  const [authedProviders, setAuthedProviders] = useState<string[]>([]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -199,17 +252,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, []);
 
+  // Trạng thái đã-đăng-nhập lấy từ `omp usage --json` (chạy nền, mất vài giây)
+  const refreshAuthStatus = useCallback(async () => {
+    try {
+      if (window.electronAPI?.getAuthStatus) {
+        const res = await window.electronAPI.getAuthStatus();
+        if (res.success && res.providers) {
+          setAuthedProviders(res.providers);
+        }
+      }
+    } catch (err) {
+      console.warn('[SettingsModal] Lỗi khi kiểm tra trạng thái đăng nhập:', err);
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       loadSettings();
       loadProvidersData();
+      refreshAuthStatus();
       setHasEngineChanged(false);
       setSaveStatus(null);
       setIsEditingProvider(false);
       setEditingProvider(null);
       setModelsSaveSuccess(false);
+      setShowApiKey(false);
     }
-  }, [isOpen, loadSettings, loadProvidersData]);
+  }, [isOpen, loadSettings, loadProvidersData, refreshAuthStatus]);
+
+  // Theo dõi tiến trình đăng nhập OAuth; hủy phiên dở dang khi đóng modal
+  useEffect(() => {
+    if (!isOpen || !window.electronAPI?.onAuthLoginEvent) return;
+    const unsubscribe = window.electronAPI.onAuthLoginEvent((event) => {
+      setAuthLogin((prev) =>
+        event.status === 'cancelled' && prev?.providerId !== event.providerId ? prev : event
+      );
+      if (event.status === 'success') {
+        refreshAuthStatus();
+      }
+    });
+    return () => {
+      unsubscribe();
+      window.electronAPI?.cancelAuthLogin?.();
+      setAuthLogin(null);
+      setAuthCodeInput('');
+    };
+  }, [isOpen, refreshAuthStatus]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -263,7 +351,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleThinkingLevelSelect = (level: OmpThinkingLevel) => {
     savePartial({ defaultThinkingLevel: level });
-    setHasEngineChanged(true);
+    if (onSelectThinkingLevel) {
+      onSelectThinkingLevel(level);
+    }
   };
 
   const handleApprovalModeSelect = (mode: OmpApprovalMode) => {
@@ -319,6 +409,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTimeout(() => setCopiedText(null), 2000);
   };
 
+  // Phân loại giá trị apiKey theo cách OMP resolve: !lệnh, tên env var, hoặc key literal
+  type ApiKeyKind = 'command' | 'env-ok' | 'env-missing' | 'literal';
+  const classifyApiKey = (cp: CustomProviderConfig): ApiKeyKind => {
+    const value = cp.apiKey || '';
+    if (value.startsWith('!')) return 'command';
+    if (cp.hasEnvVar) return 'env-ok';
+    if (/^[A-Z][A-Z0-9_]*$/.test(value)) return 'env-missing';
+    return 'literal';
+  };
+
+  const maskSecret = (value: string): string =>
+    value.length > 8 ? `${value.slice(0, 4)}••••••••` : '••••••••';
+
+  // OAuth Login Handlers
+  const isAuthLoginPending =
+    authLogin?.status === 'started' || authLogin?.status === 'awaiting-browser';
+
+  const handleStartAuthLogin = async (lp: LoginProviderItem) => {
+    if (!window.electronAPI?.startAuthLogin) {
+      handleCopyText(`omp\n/login`);
+      return;
+    }
+    setAuthCodeInput('');
+    setAuthLogin({ providerId: lp.id, status: 'started' });
+    const res = await window.electronAPI.startAuthLogin(lp.id);
+    if (!res.success) {
+      setAuthLogin({ providerId: lp.id, status: 'error', message: res.error });
+    }
+  };
+
+  const handleCancelAuthLogin = async () => {
+    await window.electronAPI?.cancelAuthLogin?.();
+    setAuthLogin(null);
+    setAuthCodeInput('');
+  };
+
+  const handleSubmitAuthCode = async () => {
+    if (!authCodeInput.trim() || !authLogin) return;
+    const res = await window.electronAPI?.sendAuthLoginInput?.(authCodeInput.trim());
+    if (res && !res.success) {
+      setAuthLogin({ ...authLogin, status: 'error', message: res.error });
+    }
+    setAuthCodeInput('');
+  };
+
   // Provider CRUD Handlers
   const handleAddNewProvider = () => {
     setEditingOriginalId(null);
@@ -331,6 +466,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       compat: { supportsUsageInStreaming: false },
       models: [{ id: '', name: '', contextWindow: 128000, maxTokens: 4096 }],
     });
+    setHeadersText('');
+    setShowApiKey(false);
     setIsEditingProvider(true);
   };
 
@@ -341,6 +478,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       compat: { ...(provider.compat || { supportsUsageInStreaming: false }) },
       models: provider.models ? provider.models.map((m) => ({ ...m })) : [],
     });
+    setHeadersText(headersToText(provider.headers));
+    setShowApiKey(false);
     setIsEditingProvider(true);
   };
 
@@ -366,10 +505,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const cleanModels: CustomModelConfig[] = (editingProvider.models || [])
       .filter((m) => m && m.id && m.id.trim())
       .map((m) => ({
+        ...m,
         id: m.id.trim(),
         name: m.name?.trim() || undefined,
         contextWindow: m.contextWindow ? Number(m.contextWindow) : undefined,
         maxTokens: m.maxTokens ? Number(m.maxTokens) : undefined,
+        thinking: m.thinking?.mode && m.thinking.efforts?.length ? m.thinking : undefined,
       }));
 
     const finalProvider: CustomProviderConfig = {
@@ -378,6 +519,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       baseUrl: cleanBaseUrl,
       api: editingProvider.api?.trim() || 'openai-completions',
       apiKey: cleanApiKey,
+      headers: textToHeaders(headersText),
       models: cleanModels.length > 0 ? cleanModels : undefined,
     };
 
@@ -445,6 +587,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       ...editingProvider,
       models: currentModels,
     });
+  };
+
+  // Bỏ trống giá -> xóa field; cost rỗng -> undefined để không ghi vào YAML
+  const handleUpdateModelCost = (
+    index: number,
+    key: 'input' | 'output' | 'cacheRead' | 'cacheWrite',
+    value: number | undefined
+  ) => {
+    if (!editingProvider) return;
+    const current = editingProvider.models?.[index];
+    if (!current) return;
+    const cost = { ...(current.cost || {}) };
+    if (value === undefined || isNaN(value)) {
+      delete cost[key];
+    } else {
+      cost[key] = value;
+    }
+    handleUpdateModelRow(index, 'cost', Object.keys(cost).length > 0 ? cost : undefined);
+  };
+
+  // defaultLevel phải nằm trong danh sách efforts đã chọn
+  const handleUpdateModelThinking = (index: number, patch: Partial<CustomModelThinking> | undefined) => {
+    if (!editingProvider) return;
+    const current = editingProvider.models?.[index];
+    if (!current) return;
+    if (patch === undefined) {
+      handleUpdateModelRow(index, 'thinking', undefined);
+      return;
+    }
+    const merged: CustomModelThinking = { mode: 'effort', ...(current.thinking || {}), ...patch };
+    if (merged.defaultLevel && !(merged.efforts || []).includes(merged.defaultLevel)) {
+      merged.defaultLevel = undefined;
+    }
+    handleUpdateModelRow(index, 'thinking', merged);
   };
 
   // Group models by provider for Available Models
@@ -695,7 +871,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {THINKING_LEVELS.map((tl) => {
-                    const isSelected = (settings.defaultThinkingLevel || 'off') === tl.id;
+                    const isSelected = (settings.defaultThinkingLevel || thinkingLevel || 'off') === tl.id;
                     return (
                       <button
                         key={tl.id}
@@ -917,17 +1093,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                       <div>
                         <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-300 block mb-1">
-                          Tên biến môi trường API Key (Env Var):
+                          API Key:
                         </label>
-                        <input
-                          type="text"
-                          value={editingProvider.apiKey || ''}
-                          onChange={(e) => setEditingProvider({ ...editingProvider, apiKey: e.target.value })}
-                          placeholder="Ví dụ: LMSTUDIO_API_KEY (không nhập raw secret)"
-                          className="w-full px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
-                        />
+                        <div className="relative">
+                          <input
+                            type={showApiKey ? 'text' : 'password'}
+                            value={editingProvider.apiKey || ''}
+                            onChange={(e) => setEditingProvider({ ...editingProvider, apiKey: e.target.value })}
+                            placeholder="Dán API key trực tiếp (hoặc tên env var / !lệnh)"
+                            autoComplete="off"
+                            className="w-full pl-3 pr-9 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"
+                            title={showApiKey ? 'Ẩn key' : 'Hiện key'}
+                          >
+                            {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
                         <span className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5 block">
-                          Tên biến trong process.env, app không bao giờ chạm giá trị key.
+                          OMP hỗ trợ cả 3 dạng: key literal (lưu vào models.yml), tên biến môi trường (vd: OPENAI_API_KEY), hoặc lệnh shell (vd: !op read ...).
                         </span>
                       </div>
                     </div>
@@ -959,6 +1146,89 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </label>
                     </div>
 
+                    <div className="grid grid-cols-3 gap-3 pt-1">
+                      <div>
+                        <label className="text-xs font-medium text-slate-700 dark:text-zinc-300 block mb-1">
+                          Chế độ xác thực
+                        </label>
+                        <select
+                          value={editingProvider.auth || ''}
+                          onChange={(e) =>
+                            setEditingProvider({
+                              ...editingProvider,
+                              auth: e.target.value === '' ? undefined : (e.target.value as 'apiKey' | 'none' | 'oauth'),
+                            })
+                          }
+                          className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
+                        >
+                          <option value="">API Key (mặc định)</option>
+                          <option value="none">Không cần xác thực (none)</option>
+                          <option value="oauth">OAuth</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium text-slate-700 dark:text-zinc-300 block mb-1">
+                          Tự phát hiện model (discovery)
+                        </label>
+                        <select
+                          value={editingProvider.discovery?.type || ''}
+                          onChange={(e) =>
+                            setEditingProvider({
+                              ...editingProvider,
+                              discovery: e.target.value === ''
+                                ? undefined
+                                : { ...editingProvider.discovery, type: e.target.value as CustomProviderDiscoveryType },
+                            })
+                          }
+                          className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
+                        >
+                          <option value="">Tắt</option>
+                          {DISCOVERY_TYPE_OPTIONS.map((dt) => (
+                            <option key={dt} value={dt}>{dt}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium text-slate-700 dark:text-zinc-300 block mb-1">
+                          Discovery timeout (ms)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          disabled={!editingProvider.discovery?.type}
+                          value={editingProvider.discovery?.timeoutMs ?? ''}
+                          onChange={(e) => {
+                            if (!editingProvider.discovery?.type) return;
+                            const num = e.target.value === '' ? undefined : Number(e.target.value);
+                            setEditingProvider({
+                              ...editingProvider,
+                              discovery: {
+                                ...editingProvider.discovery,
+                                timeoutMs: num && num > 0 ? num : undefined,
+                              },
+                            });
+                          }}
+                          placeholder="Mặc định OMP"
+                          className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent disabled:opacity-40"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-slate-700 dark:text-zinc-300 block mb-1">
+                        HTTP Headers tùy chỉnh
+                      </label>
+                      <textarea
+                        value={headersText}
+                        onChange={(e) => setHeadersText(e.target.value)}
+                        placeholder={'Mỗi dòng một header, dạng Tên: Giá trị\nX-Api-Version: 2024-01'}
+                        rows={2}
+                        className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent resize-y"
+                      />
+                    </div>
+
                     {/* Danh sách Models của Provider này */}
                     <div className="space-y-2 border-t border-border pt-3">
                       <div className="flex items-center justify-between">
@@ -977,43 +1247,197 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                       <div className="space-y-2">
                         {(editingProvider.models || []).map((m, idx) => (
-                          <div key={idx} className="flex items-center gap-2 bg-surface-highlight/60 p-2 rounded-lg border border-border">
-                            <input
-                              type="text"
-                              value={m.id}
-                              onChange={(e) => handleUpdateModelRow(idx, 'id', e.target.value)}
-                              placeholder="Model ID (bắt buộc, vd: gemini-3.7-flash)"
-                              className="flex-2 px-2.5 py-1 bg-surface border border-border rounded text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
-                            />
-                            <input
-                              type="text"
-                              value={m.name || ''}
-                              onChange={(e) => handleUpdateModelRow(idx, 'name', e.target.value)}
-                              placeholder="Tên hiển thị (vd: Gemini 3.7)"
-                              className="flex-2 px-2.5 py-1 bg-surface border border-border rounded text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
-                            />
-                            <input
-                              type="number"
-                              value={m.contextWindow || ''}
-                              onChange={(e) => handleUpdateModelRow(idx, 'contextWindow', e.target.value ? Number(e.target.value) : undefined)}
-                              placeholder="Context (vd: 300000)"
-                              className="w-24 px-2 py-1 bg-surface border border-border rounded text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
-                            />
-                            <input
-                              type="number"
-                              value={m.maxTokens || ''}
-                              onChange={(e) => handleUpdateModelRow(idx, 'maxTokens', e.target.value ? Number(e.target.value) : undefined)}
-                              placeholder="Max Tokens"
-                              className="w-24 px-2 py-1 bg-surface border border-border rounded text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveModelRow(idx)}
-                              className="p-1 text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-                              title="Xóa model này"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                          <div key={idx} className="bg-surface-highlight/60 p-2 rounded-lg border border-border space-y-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={m.id}
+                                onChange={(e) => handleUpdateModelRow(idx, 'id', e.target.value)}
+                                placeholder="Model ID (bắt buộc, vd: gemini-3.7-flash)"
+                                className="flex-2 px-2.5 py-1 bg-surface border border-border rounded text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
+                              />
+                              <input
+                                type="text"
+                                value={m.name || ''}
+                                onChange={(e) => handleUpdateModelRow(idx, 'name', e.target.value)}
+                                placeholder="Tên hiển thị (vd: Gemini 3.7)"
+                                className="flex-2 px-2.5 py-1 bg-surface border border-border rounded text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
+                              />
+                              <input
+                                type="number"
+                                value={m.contextWindow || ''}
+                                onChange={(e) => handleUpdateModelRow(idx, 'contextWindow', e.target.value ? Number(e.target.value) : undefined)}
+                                placeholder="Context (vd: 300000)"
+                                className="w-24 px-2 py-1 bg-surface border border-border rounded text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
+                              />
+                              <input
+                                type="number"
+                                value={m.maxTokens || ''}
+                                onChange={(e) => handleUpdateModelRow(idx, 'maxTokens', e.target.value ? Number(e.target.value) : undefined)}
+                                placeholder="Max Tokens"
+                                className="w-24 px-2 py-1 bg-surface border border-border rounded text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveModelRow(idx)}
+                                className="p-1 text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+                                title="Xóa model này"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-4 flex-wrap pl-0.5">
+                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title="Model nhận được ảnh đầu vào (vision)">
+                                <input
+                                  type="checkbox"
+                                  checked={m.input?.includes('image') === true}
+                                  onChange={(e) =>
+                                    handleUpdateModelRow(idx, 'input', e.target.checked ? ['text', 'image'] : undefined)
+                                  }
+                                  className="rounded text-codex-accent focus:ring-codex-accent"
+                                />
+                                <span>Image input</span>
+                              </label>
+
+                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title="Model có reasoning/thinking block">
+                                <input
+                                  type="checkbox"
+                                  checked={m.reasoning === true}
+                                  onChange={(e) =>
+                                    handleUpdateModelRow(idx, 'reasoning', e.target.checked ? true : undefined)
+                                  }
+                                  className="rounded text-codex-accent focus:ring-codex-accent"
+                                />
+                                <span>Reasoning</span>
+                              </label>
+
+                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title="Bỏ chọn nếu model không hỗ trợ tool calling">
+                                <input
+                                  type="checkbox"
+                                  checked={m.supportsTools !== false}
+                                  onChange={(e) =>
+                                    handleUpdateModelRow(idx, 'supportsTools', e.target.checked ? undefined : false)
+                                  }
+                                  className="rounded text-codex-accent focus:ring-codex-accent"
+                                />
+                                <span>Tool calling</span>
+                              </label>
+
+                              <div className="flex items-center gap-1.5 ml-auto" title="Giá USD trên 1 triệu token (để trống nếu miễn phí)">
+                                <span className="text-[10px] text-slate-400 dark:text-zinc-500">$/1M:</span>
+                                {(['input', 'output', 'cacheRead', 'cacheWrite'] as const).map((costKey) => (
+                                  <input
+                                    key={costKey}
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={m.cost?.[costKey] ?? ''}
+                                    onChange={(e) =>
+                                      handleUpdateModelCost(idx, costKey, e.target.value === '' ? undefined : Number(e.target.value))
+                                    }
+                                    placeholder={{ input: 'In', output: 'Out', cacheRead: 'C.Read', cacheWrite: 'C.Write' }[costKey]}
+                                    className="w-16 px-1.5 py-0.5 bg-surface border border-border rounded text-[10.5px] font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
+                                  />
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-4 flex-wrap pl-0.5">
+                              <div className="flex items-center gap-1.5" title="Hệ số nhân premium usage của OMP (để trống = 1)">
+                                <span className="text-[10px] text-slate-400 dark:text-zinc-500">×Premium:</span>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  value={m.premiumMultiplier ?? ''}
+                                  onChange={(e) => {
+                                    const num = e.target.value === '' ? undefined : Number(e.target.value);
+                                    handleUpdateModelRow(idx, 'premiumMultiplier', num !== undefined && num > 0 ? num : undefined);
+                                  }}
+                                  placeholder="1"
+                                  className="w-14 px-1.5 py-0.5 bg-surface border border-border rounded text-[10.5px] font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
+                                />
+                              </div>
+
+                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title="Không gửi max_output_tokens trong request (một số API yêu cầu)">
+                                <input
+                                  type="checkbox"
+                                  checked={m.omitMaxOutputTokens === true}
+                                  onChange={(e) =>
+                                    handleUpdateModelRow(idx, 'omitMaxOutputTokens', e.target.checked ? true : undefined)
+                                  }
+                                  className="rounded text-codex-accent focus:ring-codex-accent"
+                                />
+                                <span>Bỏ max_output_tokens</span>
+                              </label>
+
+                              <div className="flex items-center gap-1.5" title="Cấu hình mức thinking/reasoning cho model">
+                                <span className="text-[10px] text-slate-400 dark:text-zinc-500">Thinking:</span>
+                                <select
+                                  value={m.thinking?.mode || ''}
+                                  onChange={(e) =>
+                                    handleUpdateModelThinking(
+                                      idx,
+                                      e.target.value === ''
+                                        ? undefined
+                                        : { mode: e.target.value as CustomThinkingMode }
+                                    )
+                                  }
+                                  className="px-1.5 py-0.5 bg-surface border border-border rounded text-[10.5px] text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
+                                >
+                                  <option value="">Tắt</option>
+                                  {THINKING_MODE_OPTIONS.map((tm) => (
+                                    <option key={tm.id} value={tm.id}>{tm.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            {m.thinking?.mode && (
+                              <div className="flex items-center gap-3 flex-wrap pl-0.5">
+                                <span className="text-[10px] text-slate-400 dark:text-zinc-500">Efforts:</span>
+                                {EFFORT_LEVELS.map((lvl) => (
+                                  <label key={lvl} className="flex items-center gap-1 text-[10.5px] text-slate-600 dark:text-zinc-300 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={m.thinking?.efforts?.includes(lvl) === true}
+                                      onChange={(e) => {
+                                        const current = m.thinking?.efforts || [];
+                                        const next = e.target.checked
+                                          ? EFFORT_LEVELS.filter((l) => l === lvl || current.includes(l))
+                                          : current.filter((l) => l !== lvl);
+                                        handleUpdateModelThinking(idx, { efforts: next.length > 0 ? next : undefined });
+                                      }}
+                                      className="rounded text-codex-accent focus:ring-codex-accent"
+                                    />
+                                    <span>{lvl}</span>
+                                  </label>
+                                ))}
+
+                                <div className="flex items-center gap-1.5 ml-auto">
+                                  <span className="text-[10px] text-slate-400 dark:text-zinc-500">Mặc định:</span>
+                                  <select
+                                    value={m.thinking?.defaultLevel || ''}
+                                    onChange={(e) =>
+                                      handleUpdateModelThinking(idx, {
+                                        defaultLevel: e.target.value === '' ? undefined : (e.target.value as OmpEffortLevel),
+                                      })
+                                    }
+                                    className="px-1.5 py-0.5 bg-surface border border-border rounded text-[10.5px] text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
+                                  >
+                                    <option value="">—</option>
+                                    {(m.thinking?.efforts || []).map((lvl) => (
+                                      <option key={lvl} value={lvl}>{lvl}</option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {!(m.thinking?.efforts && m.thinking.efforts.length > 0) && (
+                                  <span className="text-[10px] text-amber-500">Chọn ít nhất 1 effort, nếu không thinking sẽ không được lưu.</span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ))}
                         {(!editingProvider.models || editingProvider.models.length === 0) && (
@@ -1092,14 +1516,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         {cp.apiKey ? (
                           <div className="flex items-center gap-1.5">
                             <KeyRound className="w-3.5 h-3.5 text-slate-400" />
-                            <span className="font-mono text-[11px] text-slate-700 dark:text-zinc-300">{cp.apiKey}:</span>
-                            {cp.hasEnvVar ? (
+                            <span className="font-mono text-[11px] text-slate-700 dark:text-zinc-300">
+                              {classifyApiKey(cp) === 'literal' ? maskSecret(cp.apiKey) : cp.apiKey}
+                            </span>
+                            {classifyApiKey(cp) === 'env-ok' && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                ✓ Đã có trong process.env
+                                ✓ Env var đã có trong process.env
                               </span>
-                            ) : (
+                            )}
+                            {classifyApiKey(cp) === 'env-missing' && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                                ⚠ Chưa đặt biến môi trường
+                                ⚠ Biến môi trường chưa được đặt
+                              </span>
+                            )}
+                            {classifyApiKey(cp) === 'literal' && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                ✓ Key lưu trong models.yml
+                              </span>
+                            )}
+                            {classifyApiKey(cp) === 'command' && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                                ⚡ Key lấy từ lệnh shell
                               </span>
                             )}
                           </div>
@@ -1206,7 +1643,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Dịch vụ Đăng nhập & OAuth ({loginProviders.length} dịch vụ)
                     </h3>
                     <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      OAuth login là giao thức TUI-only. Hãy copy lệnh và chạy trong Terminal để xác thực.
+                      Bấm "Đăng nhập" để mở trình duyệt và hoàn tất xác thực OAuth trực tiếp từ ứng dụng.
                     </p>
                   </div>
                 </div>
@@ -1216,7 +1653,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-600 dark:text-zinc-300 font-medium flex items-center gap-1.5">
                       <Terminal className="w-3.5 h-3.5 text-codex-accent" />
-                      Lệnh mở Terminal và đăng nhập:
+                      Cách khác: đăng nhập thủ công qua Terminal
                     </span>
                     <button
                       onClick={() => handleCopyText('omp')}
@@ -1240,6 +1677,77 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </p>
                 </div>
 
+                {/* Trạng thái phiên đăng nhập OAuth */}
+                {authLogin && (
+                  <div
+                    className={`p-3 rounded-xl border space-y-2 ${
+                      authLogin.status === 'success'
+                        ? 'bg-emerald-500/10 border-emerald-500/30'
+                        : authLogin.status === 'error'
+                          ? 'bg-red-500/10 border-red-500/30'
+                          : 'bg-surface border-border'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-zinc-300">
+                        {isAuthLoginPending && (
+                          <RotateCw className="w-3.5 h-3.5 animate-spin text-codex-accent" />
+                        )}
+                        {authLogin.status === 'success' && (
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        )}
+                        {authLogin.status === 'error' && (
+                          <XCircle className="w-3.5 h-3.5 text-red-500" />
+                        )}
+                        {authLogin.status === 'started' && `Đang khởi tạo đăng nhập "${authLogin.providerId}"...`}
+                        {authLogin.status === 'awaiting-browser' && `Đã mở trình duyệt — hoàn tất xác thực "${authLogin.providerId}" rồi quay lại đây.`}
+                        {authLogin.status === 'success' && `Đăng nhập "${authLogin.providerId}" thành công!`}
+                        {authLogin.status === 'error' && `Đăng nhập "${authLogin.providerId}" thất bại.`}
+                        {authLogin.status === 'cancelled' && `Đã hủy đăng nhập "${authLogin.providerId}".`}
+                      </span>
+                      {isAuthLoginPending ? (
+                        <button
+                          onClick={handleCancelAuthLogin}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-surface-highlight hover:bg-surface border border-border text-slate-600 dark:text-zinc-300 cursor-pointer"
+                        >
+                          Hủy
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setAuthLogin(null)}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200 cursor-pointer"
+                        >
+                          Đóng
+                        </button>
+                      )}
+                    </div>
+                    {authLogin.status === 'error' && authLogin.message && (
+                      <p className="text-[11px] text-red-600 dark:text-red-400 font-mono break-all">
+                        {authLogin.message}
+                      </p>
+                    )}
+                    {authLogin.status === 'awaiting-browser' && (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={authCodeInput}
+                          onChange={(e) => setAuthCodeInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSubmitAuthCode()}
+                          placeholder="Nếu trình duyệt không tự quay lại: dán redirect URL hoặc mã xác thực vào đây"
+                          className="flex-1 px-3 py-1.5 text-[11px] rounded-lg border border-border bg-panel text-slate-800 dark:text-zinc-200 outline-none font-mono focus:border-codex-accent"
+                        />
+                        <button
+                          onClick={handleSubmitAuthCode}
+                          disabled={!authCodeInput.trim()}
+                          className="px-3 py-1.5 text-[11px] font-semibold bg-surface-highlight hover:bg-surface text-slate-800 dark:text-zinc-200 rounded-lg border border-border disabled:opacity-40 cursor-pointer"
+                        >
+                          Gửi
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Tìm kiếm Login Providers */}
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -1259,17 +1767,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       key={lp.id}
                       className="px-3.5 py-2 flex items-center justify-between text-xs hover:bg-surface-highlight/50 transition-colors"
                     >
-                      <div>
-                        <div className="font-medium text-slate-800 dark:text-zinc-200">{lp.name}</div>
-                        <div className="text-[10px] font-mono text-slate-400 dark:text-zinc-500">{lp.id}</div>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <div className="font-medium text-slate-800 dark:text-zinc-200">{lp.name}</div>
+                          <div className="text-[10px] font-mono text-slate-400 dark:text-zinc-500">{lp.id}</div>
+                        </div>
+                        {authedProviders.includes(lp.id) && (
+                          <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-medium border border-green-500/30">
+                            ✓ Đã đăng nhập
+                          </span>
+                        )}
                       </div>
                       <button
-                        onClick={() => handleCopyText(`omp\n/login`)}
-                        className="px-2 py-1 bg-surface-highlight hover:bg-surface border border-border rounded text-[10.5px] font-medium text-slate-600 dark:text-zinc-300 flex items-center gap-1 cursor-pointer"
-                        title="Sao chép hướng dẫn đăng nhập"
+                        onClick={() => handleStartAuthLogin(lp)}
+                        disabled={isAuthLoginPending}
+                        className={`px-2 py-1 border rounded text-[10.5px] font-medium flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-default ${
+                          authLogin?.providerId === lp.id && isAuthLoginPending
+                            ? 'bg-codex-accent/10 border-codex-accent/40 text-codex-accent'
+                            : 'bg-surface-highlight hover:bg-surface border-border text-slate-600 dark:text-zinc-300'
+                        }`}
+                        title="Đăng nhập OAuth qua trình duyệt"
                       >
-                        <Terminal className="w-3 h-3" />
-                        <span>Đăng nhập</span>
+                        {authLogin?.providerId === lp.id && isAuthLoginPending ? (
+                          <RotateCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <LogIn className="w-3 h-3" />
+                        )}
+                        <span>
+                          {authLogin?.providerId === lp.id && isAuthLoginPending
+                            ? 'Đang chờ...'
+                            : authedProviders.includes(lp.id)
+                              ? 'Đăng nhập lại'
+                              : 'Đăng nhập'}
+                        </span>
                       </button>
                     </div>
                   ))}

@@ -273,6 +273,182 @@ try {
     delete process.env.TEST_MY_ENV_VAR_SET;
   }
 
+  // ----------------------------------------------------
+  // Test 8: Model capability fields (input/reasoning/supportsTools/cost) roundtrip
+  // ----------------------------------------------------
+  console.log('\n[Test 8] Model capability fields roundtrip');
+  {
+    const capabilityYaml = `providers:
+  cap-provider:
+    baseUrl: http://127.0.0.1:9000/v1
+    api: openai-completions
+    apiKey: sk-literal-key-for-test
+    models:
+      - id: vision-model
+        name: Vision Model
+        contextWindow: 200000
+        maxTokens: 8192
+        input:
+          - text
+          - image
+        reasoning: true
+        supportsTools: false
+        cost:
+          input: 1.25
+          output: 5
+          cacheRead: 0.31
+          cacheWrite: 1.5
+      - id: plain-model
+        input:
+          - bogus
+`;
+
+    const parsed = parseModelsYaml(capabilityYaml);
+    const capProv = parsed.find((p) => p.id === 'cap-provider');
+    const vision = capProv?.models?.find((m) => m.id === 'vision-model');
+    assert(
+      Array.isArray(vision?.input) && vision.input.includes('image') && vision.input.includes('text'),
+      'input modalities text+image parsed'
+    );
+    assert(vision?.reasoning === true, 'reasoning parsed');
+    assert(vision?.supportsTools === false, 'supportsTools=false parsed');
+    assert(
+      vision?.cost?.input === 1.25 && vision?.cost?.output === 5 && vision?.cost?.cacheRead === 0.31 && vision?.cost?.cacheWrite === 1.5,
+      'cost 4 fields parsed'
+    );
+
+    const plain = capProv?.models?.find((m) => m.id === 'plain-model');
+    assert(plain?.input === undefined, 'Invalid modality values filtered out -> undefined');
+
+    // apiKey literal đi qua parse/serialize nguyên vẹn (OMP nhận key literal trực tiếp)
+    assert(capProv?.apiKey === 'sk-literal-key-for-test', 'Literal apiKey preserved through parse');
+    assert(capProv?.hasEnvVar === false, 'Literal apiKey is not an env var');
+
+    const serialized = serializeModelsYaml(parsed);
+    const reparsed = parseModelsYaml(serialized);
+    const reVision = reparsed.find((p) => p.id === 'cap-provider')?.models?.find((m) => m.id === 'vision-model');
+    assert(
+      Array.isArray(reVision?.input) && reVision.input.length === 2,
+      'input modalities survive serialize/parse roundtrip'
+    );
+    assert(reVision?.reasoning === true && reVision?.supportsTools === false, 'reasoning/supportsTools survive roundtrip');
+    assert(reVision?.cost?.cacheWrite === 1.5, 'cost survives roundtrip');
+    assert(
+      reparsed.find((p) => p.id === 'cap-provider')?.apiKey === 'sk-literal-key-for-test',
+      'Literal apiKey survives serialize/parse roundtrip'
+    );
+
+    const rePlain = reparsed.find((p) => p.id === 'cap-provider')?.models?.find((m) => m.id === 'plain-model');
+    assert(
+      rePlain && rePlain.input === undefined && rePlain.cost === undefined,
+      'Unset capability fields stay omitted after roundtrip'
+    );
+  }
+
+  // ----------------------------------------------------
+  // Test 9: Advanced fields (auth/headers/discovery/thinking/premiumMultiplier/omitMaxOutputTokens)
+  // ----------------------------------------------------
+  console.log('\n[Test 9] Advanced provider/model fields roundtrip');
+  {
+    const advancedYaml = `providers:
+  adv-provider:
+    baseUrl: http://127.0.0.1:9100/v1
+    api: openai-completions
+    apiKey: ADV_KEY
+    auth: none
+    headers:
+      X-Api-Version: 2024-01
+      X-Tenant: acme
+    discovery:
+      type: openai-models-list
+      timeoutMs: 4000
+    models:
+      - id: adv-model
+        thinking:
+          mode: effort
+          efforts:
+            - low
+            - high
+            - bogus-level
+          defaultLevel: high
+        premiumMultiplier: 1.5
+        omitMaxOutputTokens: true
+      - id: legacy-model
+        thinking:
+          mode: budget
+          levels:
+            - medium
+      - id: broken-model
+        thinking:
+          mode: nonsense-mode
+          efforts:
+            - low
+        premiumMultiplier: -3
+        omitMaxOutputTokens: false
+`;
+
+    const parsed = parseModelsYaml(advancedYaml);
+    const adv = parsed.find((p) => p.id === 'adv-provider');
+    assert(adv?.auth === 'none', 'auth: none parsed');
+    assert(
+      adv?.headers?.['X-Api-Version'] === '2024-01' && adv?.headers?.['X-Tenant'] === 'acme',
+      'headers parsed'
+    );
+    assert(
+      adv?.discovery?.type === 'openai-models-list' && adv?.discovery?.timeoutMs === 4000,
+      'discovery type + timeoutMs parsed'
+    );
+
+    const advModel = adv?.models?.find((m) => m.id === 'adv-model');
+    assert(advModel?.thinking?.mode === 'effort', 'thinking mode parsed');
+    assert(
+      Array.isArray(advModel?.thinking?.efforts) &&
+        advModel.thinking.efforts.length === 2 &&
+        advModel.thinking.efforts.includes('low') &&
+        advModel.thinking.efforts.includes('high'),
+      'Invalid effort levels filtered, valid kept'
+    );
+    assert(advModel?.thinking?.defaultLevel === 'high', 'thinking defaultLevel parsed');
+    assert(advModel?.premiumMultiplier === 1.5, 'premiumMultiplier parsed');
+    assert(advModel?.omitMaxOutputTokens === true, 'omitMaxOutputTokens parsed');
+
+    const legacy = adv?.models?.find((m) => m.id === 'legacy-model');
+    assert(
+      legacy?.thinking?.mode === 'budget' && legacy?.thinking?.efforts?.includes('medium'),
+      'Legacy levels field accepted as efforts'
+    );
+
+    const broken = adv?.models?.find((m) => m.id === 'broken-model');
+    assert(broken?.thinking === undefined, 'Invalid thinking mode -> undefined');
+    assert(broken?.premiumMultiplier === undefined, 'Negative premiumMultiplier rejected');
+    assert(broken?.omitMaxOutputTokens === false, 'omitMaxOutputTokens=false preserved by parse');
+
+    const serialized = serializeModelsYaml(parsed);
+    assert(serialized.includes('auth: none'), 'auth serialized when non-default');
+    assert(!serialized.includes('nonsense-mode'), 'Invalid thinking mode not serialized');
+
+    const reparsed = parseModelsYaml(serialized);
+    const reAdv = reparsed.find((p) => p.id === 'adv-provider');
+    const reModel = reAdv?.models?.find((m) => m.id === 'adv-model');
+    assert(reAdv?.auth === 'none', 'auth survives roundtrip');
+    assert(reAdv?.headers?.['X-Tenant'] === 'acme', 'headers survive roundtrip');
+    assert(reAdv?.discovery?.timeoutMs === 4000, 'discovery survives roundtrip');
+    assert(
+      reModel?.thinking?.mode === 'effort' && reModel?.thinking?.defaultLevel === 'high',
+      'thinking survives roundtrip'
+    );
+    assert(
+      reModel?.premiumMultiplier === 1.5 && reModel?.omitMaxOutputTokens === true,
+      'premiumMultiplier/omitMaxOutputTokens survive roundtrip'
+    );
+
+    // Provider auth mặc định apiKey không được ghi ra YAML
+    const defaultAuthYaml = serializeModelsYaml([
+      { id: 'plain', baseUrl: 'http://x/v1', api: 'openai-completions', apiKey: 'K', hasEnvVar: false },
+    ]);
+    assert(!defaultAuthYaml.includes('auth:'), 'Default apiKey auth omitted from YAML');
+  }
+
   console.log('\n====================================================');
   console.log(`Provider Config Verification Complete: ${passed} passed, ${failed} failed.`);
   console.log('====================================================\n');

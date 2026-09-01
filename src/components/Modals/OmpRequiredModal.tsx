@@ -67,7 +67,7 @@ export const OmpRequiredModal: React.FC<OmpRequiredModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in select-none p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in select-none p-4">
       <div className="w-full max-w-xl bg-panel border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Modal Header */}
         <div className="p-6 bg-gradient-to-r from-amber-500/10 via-surface to-transparent border-b border-border flex items-start gap-4">

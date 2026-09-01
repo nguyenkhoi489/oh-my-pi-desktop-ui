@@ -16,6 +16,24 @@ Entry template:
 ```
 
 ---
+## 2026-09-02 — Phase 9: Modal & Omnibar Refinement
+
+- **State:** Phase 9 implemented and fully verified (all 27 verify suites in `npm run test` passed, 0 errors in renderer and electron tsc):
+  - Tool approval extracted into non-blocking `ToolApprovalCard` docked above composer with explicit ⌘↵ Approve and ⌘⌫ Deny shortcuts (no ESC dismissal path).
+  - PromptComposer disables message sending while tool approval is pending.
+  - `PermissionModal` modularized with `SelectView`, `ConfirmView`, `InputView`; `SelectView` supports keyboard navigation (↑/↓, Enter, 1–9 number keys).
+  - Fake countdown removed; truthful engine timeout countdown rendered only when positive timeout is provided by engine.
+  - Omnibar modal updated with real command/skill catalog via shared `useCommandCatalog` hook and keyboard navigation.
+  - Unified Z-index layering: `OmpRequiredModal` (z-[60]) > `PermissionModal` (z-[55]) > `OmnibarModal` (z-[50]).
+  - Added `scripts/verify-modal-ux.mjs` and `npm run test:modal-ux`.
+- **In-flight:** Phase 9 ready; Phase 10 (Live E2E Observability & Composer Verification) is next.
+- **Next:**
+  1. Execute Phase 10: Live E2E verification across all Phase 1–9 features.
+  2. Stage and commit changes.
+- **Refs:**
+  - `plans/260901-1954-engine-observability-session-control/phase-09-modal-omnibar-refinement.md`
+  - `plans/260901-1954-engine-observability-session-control/plan.md`
+
 
 ## 2026-09-02 — Composer & engine UX fix wave (uncommitted)
 

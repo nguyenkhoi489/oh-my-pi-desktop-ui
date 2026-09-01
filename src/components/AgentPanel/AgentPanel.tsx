@@ -9,11 +9,12 @@ import {
   OmpWidgetEntry,
   WorkspaceFile,
   OmpCommandInfo,
+  OmpUiRequest,
 } from '../../types';
 import { ChatHistory } from './ChatHistory';
 import { PromptComposer } from './PromptComposer';
+import { ToolApprovalCard } from './ToolApprovalCard';
 import { EngineStatusStrip } from '../Notifications/EngineStatusStrip';
-
 interface AgentPanelProps {
   messages: ChatMessage[];
   currentThinking: ThinkingBlock | null;
@@ -24,6 +25,10 @@ interface AgentPanelProps {
   engineWidgets?: OmpWidgetEntry[];
   workspaceFiles?: WorkspaceFile[];
   availableCommands?: OmpCommandInfo[];
+  pendingToolApproval?: OmpUiRequest | null;
+  toolApprovalQueueLength?: number;
+  onApproveTool?: (id: string) => void;
+  onDenyTool?: (id: string) => void;
   onSendMessage: (prompt: string, contextFiles?: string[]) => void;
   onBranchSession?: (entryId: string) => void;
   onCollapsePanel?: () => void;
@@ -40,6 +45,10 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   engineWidgets,
   workspaceFiles,
   availableCommands,
+  pendingToolApproval,
+  toolApprovalQueueLength = 1,
+  onApproveTool,
+  onDenyTool,
   onSendMessage,
   onBranchSession,
   onCollapsePanel,
@@ -92,12 +101,23 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
         widgets={engineWidgets}
       />
 
+      {/* Non-blocking Tool Approval Card */}
+      {pendingToolApproval && onApproveTool && onDenyTool && (
+        <ToolApprovalCard
+          request={pendingToolApproval}
+          queueLength={toolApprovalQueueLength}
+          onApprove={onApproveTool}
+          onDeny={onDenyTool}
+        />
+      )}
+
       {/* Docked Prompt Composer */}
       <PromptComposer
         onSendMessage={onSendMessage}
         status={status}
         workspaceFiles={workspaceFiles}
         availableCommands={availableCommands}
+        isToolApprovalPending={Boolean(pendingToolApproval)}
       />
     </div>
   );

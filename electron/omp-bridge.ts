@@ -193,6 +193,7 @@ export class OmpBridge {
   private engineStatuses: Map<string, string> = new Map();
   private engineWidgets: Map<string, { lines: string[]; placement?: string }> = new Map();
   private currentApprovalMode: OmpApprovalMode | undefined = undefined;
+  private currentThinkingLevel: OmpThinkingLevel = 'off';
   private availableCommands: OmpCommandInfo[] = [];
   private sessionName: string | undefined = undefined;
   private lastContextUsage: OmpContextUsage | null = null;
@@ -215,6 +216,9 @@ export class OmpBridge {
   constructor(window: BrowserWindow, settingsStore?: SettingsStore) {
     this.window = window;
     this.settingsStore = settingsStore;
+    if (this.settingsStore) {
+      this.currentThinkingLevel = this.settingsStore.get().defaultThinkingLevel || 'off';
+    }
     this.frameLogger = new RpcFrameLogger();
     this.framer = new NdjsonFramer({
       onRawLine: (line) => {
@@ -891,6 +895,7 @@ export class OmpBridge {
         level,
       });
       if (res.success) {
+        this.currentThinkingLevel = level;
         if (this.settingsStore) {
           this.settingsStore.set({ defaultThinkingLevel: level });
         }
@@ -930,6 +935,7 @@ export class OmpBridge {
             sessionName: res.data.sessionName,
           });
         }
+        res.data.thinkingLevel = this.currentThinkingLevel;
         res.data.approvalMode = this.currentApprovalMode;
         return { success: true, state: res.data };
       }

@@ -10,7 +10,8 @@ import {
 } from 'lucide-react';
 import { OmpAgentStatus, WorkspaceFile, OmpCommandInfo } from '../../types';
 import { DEMO_WORKSPACE_FILES } from '../../mock/demoData';
-import { CommandMenu, filterAndGroupCommands, DEMO_COMMANDS } from './CommandMenu';
+import { CommandMenu } from './CommandMenu';
+import { useCommandCatalog } from '../../hooks/useCommandCatalog';
 import {
   buildMessageWithFileMentions,
   findRemovedInlineAttachments,
@@ -24,8 +25,8 @@ interface PromptComposerProps {
   status: OmpAgentStatus;
   workspaceFiles?: WorkspaceFile[];
   availableCommands?: OmpCommandInfo[];
+  isToolApprovalPending?: boolean;
 }
-
 // Giới hạn số file hiển thị trong picker để tránh render hàng nghìn node
 const MAX_PICKER_FILES = 100;
 
@@ -34,6 +35,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   status,
   workspaceFiles,
   availableCommands,
+  isToolApprovalPending = false,
 }) => {
   const [input, setInput] = useState<string>('');
   const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
@@ -78,16 +80,10 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     [filteredFiles]
   );
 
-  const activeCommandsList = React.useMemo(() => {
-    return availableCommands && availableCommands.length > 0
-      ? availableCommands
-      : DEMO_COMMANDS;
-  }, [availableCommands]);
-
-  const { items: filteredCommands, groups: filteredCommandGroups } = React.useMemo(() => {
-    return filterAndGroupCommands(activeCommandsList, commandQuery);
-  }, [activeCommandsList, commandQuery]);
-
+  const { items: filteredCommands, groups: filteredCommandGroups } = useCommandCatalog({
+    availableCommands,
+    query: commandQuery,
+  });
   useEffect(() => {
     setSelectedIndex(0);
   }, [visibleFiles]);
@@ -216,8 +212,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
 
   const handleSend = () => {
     const finalMessage = buildMessageWithFileMentions(input, attachedFiles);
-    if (!finalMessage.trim() || status !== 'idle') return;
-
+    if (!finalMessage.trim() || status !== 'idle' || isToolApprovalPending) return;
     onSendMessage(finalMessage, attachedFiles);
     setInput('');
     setAttachedFiles([]);
@@ -511,11 +506,14 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
           value={input}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder="Yêu cầu OMP Agent xử lý code, gõ @file để đính kèm, hoặc / để mở lệnh..."
+          placeholder={
+            isToolApprovalPending
+              ? 'Vui lòng duyệt hoặc từ chối quyền thực thi công cụ trước...'
+              : 'Yêu cầu OMP Agent xử lý code, gõ @file để đính kèm, hoặc / để mở lệnh...'
+          }
           rows={3}
           className="w-full bg-transparent text-[13.5px] text-slate-900 dark:text-zinc-100 placeholder-slate-400 dark:placeholder-zinc-500 resize-none outline-none font-sans leading-relaxed"
         />
-
         {/* Toolbar Bottom */}
         <div className="flex items-center justify-between pt-2 border-t border-border/50 mt-1">
           <div className="flex items-center gap-2">
@@ -566,9 +564,9 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
             <button
               type="button"
               onClick={handleSend}
-              disabled={!input.trim() || status !== 'idle'}
+              disabled={!input.trim() || status !== 'idle' || isToolApprovalPending}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                input.trim() && status === 'idle'
+                input.trim() && status === 'idle' && !isToolApprovalPending
                   ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
                   : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 cursor-not-allowed'
               }`}

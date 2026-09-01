@@ -246,7 +246,7 @@ export interface OmpEngineState {
   sessionName?: string;
   autoCompactionEnabled?: boolean;
   approvalMode?: OmpApprovalMode;
-  queuedMessageCount?: number;
+  thinkingLevel?: OmpThinkingLevel;
   fastModeEnabled?: boolean;
   tokensPerSecond?: number | null;
   fastModeActive?: boolean;
@@ -267,11 +267,53 @@ export interface AppSettings {
   autoCompaction?: boolean;
 }
 
+export interface CustomModelCost {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}
+
+export type OmpEffortLevel = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export type CustomThinkingMode =
+  | 'effort'
+  | 'budget'
+  | 'google-level'
+  | 'anthropic-adaptive'
+  | 'anthropic-budget-effort';
+
+export interface CustomModelThinking {
+  mode: CustomThinkingMode;
+  efforts?: OmpEffortLevel[];
+  defaultLevel?: OmpEffortLevel;
+}
+
+export type CustomProviderDiscoveryType =
+  | 'ollama'
+  | 'llama.cpp'
+  | 'lm-studio'
+  | 'openai-models-list'
+  | 'proxy'
+  | 'litellm';
+
+export interface CustomProviderDiscovery {
+  type: CustomProviderDiscoveryType;
+  timeoutMs?: number;
+}
+
 export interface CustomModelConfig {
   id: string;
   name?: string;
   contextWindow?: number;
   maxTokens?: number;
+  input?: ('text' | 'image')[];
+  reasoning?: boolean;
+  supportsTools?: boolean;
+  cost?: CustomModelCost;
+  thinking?: CustomModelThinking;
+  premiumMultiplier?: number;
+  omitMaxOutputTokens?: boolean;
 }
 
 export interface CustomProviderConfig {
@@ -280,6 +322,9 @@ export interface CustomProviderConfig {
   api?: string;
   apiKey?: string;
   authHeader?: boolean;
+  auth?: 'apiKey' | 'none' | 'oauth';
+  headers?: Record<string, string>;
+  discovery?: CustomProviderDiscovery;
   compat?: {
     supportsUsageInStreaming?: boolean;
     [key: string]: unknown;
@@ -305,6 +350,13 @@ export interface ModelsConfigWriteResult {
 export interface LoginProviderItem {
   id: string;
   name: string;
+}
+
+export interface AuthLoginEvent {
+  providerId: string;
+  status: 'started' | 'awaiting-browser' | 'success' | 'error' | 'cancelled';
+  url?: string;
+  message?: string;
 }
 
 export interface ElectronAPI {
@@ -362,6 +414,11 @@ export interface ElectronAPI {
   getModelsConfig: () => Promise<ModelsConfigReadResult>;
   saveModelsConfig: (providers: CustomProviderConfig[]) => Promise<ModelsConfigWriteResult>;
   getLoginProviders: () => Promise<{ success: boolean; providers?: LoginProviderItem[]; error?: string }>;
+  startAuthLogin?: (providerId: string) => Promise<{ success: boolean; error?: string }>;
+  cancelAuthLogin?: () => Promise<{ success: boolean }>;
+  getAuthStatus?: () => Promise<{ success: boolean; providers?: string[]; error?: string }>;
+  sendAuthLoginInput?: (text: string) => Promise<{ success: boolean; error?: string }>;
+  onAuthLoginEvent?: (callback: (event: AuthLoginEvent) => void) => () => void;
   onOmpNotification: (callback: (notification: OmpNotification) => void) => () => void;
   onOmpEngineStatus: (callback: (statuses: OmpEngineStatusEntry[]) => void) => () => void;
   onOmpWidgetUpdate: (callback: (widgets: OmpWidgetEntry[]) => void) => () => void;

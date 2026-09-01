@@ -8,11 +8,53 @@ import YAML from 'yaml';
 
 const execFileAsync = promisify(execFile);
 
+export interface CustomModelCost {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}
+
+export type OmpEffortLevel = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export type CustomThinkingMode =
+  | 'effort'
+  | 'budget'
+  | 'google-level'
+  | 'anthropic-adaptive'
+  | 'anthropic-budget-effort';
+
+export interface CustomModelThinking {
+  mode: CustomThinkingMode;
+  efforts?: OmpEffortLevel[];
+  defaultLevel?: OmpEffortLevel;
+}
+
+export type CustomProviderDiscoveryType =
+  | 'ollama'
+  | 'llama.cpp'
+  | 'lm-studio'
+  | 'openai-models-list'
+  | 'proxy'
+  | 'litellm';
+
+export interface CustomProviderDiscovery {
+  type: CustomProviderDiscoveryType;
+  timeoutMs?: number;
+}
+
 export interface CustomModelConfig {
   id: string;
   name?: string;
   contextWindow?: number;
   maxTokens?: number;
+  input?: ('text' | 'image')[];
+  reasoning?: boolean;
+  supportsTools?: boolean;
+  cost?: CustomModelCost;
+  thinking?: CustomModelThinking;
+  premiumMultiplier?: number;
+  omitMaxOutputTokens?: boolean;
 }
 
 export interface CustomProviderConfig {
@@ -21,6 +63,9 @@ export interface CustomProviderConfig {
   api?: string;
   apiKey?: string;
   authHeader?: boolean;
+  auth?: 'apiKey' | 'none' | 'oauth';
+  headers?: Record<string, string>;
+  discovery?: CustomProviderDiscovery;
   compat?: {
     supportsUsageInStreaming?: boolean;
     [key: string]: unknown;
@@ -93,6 +138,16 @@ export function parseModelsYaml(yamlContent: string): CustomProviderConfig[] {
             name: typeof m.name === 'string' ? m.name : undefined,
             contextWindow: typeof m.contextWindow === 'number' ? m.contextWindow : undefined,
             maxTokens: typeof m.maxTokens === 'number' ? m.maxTokens : undefined,
+            input: parseModelInput(m.input),
+            reasoning: typeof m.reasoning === 'boolean' ? m.reasoning : undefined,
+            supportsTools: typeof m.supportsTools === 'boolean' ? m.supportsTools : undefined,
+            cost: parseModelCost(m.cost),
+            thinking: parseModelThinking(m.thinking),
+            premiumMultiplier:
+              typeof m.premiumMultiplier === 'number' && Number.isFinite(m.premiumMultiplier) && m.premiumMultiplier > 0
+                ? m.premiumMultiplier
+                : undefined,
+            omitMaxOutputTokens: typeof m.omitMaxOutputTokens === 'boolean' ? m.omitMaxOutputTokens : undefined,
           });
         }
       }
@@ -107,6 +162,9 @@ export function parseModelsYaml(yamlContent: string): CustomProviderConfig[] {
       api: typeof cfg.api === 'string' ? cfg.api : 'openai-completions',
       apiKey: apiKeyEnvName,
       authHeader: typeof cfg.authHeader === 'boolean' ? cfg.authHeader : undefined,
+      auth: cfg.auth === 'apiKey' || cfg.auth === 'none' || cfg.auth === 'oauth' ? cfg.auth : undefined,
+      headers: parseProviderHeaders(cfg.headers),
+      discovery: parseProviderDiscovery(cfg.discovery),
       compat: cfg.compat && typeof cfg.compat === 'object' ? cfg.compat : undefined,
       models: models.length > 0 ? models : undefined,
       hasEnvVar,
@@ -114,6 +172,74 @@ export function parseModelsYaml(yamlContent: string): CustomProviderConfig[] {
   }
 
   return result;
+}
+
+const EFFORT_LEVELS: OmpEffortLevel[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+const THINKING_MODES: CustomThinkingMode[] = [
+  'effort',
+  'budget',
+  'google-level',
+  'anthropic-adaptive',
+  'anthropic-budget-effort',
+];
+const DISCOVERY_TYPES: CustomProviderDiscoveryType[] = [
+  'ollama',
+  'llama.cpp',
+  'lm-studio',
+  'openai-models-list',
+  'proxy',
+  'litellm',
+];
+
+function parseModelThinking(raw: unknown): CustomModelThinking | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const src = raw as Record<string, unknown>;
+  if (!THINKING_MODES.includes(src.mode as CustomThinkingMode)) return undefined;
+  const rawEfforts = Array.isArray(src.efforts) ? src.efforts : Array.isArray(src.levels) ? src.levels : [];
+  const efforts = rawEfforts.filter((v): v is OmpEffortLevel => EFFORT_LEVELS.includes(v as OmpEffortLevel));
+  if (efforts.length === 0) return undefined;
+  const defaultLevel = EFFORT_LEVELS.includes(src.defaultLevel as OmpEffortLevel)
+    ? (src.defaultLevel as OmpEffortLevel)
+    : undefined;
+  return { mode: src.mode as CustomThinkingMode, efforts, defaultLevel };
+}
+
+function parseProviderHeaders(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (key.trim() && typeof value === 'string') headers[key] = value;
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+function parseProviderDiscovery(raw: unknown): CustomProviderDiscovery | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const src = raw as Record<string, unknown>;
+  if (!DISCOVERY_TYPES.includes(src.type as CustomProviderDiscoveryType)) return undefined;
+  const timeoutMs =
+    typeof src.timeoutMs === 'number' && Number.isFinite(src.timeoutMs) && src.timeoutMs > 0
+      ? src.timeoutMs
+      : undefined;
+  return { type: src.type as CustomProviderDiscoveryType, timeoutMs };
+}
+
+function parseModelInput(raw: unknown): ('text' | 'image')[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const modalities = raw.filter((v): v is 'text' | 'image' => v === 'text' || v === 'image');
+  return modalities.length > 0 ? modalities : undefined;
+}
+
+function parseModelCost(raw: unknown): CustomModelCost | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const src = raw as Record<string, unknown>;
+  const cost: CustomModelCost = {};
+  for (const key of ['input', 'output', 'cacheRead', 'cacheWrite'] as const) {
+    if (typeof src[key] === 'number' && Number.isFinite(src[key])) {
+      cost[key] = src[key] as number;
+    }
+  }
+  return Object.keys(cost).length > 0 ? cost : undefined;
 }
 
 export function serializeModelsYaml(providers: CustomProviderConfig[]): string {
@@ -135,6 +261,20 @@ export function serializeModelsYaml(providers: CustomProviderConfig[]): string {
       providerEntry.authHeader = p.authHeader;
     }
 
+    // auth apiKey là mặc định của OMP nên chỉ ghi khi khác mặc định
+    if (p.auth === 'none' || p.auth === 'oauth') {
+      providerEntry.auth = p.auth;
+    }
+
+    const headers = parseProviderHeaders(p.headers);
+    if (headers) providerEntry.headers = headers;
+
+    const discovery = parseProviderDiscovery(p.discovery);
+    if (discovery) {
+      providerEntry.discovery = { type: discovery.type };
+      if (discovery.timeoutMs) providerEntry.discovery.timeoutMs = discovery.timeoutMs;
+    }
+
     if (p.compat && typeof p.compat === 'object' && Object.keys(p.compat).length > 0) {
       providerEntry.compat = p.compat;
     }
@@ -151,6 +291,21 @@ export function serializeModelsYaml(providers: CustomProviderConfig[]): string {
           if (typeof m.maxTokens === 'number' && !isNaN(m.maxTokens)) {
             mObj.maxTokens = m.maxTokens;
           }
+          const input = parseModelInput(m.input);
+          if (input) mObj.input = input;
+          if (typeof m.reasoning === 'boolean') mObj.reasoning = m.reasoning;
+          if (typeof m.supportsTools === 'boolean') mObj.supportsTools = m.supportsTools;
+          const cost = parseModelCost(m.cost);
+          if (cost) mObj.cost = cost;
+          const thinking = parseModelThinking(m.thinking);
+          if (thinking) {
+            mObj.thinking = { mode: thinking.mode, efforts: thinking.efforts };
+            if (thinking.defaultLevel) mObj.thinking.defaultLevel = thinking.defaultLevel;
+          }
+          if (typeof m.premiumMultiplier === 'number' && Number.isFinite(m.premiumMultiplier) && m.premiumMultiplier > 0) {
+            mObj.premiumMultiplier = m.premiumMultiplier;
+          }
+          if (m.omitMaxOutputTokens === true) mObj.omitMaxOutputTokens = true;
           return mObj;
         });
     }
@@ -261,6 +416,24 @@ export async function writeModelsConfig(
   }
 }
 
+// Mở rộng PATH với các vị trí cài đặt phổ biến trên macOS
+export function buildExtendedPath(): string {
+  const homedir = os.homedir();
+  return [
+    process.env.PATH,
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    path.join(homedir, '.local/bin'),
+    path.join(homedir, '.bun/bin'),
+    path.join(homedir, '.cargo/bin'),
+    path.join(homedir, 'Library/pnpm'),
+    '/usr/bin',
+    '/bin',
+  ]
+    .filter(Boolean)
+    .join(':');
+}
+
 export function parseLoginProvidersJson(jsonString: string): LoginProviderItem[] {
   try {
     const parsed = JSON.parse(jsonString);
@@ -299,23 +472,8 @@ export async function fetchLoginProviders(
   }
 
   try {
-    const homedir = os.homedir();
-    const extendedPath = [
-      process.env.PATH,
-      '/opt/homebrew/bin',
-      '/usr/local/bin',
-      path.join(homedir, '.local/bin'),
-      path.join(homedir, '.bun/bin'),
-      path.join(homedir, '.cargo/bin'),
-      path.join(homedir, 'Library/pnpm'),
-      '/usr/bin',
-      '/bin',
-    ]
-      .filter(Boolean)
-      .join(':');
-
     const { stdout } = await execFileAsync(binaryPath, ['auth-broker', 'list', '--json'], {
-      env: { ...process.env, PATH: extendedPath },
+      env: { ...process.env, PATH: buildExtendedPath() },
       encoding: 'utf-8',
       timeout: 5000,
     });
