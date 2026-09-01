@@ -102,33 +102,81 @@ ipcMain.handle('fs:select-folder', async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle('fs:read-dir', async (_, dirPath: string) => {
+const IGNORED_NAMES = new Set([
+  '.git',
+  '.github',
+  'node_modules',
+  'dist',
+  'dist-electron',
+  '.DS_Store',
+  '.turbo',
+  '.next',
+  '.nuxt',
+  '.output',
+  '.vite-temp',
+  'build',
+  '.cache',
+  '.omp',
+]);
+
+async function scanDirectoryRecursive(
+  currentDir: string,
+  rootWorkspaceDir: string,
+  maxDepth = 8,
+  currentDepth = 0
+): Promise<WorkspaceFile[]> {
+  if (currentDepth > maxDepth) return [];
+
   try {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    const entries = await fs.readdir(currentDir, { withFileTypes: true });
     const files: WorkspaceFile[] = [];
 
     for (const entry of entries) {
-      if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') {
+      if (IGNORED_NAMES.has(entry.name) || entry.name === '.DS_Store' || entry.name.startsWith('.git')) {
         continue;
       }
-      const fullPath = path.join(dirPath, entry.name);
-      files.push({
-        name: entry.name,
-        path: fullPath,
-        relativePath: entry.name,
-        isDirectory: entry.isDirectory(),
-      });
+
+      const fullPath = path.join(currentDir, entry.name);
+      const relativePath = path.relative(rootWorkspaceDir, fullPath);
+
+      if (entry.isDirectory()) {
+        const children = await scanDirectoryRecursive(
+          fullPath,
+          rootWorkspaceDir,
+          maxDepth,
+          currentDepth + 1
+        );
+
+        files.push({
+          name: entry.name,
+          path: fullPath,
+          relativePath,
+          isDirectory: true,
+          children,
+        });
+      } else {
+        files.push({
+          name: entry.name,
+          path: fullPath,
+          relativePath,
+          isDirectory: false,
+        });
+      }
     }
 
     return files.sort((a, b) => {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
-      return a.name.localeCompare(b.name);
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
   } catch (err) {
-    console.error('Error reading directory:', err);
+    console.error(`Error scanning directory ${currentDir}:`, err);
     return [];
   }
+}
+
+ipcMain.handle('fs:read-dir', async (_, dirPath: string) => {
+  return scanDirectoryRecursive(dirPath, dirPath);
 });
 
 ipcMain.handle('fs:read-file', async (_, filePath: string) => {
