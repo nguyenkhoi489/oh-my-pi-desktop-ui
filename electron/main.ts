@@ -91,6 +91,11 @@ ipcMain.handle('omp:respond-permission', async (_, requestId: string, approved: 
   ompBridge.respondPermission(requestId, approved);
 });
 
+ipcMain.handle('omp:ui-respond', async (_, id: string, payload: { value?: unknown; confirmed?: boolean; cancelled?: boolean }) => {
+  if (!ompBridge) return;
+  ompBridge.respondUiRequest(id, payload);
+});
+
 // IPC Handlers: Model Catalog & Engine State (Phase 2 Additions)
 ipcMain.handle('omp:get-models', async () => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
@@ -222,6 +227,15 @@ ipcMain.handle('fs:save-file', async (_, filePath: string, content: string) => {
 ipcMain.handle('fs:delete-file', async (_, filePath: string) => {
   try {
     const resolved = path.resolve(filePath);
+    const wsPath = ompBridge?.getWorkspacePath();
+    if (wsPath) {
+      const resolvedWs = path.resolve(wsPath);
+      const relative = path.relative(resolvedWs, resolved);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        console.warn('[fs:delete-file] Refusing to delete file outside workspace:', resolved);
+        return false;
+      }
+    }
     const stats = await fs.stat(resolved);
     if (stats.isDirectory()) {
       console.warn('[fs:delete-file] Refusing to delete directory:', resolved);

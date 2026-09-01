@@ -54,7 +54,12 @@ export function App() {
     activeToolCalls,
     currentStreamText,
     activeDiff,
-    pendingPermission,
+    activeUiRequest,
+    uiRequestQueue,
+    respondUiSelect,
+    respondUiConfirm,
+    respondUiInput,
+    dismissUiRequest,
     availableModels,
     selectedModel,
     thinkingLevel,
@@ -63,7 +68,6 @@ export function App() {
     refreshModels,
     refreshEngineState,
     sendMessage,
-    respondPermission,
     acceptDiff,
     rejectDiff,
   } = useOmpRpc();
@@ -239,8 +243,12 @@ export function App() {
       />
 
       <PermissionModal
-        request={pendingPermission}
-        onRespond={respondPermission}
+        request={activeUiRequest}
+        queueLength={uiRequestQueue.length}
+        onRespondSelect={respondUiSelect}
+        onRespondConfirm={respondUiConfirm}
+        onRespondInput={respondUiInput}
+        onDismiss={dismissUiRequest}
       />
 
       {/* Principle #1: OMP Required Installation Modal */}

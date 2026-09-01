@@ -60,6 +60,19 @@ export interface PermissionRequest {
   dangerous: boolean;
 }
 
+export interface OmpUiRequest {
+  id: string;
+  method: 'select' | 'confirm' | 'input' | 'editor';
+  title: string;
+  message?: string;
+  options?: string[];
+  optionDetails?: Array<{ description?: string; [key: string]: unknown }>;
+  placeholder?: string;
+  prefill?: string;
+  timeout?: number;
+  isToolApproval: boolean;
+}
+
 export interface OmpInstallStatus {
   installed: boolean;
   version?: string;
@@ -145,6 +158,7 @@ export interface ElectronAPI {
   stopOmpProcess: () => Promise<any>;
   sendOmpMessage: (prompt: string, context?: { files?: string[] }) => Promise<any>;
   respondToPermission: (requestId: string, approved: boolean) => Promise<any>;
+  respondUiRequest: (id: string, payload: { value?: unknown; confirmed?: boolean; cancelled?: boolean }) => Promise<any>;
 
   // Model Catalog & Engine State (Phase 2 Additions)
   getAvailableModels: () => Promise<{ success: boolean; models?: OmpModelInfo[]; error?: string }>;
@@ -164,6 +178,8 @@ export interface ElectronAPI {
   onOmpToolCall: (callback: (toolCall: ToolCall) => void) => () => void;
   onOmpDiffGenerated: (callback: (diff: FileDiffItem) => void) => () => void;
   onOmpPermissionRequest: (callback: (request: PermissionRequest) => void) => () => void;
+  onOmpUiRequest: (callback: (request: OmpUiRequest) => void) => () => void;
+  onOmpUiRequestCancel: (callback: (targetId: string) => void) => () => void;
   onOmpMessageComplete: (callback: (message: ChatMessage) => void) => () => void;
 }
 

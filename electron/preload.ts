@@ -5,6 +5,7 @@ import type {
   ToolCall,
   FileDiffItem,
   PermissionRequest,
+  OmpUiRequest,
   ChatMessage,
   WorkspaceFile,
   OmpThinkingLevel,
@@ -32,6 +33,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   respondToPermission: (requestId: string, approved: boolean) =>
     ipcRenderer.invoke('omp:respond-permission', requestId, approved),
+
+  respondUiRequest: (id: string, payload: { value?: unknown; confirmed?: boolean; cancelled?: boolean }) =>
+    ipcRenderer.invoke('omp:ui-respond', id, payload),
 
   // Model Catalog & Engine State (Phase 2 Additions)
   getAvailableModels: () =>
@@ -100,6 +104,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: any, req: PermissionRequest) => callback(req);
     ipcRenderer.on('omp:permission-request', handler);
     return () => ipcRenderer.removeListener('omp:permission-request', handler);
+  },
+
+  onOmpUiRequest: (callback: (request: OmpUiRequest) => void) => {
+    const handler = (_: any, req: OmpUiRequest) => callback(req);
+    ipcRenderer.on('omp:ui-request', handler);
+    return () => ipcRenderer.removeListener('omp:ui-request', handler);
+  },
+
+  onOmpUiRequestCancel: (callback: (targetId: string) => void) => {
+    const handler = (_: any, targetId: string) => callback(targetId);
+    ipcRenderer.on('omp:ui-request-cancel', handler);
+    return () => ipcRenderer.removeListener('omp:ui-request-cancel', handler);
   },
 
   onOmpMessageComplete: (callback: (message: ChatMessage) => void) => {

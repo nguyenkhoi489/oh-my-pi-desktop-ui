@@ -132,10 +132,10 @@ export interface GetMessagesPageCommand {
 
 export interface ExtensionUiResponseCommand {
   type: 'extension_ui_response';
-  id?: string;
-  requestId?: string;
-  approved?: boolean;
-  response?: unknown;
+  id: string;
+  value?: unknown;
+  confirmed?: boolean;
+  cancelled?: boolean;
   [key: string]: unknown;
 }
 
@@ -408,7 +408,21 @@ export interface ExtensionUiRequestEvent {
   id?: string;
   requestId?: string;
   method?: string;
+  title?: string;
+  message?: string;
+  options?: string[];
+  optionDetails?: Array<{ description?: string; [key: string]: unknown }>;
+  placeholder?: string;
+  prefill?: string;
+  promptStyle?: string;
+  timeout?: number;
+  targetId?: string;
   widgetKey?: string;
+  widgetLines?: string[];
+  widgetPlacement?: string;
+  statusKey?: string;
+  statusText?: string;
+  notifyType?: string;
   params?: unknown;
   [key: string]: unknown;
 }

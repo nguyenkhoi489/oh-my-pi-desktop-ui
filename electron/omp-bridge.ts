@@ -10,6 +10,7 @@ import type {
   ChatMessage,
   FileDiffItem,
   PermissionRequest,
+  OmpUiRequest,
   OmpInstallStatus,
 } from './types.ts';
 import { NdjsonFramer } from './ndjson-framer.ts';
@@ -23,6 +24,7 @@ import type {
   NegotiateProtocolCommand,
   PromptCommand,
   ExtensionUiResponseCommand,
+  ExtensionUiRequestEvent,
   GetAvailableModelsCommand,
   SetModelCommand,
   SetThinkingLevelCommand,
@@ -143,6 +145,7 @@ export class OmpBridge {
   private writeSnapshots: Map<string, string | null> = new Map();
   private pendingCommands: Map<string, PendingCommand> = new Map();
   private pendingPermissions: Map<string, (approved: boolean) => void> = new Map();
+  private pendingUiRequests: Map<string, OmpUiRequest> = new Map();
   
   private handshakePromise: {
     resolve: (val: { success: boolean; pid?: number }) => void;
@@ -165,6 +168,10 @@ export class OmpBridge {
         console.warn('[OMP FRAMER ERROR]:', err.message, raw.slice(0, 100));
       },
     });
+  }
+
+  public getWorkspacePath(): string | null {
+    return this.workspacePath;
   }
 
   public getLifecycleState(): BridgeLifecycleState {
@@ -323,6 +330,7 @@ export class OmpBridge {
     this.thinkingAccumulator.reset();
     this.activeToolCalls.clear();
     this.writeSnapshots.clear();
+    this.pendingUiRequests.clear();
     this.currentTurnId = null;
     this.workspacePath = workspacePath;
 
@@ -392,22 +400,30 @@ export class OmpBridge {
 
         this.lifecycleState = 'awaiting_ready';
 
-        this.process?.stdout?.on('data', (chunk: Buffer) => {
-          this.handleStdoutData(chunk.toString('utf-8'));
+        const childProc = this.process;
+
+        childProc?.stdout?.on('data', (chunk: Buffer) => {
+          if (this.process === childProc) {
+            this.handleStdoutData(chunk.toString('utf-8'));
+          }
         });
 
-        this.process?.stderr?.on('data', (chunk: Buffer) => {
+        childProc?.stderr?.on('data', (chunk: Buffer) => {
           console.error('[OMP STDERR]:', chunk.toString('utf-8'));
         });
 
-        this.process?.on('close', (code) => {
-          console.log(`[OmpBridge] Process exited with code ${code}`);
-          this.handleProcessExit(code);
+        childProc?.on('close', (code) => {
+          if (this.process === childProc) {
+            console.log(`[OmpBridge] Process exited with code ${code}`);
+            this.handleProcessExit(code);
+          }
         });
 
-        this.process?.on('error', (err) => {
-          console.warn('[OmpBridge] Process error:', err.message);
-          this.handleProcessExit(-1);
+        childProc?.on('error', (err) => {
+          if (this.process === childProc) {
+            console.warn('[OmpBridge] Process error:', err.message);
+            this.handleProcessExit(-1);
+          }
         });
       });
     } catch (err: any) {
@@ -443,6 +459,8 @@ export class OmpBridge {
         }
       }, 500);
 
+      this.cleanupProcess();
+    } else {
       this.cleanupProcess();
     }
 
@@ -518,10 +536,32 @@ export class OmpBridge {
     if (this.process && this.process.stdin?.writable) {
       const responseFrame: ExtensionUiResponseCommand = {
         type: 'extension_ui_response',
-        id: this.generateId(),
-        requestId,
-        approved,
-        response: { approved },
+        id: requestId,
+        value: approved ? 'Approve' : 'Deny',
+        confirmed: approved,
+      };
+      this.writeFrame(responseFrame);
+    }
+  }
+
+  public respondUiRequest(
+    id: string,
+    payload: { value?: unknown; confirmed?: boolean; cancelled?: boolean }
+  ) {
+    if (!this.pendingUiRequests.has(id)) {
+      console.warn(`[OmpBridge] respondUiRequest: No pending UI request with id ${id}`);
+    }
+    this.pendingUiRequests.delete(id);
+
+    if (this.pendingUiRequests.size === 0 && this.status === 'waiting_permission') {
+      this.setStatus(this.currentTurnId ? 'thinking' : 'idle');
+    }
+
+    if (this.process && this.process.stdin?.writable) {
+      const responseFrame: ExtensionUiResponseCommand = {
+        type: 'extension_ui_response',
+        id,
+        ...payload,
       };
       this.writeFrame(responseFrame);
     }
@@ -661,13 +701,61 @@ export class OmpBridge {
       return;
     }
 
-    // 4. Extension UI Requests (e.g. widgets, permissions)
+    // 4. Extension UI Requests (Interactive, Cancel, Legacy, and Fire-and-forget)
     if (frame.type === 'extension_ui_request') {
-      const reqId = (frame.id || frame.requestId || '') as string;
-      const method = (frame.method || '') as string;
+      const reqEvent = frame as ExtensionUiRequestEvent;
+      const reqId = (reqEvent.id || reqEvent.requestId || '') as string;
+      const method = (reqEvent.method || '') as string;
 
+      // A. Interactive Methods: select, confirm, input, editor
+      if (method === 'select' || method === 'confirm' || method === 'input' || method === 'editor') {
+        const isToolApproval =
+          method === 'select' &&
+          Array.isArray(reqEvent.options) &&
+          reqEvent.options.length === 2 &&
+          reqEvent.options[0] === 'Approve' &&
+          reqEvent.options[1] === 'Deny';
+
+        const uiReq: OmpUiRequest = {
+          id: reqId,
+          method,
+          title: reqEvent.title || '',
+          message: reqEvent.message,
+          options: reqEvent.options,
+          optionDetails: reqEvent.optionDetails,
+          placeholder: reqEvent.placeholder,
+          prefill: reqEvent.prefill,
+          timeout: reqEvent.timeout,
+          isToolApproval,
+        };
+
+        this.pendingUiRequests.set(reqId, uiReq);
+        this.setStatus('waiting_permission');
+
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:ui-request', uiReq);
+        }
+        return;
+      }
+
+      // B. Engine Cancel Request: cancel targetId
+      if (method === 'cancel') {
+        const targetId = (reqEvent.targetId || '') as string;
+        if (this.pendingUiRequests.has(targetId)) {
+          this.pendingUiRequests.delete(targetId);
+        }
+        if (this.pendingUiRequests.size === 0 && this.status === 'waiting_permission') {
+          this.setStatus(this.currentTurnId ? 'thinking' : 'idle');
+        }
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:ui-request-cancel', targetId);
+        }
+        return;
+      }
+
+      // C. Legacy Permission Request fallback (warp/telemetry fallback)
       if (method === 'permission_request' || method === 'request_permission') {
-        const params = (frame.params || {}) as Record<string, any>;
+        const params = (reqEvent.params || {}) as Record<string, any>;
         const req: PermissionRequest = {
           id: reqId,
           toolName: params.toolName || params.name || 'tool',
@@ -680,17 +768,11 @@ export class OmpBridge {
         if (this.window && !this.window.isDestroyed()) {
           this.window.webContents.send('omp:permission-request', req);
         }
-      } else {
-        // Auto-reply unsupported methods immediately (e.g. setWidget) to prevent engine hang
-        const autoReply: ExtensionUiResponseCommand = {
-          type: 'extension_ui_response',
-          id: this.generateId(),
-          requestId: reqId,
-          approved: false,
-          response: null,
-        };
-        this.writeFrame(autoReply);
+        return;
       }
+
+      // D. Fire-and-forget (notify, setStatus, setWidget, setTitle, set_editor_text, and unknown methods):
+      // NO reply is sent (Decision E2), already logged to frameLogger.
       return;
     }
 
@@ -794,10 +876,11 @@ export class OmpBridge {
         toolCall.status = endFrame.isError ? 'failed' : 'completed';
         toolCall.endTime = Date.now();
         if (endFrame.isError) {
+          const resultContent = (endFrame.result as any)?.content?.[0]?.text;
           toolCall.error =
             typeof endFrame.error === 'string'
               ? endFrame.error
-              : (endFrame.error ? JSON.stringify(endFrame.error) : 'Tool execution failed');
+              : (resultContent || (endFrame.error ? JSON.stringify(endFrame.error) : 'Tool execution failed'));
         }
         toolCall.result = endFrame.result;
 
@@ -900,6 +983,12 @@ export class OmpBridge {
         this.thinkingAccumulator.reset();
         this.activeToolCalls.clear();
         this.writeSnapshots.clear();
+        for (const id of this.pendingUiRequests.keys()) {
+          if (this.window && !this.window.isDestroyed()) {
+            this.window.webContents.send('omp:ui-request-cancel', id);
+          }
+        }
+        this.pendingUiRequests.clear();
         break;
 
       case 'abort':
@@ -907,6 +996,12 @@ export class OmpBridge {
         this.thinkingAccumulator.reset();
         this.activeToolCalls.clear();
         this.writeSnapshots.clear();
+        for (const id of this.pendingUiRequests.keys()) {
+          if (this.window && !this.window.isDestroyed()) {
+            this.window.webContents.send('omp:ui-request-cancel', id);
+          }
+        }
+        this.pendingUiRequests.clear();
         break;
     }
   }
@@ -1116,6 +1211,12 @@ export class OmpBridge {
     this.thinkingAccumulator.reset();
     this.activeToolCalls.clear();
     this.writeSnapshots.clear();
+    for (const id of this.pendingUiRequests.keys()) {
+      if (this.window && !this.window.isDestroyed()) {
+        this.window.webContents.send('omp:ui-request-cancel', id);
+      }
+    }
+    this.pendingUiRequests.clear();
     this.workspacePath = null;
     this.currentTurnId = null;
     this.framer.reset();

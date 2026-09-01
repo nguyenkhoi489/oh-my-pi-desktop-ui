@@ -6,6 +6,7 @@ import {
   ToolCall,
   FileDiffItem,
   PermissionRequest,
+  OmpUiRequest,
   OmpInstallStatus,
   OmpModelInfo,
   OmpThinkingLevel,
@@ -24,6 +25,11 @@ export function useOmpRpc() {
   const [currentStreamText, setCurrentStreamText] = useState<string>('');
   const [activeDiff, setActiveDiff] = useState<FileDiffItem | null>(() => (isElectron ? null : DEMO_INITIAL_DIFF));
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
+
+  // Extension UI Request queue (FIFO)
+  const [uiRequestQueue, setUiRequestQueue] = useState<OmpUiRequest[]>([]);
+  const uiRequestQueueRef = useRef<OmpUiRequest[]>([]);
+  const activeUiRequest = uiRequestQueue.length > 0 ? uiRequestQueue[0] : null;
   
   // Model catalog & engine state
   const [availableModels, setAvailableModels] = useState<OmpModelInfo[]>([]);
@@ -231,6 +237,25 @@ export function useOmpRpc() {
       setPendingPermission(req);
     });
 
+    const unsubUiRequest = window.electronAPI.onOmpUiRequest((req) => {
+      setUiRequestQueue((prev) => {
+        if (prev.some((item) => item.id === req.id)) {
+          return prev;
+        }
+        const updated = [...prev, req];
+        uiRequestQueueRef.current = updated;
+        return updated;
+      });
+    });
+
+    const unsubUiCancel = window.electronAPI.onOmpUiRequestCancel((targetId) => {
+      setUiRequestQueue((prev) => {
+        const updated = prev.filter((item) => item.id !== targetId);
+        uiRequestQueueRef.current = updated;
+        return updated;
+      });
+    });
+
     const unsubComplete = window.electronAPI.onOmpMessageComplete((msg) => {
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
@@ -266,6 +291,8 @@ export function useOmpRpc() {
       unsubTool();
       unsubDiff();
       unsubPermission();
+      unsubUiRequest();
+      unsubUiCancel();
       unsubComplete();
     };
   }, [flushTokens, refreshEngineState]);
@@ -372,6 +399,58 @@ export function useOmpRpc() {
     [pendingPermission]
   );
 
+  const respondUiRequest = useCallback(
+    async (id: string, payload: { value?: unknown; confirmed?: boolean; cancelled?: boolean }) => {
+      // Check if request is currently in queue (prevent double reply)
+      const exists = uiRequestQueueRef.current.some((r) => r.id === id);
+      if (!exists) return;
+
+      // Immediately remove from queue (FIFO shift/filter)
+      setUiRequestQueue((prev) => {
+        const updated = prev.filter((r) => r.id !== id);
+        uiRequestQueueRef.current = updated;
+        return updated;
+      });
+
+      if (window.electronAPI) {
+        try {
+          await window.electronAPI.respondUiRequest(id, payload);
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to respond to UI request:', err);
+        }
+      }
+    },
+    []
+  );
+
+  const respondUiSelect = useCallback(
+    (id: string, value: string) => {
+      return respondUiRequest(id, { value });
+    },
+    [respondUiRequest]
+  );
+
+  const respondUiConfirm = useCallback(
+    (id: string, confirmed: boolean) => {
+      return respondUiRequest(id, { confirmed });
+    },
+    [respondUiRequest]
+  );
+
+  const respondUiInput = useCallback(
+    (id: string, value: string) => {
+      return respondUiRequest(id, { value });
+    },
+    [respondUiRequest]
+  );
+
+  const dismissUiRequest = useCallback(
+    (id: string) => {
+      return respondUiRequest(id, { cancelled: true });
+    },
+    [respondUiRequest]
+  );
+
   const acceptDiff = useCallback(async () => {
     if (!activeDiff) return;
     if (window.electronAPI) {
@@ -407,6 +486,13 @@ export function useOmpRpc() {
     currentStreamText,
     activeDiff,
     pendingPermission,
+    uiRequestQueue,
+    activeUiRequest,
+    respondUiSelect,
+    respondUiConfirm,
+    respondUiInput,
+    dismissUiRequest,
+    respondUiRequest,
     availableModels,
     selectedModel,
     setSelectedModel,
