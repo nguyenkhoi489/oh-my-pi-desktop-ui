@@ -163,16 +163,21 @@ pre {
   border-collapse: collapse;
   margin-top: 0.75rem;
   margin-bottom: 0.75rem;
-}
-
-.markdown-content th,
-.markdown-content td {
-  padding: 0.45rem 0.75rem;
-  border: 1px solid var(--color-border);
+  font-size: 13px;
+  background: transparent;
 }
 
 .markdown-content th {
-  background-color: var(--color-surface);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1.5px solid var(--color-border);
   font-weight: 600;
+  text-align: left;
+  background: transparent;
+}
+
+.markdown-content td {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
 }
 

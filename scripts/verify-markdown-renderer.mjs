@@ -103,7 +103,7 @@ const markedInstance = new Marked({
           headerHtml += this.tablecell(token.header[i]);
         }
       }
-      headerHtml = this.tablerow({ text: headerHtml });
+      headerHtml = `<thead class="border-b border-border font-semibold text-slate-900 dark:text-zinc-100">${this.tablerow({ text: headerHtml })}</thead>`;
 
       let bodyHtml = '';
       if (token.rows && Array.isArray(token.rows)) {
@@ -115,18 +115,21 @@ const markedInstance = new Marked({
           bodyHtml += this.tablerow({ text: rowHtml });
         }
       }
+      bodyHtml = `<tbody class="divide-y divide-border/60">${bodyHtml}</tbody>`;
 
-      return `<div class="overflow-x-auto my-3 rounded-xl border border-border bg-panel shadow-xs"><table class="min-w-full text-xs text-left divide-y divide-border"><thead class="bg-surface-highlight font-semibold text-slate-700 dark:text-zinc-300">${headerHtml}</thead><tbody class="divide-y divide-border bg-panel">${bodyHtml}</tbody></table></div>`;
+      return `<div class="overflow-x-auto my-3"><table class="min-w-full text-xs text-left border-collapse">${headerHtml}${bodyHtml}</table></div>`;
     },
 
     tablerow(token) {
-      return `<tr class="hover:bg-surface-highlight/40 transition-colors">${token.text}</tr>`;
+      return `<tr class="hover:bg-surface-highlight/30 transition-colors">${token.text}</tr>`;
     },
 
     tablecell(token) {
       const tag = token.header ? 'th' : 'td';
       const alignCls = token.align ? ` text-${token.align}` : '';
-      const padCls = token.header ? 'px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100' : 'px-3.5 py-2 text-slate-700 dark:text-zinc-300';
+      const padCls = token.header
+        ? 'px-3 py-2 font-semibold text-slate-900 dark:text-zinc-100 border-b border-border'
+        : 'px-3 py-2 text-slate-700 dark:text-zinc-300 border-b border-border/50';
       const content = token.tokens ? this.parser.parseInline(token.tokens) : (token.text || '');
       return `<${tag} class="${padCls}${alignCls}">${content}</${tag}>`;
     },
@@ -240,13 +243,13 @@ console.log('[Test 6] Tech Stack Table Rendering');
 
   const html = markedInstance.parse(tableSample);
   assert(!html.includes('[object Object]'), 'Output does NOT contain [object Object]');
-  assert(html.includes('<table class="min-w-full text-xs text-left divide-y divide-border">'), 'Table rendered with table tag and styling');
-  assert(html.includes('<th class="px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100">Layer</th>'), 'Header cell Layer rendered');
-  assert(html.includes('<th class="px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100">Technology</th>'), 'Header cell Technology rendered');
-  assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300">Runtime</td>'), 'Data cell Runtime rendered');
-  assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300">Node.js &gt;= 20</td>'), 'Data cell Node.js >= 20 rendered');
-  assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300">Fastify 5</td>'), 'Data cell Fastify 5 rendered');
-  assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300">SQLite (better-sqlite3, WAL mode)</td>'), 'Data cell SQLite rendered');
+  assert(html.includes('<table class="min-w-full text-xs text-left border-collapse">'), 'Table rendered with table tag and border-collapse');
+  assert(html.includes('<th class="px-3 py-2 font-semibold text-slate-900 dark:text-zinc-100 border-b border-border">Layer</th>'), 'Header cell Layer rendered');
+  assert(html.includes('<th class="px-3 py-2 font-semibold text-slate-900 dark:text-zinc-100 border-b border-border">Technology</th>'), 'Header cell Technology rendered');
+  assert(html.includes('<td class="px-3 py-2 text-slate-700 dark:text-zinc-300 border-b border-border/50">Runtime</td>'), 'Data cell Runtime rendered');
+  assert(html.includes('<td class="px-3 py-2 text-slate-700 dark:text-zinc-300 border-b border-border/50">Node.js &gt;= 20</td>'), 'Data cell Node.js >= 20 rendered');
+  assert(html.includes('<td class="px-3 py-2 text-slate-700 dark:text-zinc-300 border-b border-border/50">Fastify 5</td>'), 'Data cell Fastify 5 rendered');
+  assert(html.includes('<td class="px-3 py-2 text-slate-700 dark:text-zinc-300 border-b border-border/50">SQLite (better-sqlite3, WAL mode)</td>'), 'Data cell SQLite rendered');
 }
 console.log();
 
