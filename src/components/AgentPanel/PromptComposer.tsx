@@ -13,6 +13,7 @@ import { DEMO_WORKSPACE_FILES } from '../../mock/demoData';
 import { CommandMenu, filterAndGroupCommands, DEMO_COMMANDS } from './CommandMenu';
 import {
   buildMessageWithFileMentions,
+  findRemovedInlineAttachments,
   flattenWorkspaceFiles,
 } from '../../utils/fileMention';
 
@@ -25,7 +26,10 @@ interface PromptComposerProps {
   availableCommands?: OmpCommandInfo[];
 }
 
-export const PromptComposer: React.FC<PromptComposerProps> = ({
+// Giới hạn số file hiển thị trong picker để tránh render hàng nghìn node
+const MAX_PICKER_FILES = 100;
+
+const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   onSendMessage,
   status,
   workspaceFiles,
@@ -41,11 +45,15 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
   const [isCommandMenuOpen, setIsCommandMenuOpen] = useState<boolean>(false);
   const [commandQuery, setCommandQuery] = useState<string>('');
   const [commandSelectedIndex, setCommandSelectedIndex] = useState<number>(0);
+  // Vị trí ký tự '/' đang mở command menu (hỗ trợ command giữa message)
+  const [slashIndex, setSlashIndex] = useState<number | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const commandMenuRef = useRef<HTMLDivElement>(null);
+  // Các attachment được chèn dạng @token trong text (phân biệt với attach qua nút)
+  const inlineAttachmentsRef = useRef<Set<string>>(new Set());
 
   const allFiles = React.useMemo(() => {
     const sourceTree =
@@ -65,19 +73,24 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
     );
   }, [allFiles, pickerQuery]);
 
+  const visibleFiles = React.useMemo(
+    () => filteredFiles.slice(0, MAX_PICKER_FILES),
+    [filteredFiles]
+  );
+
   const activeCommandsList = React.useMemo(() => {
     return availableCommands && availableCommands.length > 0
       ? availableCommands
       : DEMO_COMMANDS;
   }, [availableCommands]);
 
-  const { items: filteredCommands } = React.useMemo(() => {
+  const { items: filteredCommands, groups: filteredCommandGroups } = React.useMemo(() => {
     return filterAndGroupCommands(activeCommandsList, commandQuery);
   }, [activeCommandsList, commandQuery]);
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [filteredFiles]);
+  }, [visibleFiles]);
 
   useEffect(() => {
     setCommandSelectedIndex(0);
@@ -108,6 +121,7 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
         !textareaRef.current.contains(target)
       ) {
         setIsCommandMenuOpen(false);
+        setSlashIndex(null);
       }
     };
     if (isPickerOpen || isCommandMenuOpen) {
@@ -126,6 +140,7 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
       const beforeAt = input.slice(0, atCursorIndex);
       const afterCursor = input.slice(textareaRef.current.selectionEnd || input.length);
       const newInput = `${beforeAt}@${trimmedPath} ${afterCursor}`;
+      inlineAttachmentsRef.current.add(trimmedPath);
       setInput(newInput);
       setTimeout(() => {
         if (textareaRef.current) {
@@ -147,19 +162,54 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
 
   const removeAttachment = (file: string) => {
     setAttachedFiles(attachedFiles.filter((f) => f !== file));
+    // Chip chèn inline: gỡ luôn token @file trong text để hai phía đồng bộ
+    if (inlineAttachmentsRef.current.has(file)) {
+      inlineAttachmentsRef.current.delete(file);
+      const token = `@${file}`;
+      setInput((prev) =>
+        prev.includes(`${token} `) ? prev.replace(`${token} `, '') : prev.replace(token, '')
+      );
+    }
   };
 
   const handleSelectCommand = (insertText: string) => {
-    const remainder = input.replace(/^\/[^\s]*/, '');
-    const newInput = `${insertText}${remainder.trimStart()}`;
-    setInput(newInput);
+    let newCursorPos: number;
+    if (slashIndex !== null) {
+      // Thay token '/query' tại vị trí slash bằng lệnh được chọn
+      const before = input.slice(0, slashIndex);
+      const after = input.slice(textareaRef.current?.selectionEnd ?? input.length);
+      setInput(`${before}${insertText}${after}`);
+      newCursorPos = before.length + insertText.length;
+    } else {
+      // Menu mở qua nút khi chưa có token: chèn tại vị trí con trỏ
+      const pos = textareaRef.current?.selectionEnd ?? input.length;
+      setInput(`${input.slice(0, pos)}${insertText}${input.slice(pos)}`);
+      newCursorPos = pos + insertText.length;
+    }
     setIsCommandMenuOpen(false);
     setCommandQuery('');
+    setSlashIndex(null);
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
-        const pos = insertText.length;
-        textareaRef.current.setSelectionRange(pos, pos);
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 0);
+  };
+
+  // Chèn '/' tại con trỏ và mở command menu (dùng cho nút Commands và ⌘+/)
+  const openCommandMenuAtCursor = () => {
+    const pos = textareaRef.current?.selectionEnd ?? input.length;
+    const needsSpace = pos > 0 && !/\s/.test(input[pos - 1]);
+    const slashPos = pos + (needsSpace ? 1 : 0);
+    setInput(`${input.slice(0, pos)}${needsSpace ? ' /' : '/'}${input.slice(pos)}`);
+    setSlashIndex(slashPos);
+    setCommandQuery('');
+    setIsCommandMenuOpen(true);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(slashPos + 1, slashPos + 1);
       }
     }, 0);
   };
@@ -171,10 +221,12 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
     onSendMessage(finalMessage, attachedFiles);
     setInput('');
     setAttachedFiles([]);
+    inlineAttachmentsRef.current.clear();
     setIsPickerOpen(false);
     setAtCursorIndex(null);
     setIsCommandMenuOpen(false);
     setCommandQuery('');
+    setSlashIndex(null);
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -182,18 +234,40 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
     const cursorPos = e.target.selectionStart;
     setInput(val);
 
-    // Slash commands menu detection: triggered when input starts with '/' and cursor is in first token
-    if (val.startsWith('/')) {
-      const spaceIdx = val.indexOf(' ');
-      if (spaceIdx === -1 || cursorPos <= spaceIdx) {
-        const query = val.slice(1, spaceIdx === -1 ? undefined : spaceIdx);
-        setCommandQuery(query);
-        setIsCommandMenuOpen(true);
-      } else {
-        setIsCommandMenuOpen(false);
+    // Xoá token @file khỏi text thì gỡ luôn chip attachment tương ứng
+    if (inlineAttachmentsRef.current.size > 0) {
+      const removed = findRemovedInlineAttachments(val, inlineAttachmentsRef.current);
+      if (removed.length > 0) {
+        for (const file of removed) {
+          inlineAttachmentsRef.current.delete(file);
+        }
+        setAttachedFiles((prev) => prev.filter((f) => !removed.includes(f)));
       }
-    } else {
-      setIsCommandMenuOpen(false);
+    }
+
+    // Command menu: '/' ở đầu chuỗi hoặc sau whitespace (hỗ trợ command giữa message)
+    if (
+      cursorPos > 0 &&
+      val[cursorPos - 1] === '/' &&
+      (cursorPos === 1 || /\s/.test(val[cursorPos - 2]))
+    ) {
+      setSlashIndex(cursorPos - 1);
+      setCommandQuery('');
+      setIsCommandMenuOpen(true);
+    } else if (slashIndex !== null) {
+      if (cursorPos <= slashIndex || val[slashIndex] !== '/') {
+        setSlashIndex(null);
+        setIsCommandMenuOpen(false);
+      } else {
+        const query = val.slice(slashIndex + 1, cursorPos);
+        if (query.includes(' ') || query.includes('\n')) {
+          setSlashIndex(null);
+          setIsCommandMenuOpen(false);
+        } else {
+          setCommandQuery(query);
+          setIsCommandMenuOpen(true);
+        }
+      }
     }
 
     if (cursorPos > 0 && val[cursorPos - 1] === '@') {
@@ -221,12 +295,12 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
     // Shortcut Cmd+/ or Ctrl+/ to toggle Slash Command Menu
     if ((e.metaKey || e.ctrlKey) && e.key === '/') {
       e.preventDefault();
-      if (!input.startsWith('/')) {
-        const next = '/' + input;
-        setInput(next);
-        setCommandQuery(input);
+      if (isCommandMenuOpen) {
+        setIsCommandMenuOpen(false);
+        setSlashIndex(null);
+      } else {
+        openCommandMenuAtCursor();
       }
-      setIsCommandMenuOpen((prev) => !prev);
       return;
     }
 
@@ -257,6 +331,7 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
       if (e.key === 'Escape') {
         e.preventDefault();
         setIsCommandMenuOpen(false);
+        setSlashIndex(null);
         return;
       }
     }
@@ -265,23 +340,23 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedIndex((prev) =>
-          filteredFiles.length > 0 ? (prev + 1) % filteredFiles.length : 0
+          visibleFiles.length > 0 ? (prev + 1) % visibleFiles.length : 0
         );
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
         setSelectedIndex((prev) =>
-          filteredFiles.length > 0
-            ? (prev - 1 + filteredFiles.length) % filteredFiles.length
+          visibleFiles.length > 0
+            ? (prev - 1 + visibleFiles.length) % visibleFiles.length
             : 0
         );
         return;
       }
       if (e.key === 'Enter' || e.key === 'Tab') {
-        if (filteredFiles.length > 0 && filteredFiles[selectedIndex]) {
+        if (visibleFiles.length > 0 && visibleFiles[selectedIndex]) {
           e.preventDefault();
-          addAttachment(filteredFiles[selectedIndex].relativePath);
+          addAttachment(visibleFiles[selectedIndex].relativePath);
           return;
         }
       }
@@ -303,19 +378,19 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSelectedIndex((prev) =>
-        filteredFiles.length > 0 ? (prev + 1) % filteredFiles.length : 0
+        visibleFiles.length > 0 ? (prev + 1) % visibleFiles.length : 0
       );
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelectedIndex((prev) =>
-        filteredFiles.length > 0
-          ? (prev - 1 + filteredFiles.length) % filteredFiles.length
+        visibleFiles.length > 0
+          ? (prev - 1 + visibleFiles.length) % visibleFiles.length
           : 0
       );
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (filteredFiles.length > 0 && filteredFiles[selectedIndex]) {
-        addAttachment(filteredFiles[selectedIndex].relativePath);
+      if (visibleFiles.length > 0 && visibleFiles[selectedIndex]) {
+        addAttachment(visibleFiles[selectedIndex].relativePath);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -354,11 +429,11 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
         <CommandMenu
           isOpen={isCommandMenuOpen}
           query={commandQuery}
-          commands={activeCommandsList}
+          items={filteredCommands}
+          groups={filteredCommandGroups}
           selectedIndex={commandSelectedIndex}
           onSelectCommand={handleSelectCommand}
           onClose={() => setIsCommandMenuOpen(false)}
-          onSelectedIndexChange={setCommandSelectedIndex}
         />
       </div>
 
@@ -366,7 +441,7 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
       {isPickerOpen && (
         <div
           ref={popoverRef}
-          className="absolute bottom-full mb-2 left-3 right-3 sm:left-3 sm:right-auto sm:w-96 max-h-72 bg-surface dark:bg-[#181a24] border border-border rounded-xl shadow-xl z-50 flex flex-col overflow-hidden animate-fade-in"
+          className="absolute bottom-full mb-2 left-3 right-3 sm:left-3 sm:right-auto sm:w-96 sm:max-w-[calc(100%-24px)] max-h-72 bg-surface dark:bg-[#181a24] border border-border rounded-xl shadow-xl z-50 flex flex-col overflow-hidden animate-fade-in"
         >
           <div className="p-2.5 border-b border-border/60 bg-surface-highlight/30 flex items-center gap-2">
             <Search className="w-3.5 h-3.5 text-slate-400" />
@@ -392,12 +467,12 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
           </div>
 
           <div className="overflow-y-auto flex-1 p-1 max-h-52">
-            {filteredFiles.length === 0 ? (
+            {visibleFiles.length === 0 ? (
               <div className="p-4 text-center text-xs text-slate-400">
                 Không tìm thấy file nào phù hợp
               </div>
             ) : (
-              filteredFiles.map((file, idx) => (
+              visibleFiles.map((file, idx) => (
                 <button
                   key={file.path || file.relativePath}
                   onClick={() => addAttachment(file.relativePath)}
@@ -418,7 +493,11 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
           </div>
 
           <div className="px-2.5 py-1.5 border-t border-border/40 bg-surface-highlight/20 text-[10.5px] text-slate-400 flex items-center justify-between">
-            <span>↑↓ di chuyển</span>
+            <span>
+              {filteredFiles.length > MAX_PICKER_FILES
+                ? `${MAX_PICKER_FILES}/${filteredFiles.length} — gõ để lọc thêm`
+                : '↑↓ di chuyển'}
+            </span>
             <span>↵ chọn</span>
             <span>esc đóng</span>
           </div>
@@ -461,12 +540,12 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
             <button
               type="button"
               onClick={() => {
-                if (!input.startsWith('/')) {
-                  setInput('/' + input);
-                  setCommandQuery(input);
+                if (isCommandMenuOpen) {
+                  setIsCommandMenuOpen(false);
+                  setSlashIndex(null);
+                } else {
+                  openCommandMenuAtCursor();
                 }
-                setIsCommandMenuOpen(!isCommandMenuOpen);
-                textareaRef.current?.focus();
               }}
               className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors font-medium cursor-pointer ${
                 isCommandMenuOpen
@@ -503,3 +582,5 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
     </div>
   );
 };
+
+export const PromptComposer = React.memo(PromptComposerComponent);

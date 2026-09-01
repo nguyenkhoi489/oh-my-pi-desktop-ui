@@ -1,4 +1,7 @@
-import { spawn, execSync, execFileSync, type ChildProcess } from 'child_process';
+import { spawn, execFile, type ChildProcess } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import type { BrowserWindow } from 'electron';
 import fs from 'fs';
 import os from 'os';
@@ -203,6 +206,7 @@ export class OmpBridge {
   } | null = null;
 
   private detectedPath: string | null = null;
+  private cachedVersion: { path: string; version: string } | null = null;
   private customPath: string | null = null;
   private commandCounter: number = 0;
   private settingsStore?: SettingsStore;
@@ -434,26 +438,30 @@ export class OmpBridge {
       } catch {}
     }
 
-    // 4. Query user's interactive login shell (loads .zshrc, .zprofile, PATH)
+    return null;
+  }
+
+  // Fallback chậm: hỏi login shell ở tiến trình con async để không block main process
+  private async detectViaLoginShell(): Promise<string | null> {
+    const binaryNames = ['omp', 'oh-my-pi', 'pi-coding-agent', 'pi'];
     for (const name of binaryNames) {
       try {
-        const shellOutput = execSync(`/bin/zsh -l -c 'which ${name}' 2>/dev/null`, {
+        const { stdout } = await execFileAsync('/bin/zsh', ['-l', '-c', `which ${name}`], {
           encoding: 'utf-8',
           timeout: 2500,
-        }).trim();
-
-        if (shellOutput && fs.existsSync(shellOutput)) {
-          this.detectedPath = shellOutput;
-          return shellOutput;
+        });
+        const found = stdout.trim();
+        if (found && fs.existsSync(found)) {
+          this.detectedPath = found;
+          return found;
         }
       } catch {}
     }
-
     return null;
   }
 
   public async checkInstallation(): Promise<OmpInstallStatus> {
-    const binaryPath = this.detectBinaryPath();
+    const binaryPath = this.detectBinaryPath() ?? (await this.detectViaLoginShell());
 
     if (!binaryPath || !fs.existsSync(binaryPath)) {
       return {
@@ -475,26 +483,40 @@ export class OmpBridge {
       '/bin',
     ].filter(Boolean).join(':');
 
+    // Version đã hỏi rồi thì dùng lại, tránh spawn tiến trình con lặp lại
+    if (this.cachedVersion?.path === binaryPath) {
+      return {
+        installed: true,
+        version: this.cachedVersion.version,
+        binaryPath,
+      };
+    }
+
     let versionOutput = '';
     try {
-      versionOutput = execFileSync(binaryPath, ['--version'], {
+      const { stdout } = await execFileAsync(binaryPath, ['--version'], {
         env: { ...process.env, PATH: extendedPath },
         encoding: 'utf-8',
         timeout: 3000,
-      }).trim();
+      });
+      versionOutput = stdout.trim();
     } catch {
       try {
-        versionOutput = execFileSync(binaryPath, ['-v'], {
+        const { stdout } = await execFileAsync(binaryPath, ['-v'], {
           env: { ...process.env, PATH: extendedPath },
           encoding: 'utf-8',
           timeout: 3000,
-        }).trim();
+        });
+        versionOutput = stdout.trim();
       } catch {}
     }
 
+    const version = versionOutput || 'v0.1.0';
+    this.cachedVersion = { path: binaryPath, version };
+
     return {
       installed: true,
-      version: versionOutput || 'v0.1.0',
+      version,
       binaryPath,
     };
   }
@@ -512,7 +534,10 @@ export class OmpBridge {
     options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode }
   ): Promise<{ success: boolean; pid?: number }> {
     if (this.process) {
+      // Chờ tiến trình cũ thoát hẳn trước khi spawn, tránh handshake timeout do tranh chấp
+      const oldProcess = this.process;
       this.stopProcess();
+      await this.waitForProcessExit(oldProcess, 3000);
     }
 
     this.rejectAllPending('Khởi động tiến trình OMP mới');
@@ -538,7 +563,7 @@ export class OmpBridge {
     if (effectiveApprovalMode) {
       this.currentApprovalMode = effectiveApprovalMode;
     }
-    const binaryPath = this.detectBinaryPath();
+    const binaryPath = this.detectBinaryPath() ?? (await this.detectViaLoginShell());
     if (!binaryPath || !fs.existsSync(binaryPath)) {
       console.warn('[OmpBridge] Binary not found. Live process start aborted; fallback mode available.');
       this.lifecycleState = 'idle';
@@ -586,6 +611,10 @@ export class OmpBridge {
         const handshakeTimeoutMs = 15000;
         const handshakeTimer = setTimeout(() => {
           console.warn(`[OmpBridge] Handshake timed out after ${handshakeTimeoutMs}ms`);
+          this.emitNotification(
+            'Không thể khởi động OMP engine (handshake timeout). Hãy thử mở lại dự án.',
+            'error'
+          );
           this.cleanupProcess();
           resolve({ success: false });
         }, handshakeTimeoutMs);
@@ -1688,12 +1717,14 @@ export class OmpBridge {
             }
           } else {
             console.error('[OmpBridge] Protocol negotiation failed:', res.error);
+            this.emitNotification('Khởi động OMP engine thất bại (negotiation). Hãy thử mở lại dự án.', 'error');
             this.cleanupProcess();
             this.handshakePromise?.resolve({ success: false });
           }
         })
         .catch((err) => {
           console.error('[OmpBridge] Protocol negotiation timeout or error:', err.message);
+          this.emitNotification('Khởi động OMP engine thất bại (negotiation timeout). Hãy thử mở lại dự án.', 'error');
           this.cleanupProcess();
           this.handshakePromise?.resolve({ success: false });
         });
@@ -2477,6 +2508,28 @@ export class OmpBridge {
     if (this.handshakePromise) {
       this.handshakePromise.resolve({ success: false });
     }
+  }
+
+  // Chờ tiến trình thoát hẳn; quá hạn thì ép SIGKILL
+  private waitForProcessExit(proc: ChildProcess, timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      if (proc.exitCode !== null || proc.signalCode !== null) {
+        resolve();
+        return;
+      }
+      const timer = setTimeout(() => {
+        try {
+          proc.kill('SIGKILL');
+        } catch {
+          // Ignored
+        }
+        resolve();
+      }, timeoutMs);
+      proc.once('close', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
   }
 
   private cleanupProcess() {

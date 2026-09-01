@@ -108,7 +108,7 @@ const SystemMessageCard: React.FC<{ content: string; timestamp?: number }> = ({ 
   );
 };
 
-export const ChatHistory: React.FC<ChatHistoryProps> = ({
+const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
   messages,
   currentThinking,
   activeToolCalls,
@@ -275,3 +275,5 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
     </div>
   );
 };
+
+export const ChatHistory = React.memo(ChatHistoryComponent);

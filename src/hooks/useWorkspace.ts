@@ -42,6 +42,9 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
         const name = folderPath.split('/').filter(Boolean).pop() || 'workspace';
         setWorkspaceName(name);
         
+        // Khởi động engine song song với việc scan thư mục để rút ngắn thời gian chờ
+        const startPromise = window.electronAPI.startOmpProcess(folderPath);
+
         const dirFiles = await window.electronAPI.readDirectory(folderPath);
         setFiles(dirFiles);
 
@@ -55,11 +58,12 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
             setFileContent('');
           }
         }
-        
-        // Notify OMP backend to switch workspace
-        const startRes = await window.electronAPI.startOmpProcess(folderPath);
-        if (startRes?.success && options?.onProcessStarted) {
-          options.onProcessStarted();
+
+        const startRes = await startPromise;
+        if (startRes?.success) {
+          options?.onProcessStarted?.();
+        } else {
+          console.warn('[useWorkspace] OMP engine failed to start for workspace:', folderPath);
         }
       }
     }

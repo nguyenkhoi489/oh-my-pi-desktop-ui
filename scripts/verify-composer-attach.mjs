@@ -24,6 +24,7 @@
 import { OmpBridge } from '../electron/omp-bridge.ts';
 import {
   buildMessageWithFileMentions,
+  findRemovedInlineAttachments,
   flattenWorkspaceFiles,
 } from '../src/utils/fileMention.ts';
 
@@ -284,6 +285,34 @@ console.log('\n[Test 4] OmpBridge translateHistoryMessages with fileMention hist
     translated[2].content === 'This service handles user auth tokens.',
     'Assistant message content preserved'
   );
+}
+
+// ----------------------------------------------------
+// Test: findRemovedInlineAttachments (sync chip <-> @token)
+// ----------------------------------------------------
+console.log('\n[Test] findRemovedInlineAttachments inline attachment pruning');
+{
+  const inline = new Set(['src/auth/service.ts', 'docs/readme.md']);
+
+  // Cả 2 token còn trong text -> không gỡ gì
+  const res1 = findRemovedInlineAttachments(
+    'Review @src/auth/service.ts and @docs/readme.md now',
+    inline
+  );
+  assert(res1.length === 0, 'No attachments removed while both tokens remain in text');
+
+  // Xoá 1 token khỏi text -> gỡ đúng 1 attachment
+  const res2 = findRemovedInlineAttachments('Review @src/auth/service.ts now', inline);
+  assert(res2.length === 1, 'One attachment flagged when its token is deleted');
+  assert(res2[0] === 'docs/readme.md', 'Correct attachment flagged for removal');
+
+  // Text rỗng -> gỡ toàn bộ inline attachment
+  const res3 = findRemovedInlineAttachments('', inline);
+  assert(res3.length === 2, 'All inline attachments flagged when text is cleared');
+
+  // Tập inline rỗng -> không có gì để gỡ
+  const res4 = findRemovedInlineAttachments('anything @a/b.ts', new Set());
+  assert(res4.length === 0, 'Empty inline set yields no removals');
 }
 
 console.log(`\n🎉 All ${passed} Composer File Attach tests passed successfully!`);

@@ -25,6 +25,20 @@ export function buildMessageWithFileMentions(text: string, files: string[]): str
   return trimmed ? `${trimmed} ${tokensToAppend.join(' ')}` : tokensToAppend.join(' ');
 }
 
+// Tìm các attachment inline có token @file đã bị xoá khỏi text
+export function findRemovedInlineAttachments(
+  text: string,
+  inlineFiles: Iterable<string>
+): string[] {
+  const removed: string[] = [];
+  for (const file of inlineFiles) {
+    if (!text.includes(`@${file}`)) {
+      removed.push(file);
+    }
+  }
+  return removed;
+}
+
 export function flattenWorkspaceFiles(tree: WorkspaceFile[]): WorkspaceFile[] {
   const result: WorkspaceFile[] = [];
   const traverse = (items: WorkspaceFile[]) => {

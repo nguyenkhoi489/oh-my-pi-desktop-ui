@@ -89,6 +89,10 @@ export function App() {
     setIsRightSidebarOpen((prev) => !prev);
   };
 
+  // Callback ổn định để không phá React.memo của ProjectTree/AgentPanel
+  const collapseLeftSidebar = useCallback(() => setIsLeftSidebarOpen(false), []);
+  const collapseRightSidebar = useCallback(() => setIsRightSidebarOpen(false), []);
+
   const {
     status,
     installStatus,
@@ -328,7 +332,7 @@ export function App() {
               files={files}
               selectedFile={selectedFile}
               onSelectFile={selectFile}
-              onCollapseSidebar={() => setIsLeftSidebarOpen(false)}
+              onCollapseSidebar={collapseLeftSidebar}
             />
             <ThreadList
               sessions={sessions}
@@ -376,7 +380,7 @@ export function App() {
               availableCommands={availableCommands}
               onSendMessage={sendMessage}
               onBranchSession={branchFromMessage}
-              onCollapsePanel={() => setIsRightSidebarOpen(false)}
+              onCollapsePanel={collapseRightSidebar}
               onOpenFile={handleOpenFileByPath}
             />
           </div>

@@ -1,6 +1,5 @@
 import React, { useMemo, useEffect, useRef } from 'react';
 import { Terminal, Sparkles, ChevronRight, Hash, X } from 'lucide-react';
-import type { OmpCommandInfo } from '../../types';
 import {
   DEMO_COMMANDS,
   CommandMenuItem,
@@ -13,17 +12,18 @@ export type { CommandMenuItem };
 export interface CommandMenuProps {
   isOpen: boolean;
   query: string;
-  commands?: OmpCommandInfo[];
+  items: CommandMenuItem[];
+  groups: { name: string; items: CommandMenuItem[] }[];
   selectedIndex: number;
   onSelectCommand: (insertText: string) => void;
   onClose: () => void;
-  onSelectedIndexChange?: (index: number) => void;
 }
 
-export const CommandMenu: React.FC<CommandMenuProps> = ({
+const CommandMenuComponent: React.FC<CommandMenuProps> = ({
   isOpen,
   query,
-  commands,
+  items: filteredItems,
+  groups,
   selectedIndex,
   onSelectCommand,
   onClose,
@@ -31,19 +31,17 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const activeItemRef = useRef<HTMLButtonElement>(null);
 
-  const sourceCommands = useMemo(() => {
-    return commands && commands.length > 0 ? commands : DEMO_COMMANDS;
-  }, [commands]);
-
-  const { items: filteredItems, groups } = useMemo(() => {
-    return filterAndGroupCommands(sourceCommands, query);
-  }, [sourceCommands, query]);
+  // Tra chỉ số toàn cục O(1) thay vì indexOf trong vòng render
+  const itemIndexMap = useMemo(() => {
+    const map = new Map<CommandMenuItem, number>();
+    filteredItems.forEach((item, idx) => map.set(item, idx));
+    return map;
+  }, [filteredItems]);
 
   useEffect(() => {
     if (activeItemRef.current) {
       activeItemRef.current.scrollIntoView({
         block: 'nearest',
-        behavior: 'smooth',
       });
     }
   }, [selectedIndex]);
@@ -53,7 +51,7 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
   return (
     <div
       ref={containerRef}
-      className="absolute bottom-full mb-2 left-3 right-3 sm:left-3 sm:right-auto sm:w-[420px] max-h-80 bg-surface dark:bg-[#181a24] border border-border rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden animate-fade-in text-slate-800 dark:text-zinc-100"
+      className="absolute bottom-full mb-2 left-3 right-3 sm:left-3 sm:right-auto sm:w-[420px] sm:max-w-[calc(100%-24px)] max-h-80 bg-surface dark:bg-[#181a24] border border-border rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden animate-fade-in text-slate-800 dark:text-zinc-100"
     >
       {/* Header Info */}
       <div className="px-3 py-2 border-b border-border/60 bg-surface-highlight/30 flex items-center justify-between text-[11px] text-slate-400">
@@ -98,7 +96,7 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
 
               <div className="space-y-0.5">
                 {grp.items.map((item) => {
-                  const globalIdx = filteredItems.indexOf(item);
+                  const globalIdx = itemIndexMap.get(item) ?? -1;
                   const isSelected = globalIdx === selectedIndex;
 
                   return (
@@ -168,3 +166,5 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
     </div>
   );
 };
+
+export const CommandMenu = React.memo(CommandMenuComponent);

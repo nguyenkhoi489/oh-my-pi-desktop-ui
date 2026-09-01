@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Folder,
   FolderOpen,
@@ -25,31 +25,13 @@ interface ProjectTreeProps {
   onCollapseSidebar?: () => void;
 }
 
-export const ProjectTree: React.FC<ProjectTreeProps> = ({
+const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
   files,
   selectedFile,
   onSelectFile,
   onCollapseSidebar,
 }) => {
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
-
-  // Auto-expand top level folders when files are first loaded
-  useEffect(() => {
-    if (files.length > 0) {
-      setExpandedFolders((prev) => {
-        const next = { ...prev };
-        files.forEach((f) => {
-          if (f.isDirectory) {
-            const key = f.path || f.relativePath;
-            if (next[key] === undefined) {
-              next[key] = true;
-            }
-          }
-        });
-        return next;
-      });
-    }
-  }, [files]);
 
   const toggleFolder = (key: string) => {
     setExpandedFolders((prev) => ({
@@ -253,3 +235,5 @@ export const ProjectTree: React.FC<ProjectTreeProps> = ({
     </div>
   );
 };
+
+export const ProjectTree = React.memo(ProjectTreeComponent);

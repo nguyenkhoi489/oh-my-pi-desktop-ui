@@ -30,7 +30,7 @@ interface AgentPanelProps {
   onOpenFile?: (filePath: string) => void;
 }
 
-export const AgentPanel: React.FC<AgentPanelProps> = ({
+const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   messages,
   currentThinking,
   activeToolCalls,
@@ -102,3 +102,5 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     </div>
   );
 };
+
+export const AgentPanel = React.memo(AgentPanelComponent);
