@@ -16,5 +16,4 @@ coverage/
 .agents/
 GEMINI.md
 release-manifest.json
-.repomixignore
-plans/templates/
+plans/
