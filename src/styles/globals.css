@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --color-bg: #f8fafc;
+  --color-panel: #ffffff;
+  --color-surface: #f1f5f9;
+  --color-surface-highlight: #e2e8f0;
+  --color-border: rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+  color-scheme: dark;
+  --color-bg: #0d0e11;
+  --color-panel: #121316;
+  --color-surface: #18191d;
+  --color-surface-highlight: #22242a;
+  --color-border: rgba(255, 255, 255, 0.08);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', sans-serif;
+  background-color: var(--color-bg);
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+}
+
+.dark body {
+  color: #ededed;
+}
+
+/* Custom sleek scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Titlebar drag region for macOS */
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Antigravity glow effects */
+.glow-purple {
+  box-shadow: 0 4px 20px -2px rgba(147, 51, 234, 0.15);
+}
+
+.dark .glow-purple {
+  box-shadow: 0 0 20px -5px rgba(168, 85, 247, 0.35);
+}
+
+.glow-emerald {
+  box-shadow: 0 4px 20px -2px rgba(16, 185, 129, 0.15);
+}
+
+.dark .glow-emerald {
+  box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.35);
+}
+
+/* Code block highlight */
+pre {
+  background-color: #f8fafc !important;
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark pre {
+  background-color: #121316 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}

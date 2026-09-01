@@ -1,0 +1,20 @@
+node_modules/
+dist/
+dist-electron/
+release/
+coverage/
+.cache/
+.vite/
+*.tsbuildinfo
+*.log
+.DS_Store
+.env*
+!.env.example
+
+# Local agent runtimes and generated manifests
+.claude/
+.agents/
+GEMINI.md
+release-manifest.json
+.repomixignore
+plans/templates/

@@ -1,0 +1,53 @@
+{
+  "name": "omp-agent",
+  "productName": "OMP Agent",
+  "version": "1.0.0",
+  "description": "Antigravity & Codex-inspired Mac App UI for oh-my-pi Coding Agent",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && electron-builder --dir",
+    "build:renderer": "tsc && vite build",
+    "build:electron": "tsc -p tsconfig.node.json",
+    "start": "vite",
+    "test": "vite build && npm run test:preload",
+    "test:preload": "node scripts/verify-electron-preload.cjs"
+  },
+  "keywords": [
+    "omp",
+    "oh-my-pi",
+    "coding-agent",
+    "antigravity",
+    "codex",
+    "electron",
+    "mac-app"
+  ],
+  "author": "OMP Team",
+  "license": "MIT",
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.16.0",
+    "monaco-editor": "^0.52.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.0.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.16",
+    "@types/node": "^22.13.5",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  }
+}
