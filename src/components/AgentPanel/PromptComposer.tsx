@@ -60,7 +60,7 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
       )}
 
       {/* Input Box */}
-      <div className="relative rounded-2xl border border-border focus-within:border-codex-accent bg-surface/50 dark:bg-[#14161f] focus-within:bg-surface dark:focus-within:bg-[#181a24] transition-all shadow-xs p-3">
+      <div className="relative rounded-2xl border border-border focus-within:border-blue-500/60 bg-surface/50 dark:bg-[#14161f] focus-within:bg-surface dark:focus-within:bg-[#181a24] transition-all shadow-xs p-3">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -96,7 +96,7 @@ export const PromptComposer: React.FC<PromptComposerProps> = ({
               disabled={!input.trim() || status !== 'idle'}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 input.trim() && status === 'idle'
-                  ? 'bg-codex-accent hover:bg-codex-accent-hover text-white shadow-sm'
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
                   : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 cursor-not-allowed'
               }`}
             >

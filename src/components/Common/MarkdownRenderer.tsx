@@ -26,31 +26,31 @@ const markedInstance = new Marked({
     },
 
     code({ text, lang }) {
-      const language = (lang || 'code').trim();
+      const language = (lang || 'text').trim();
       const escaped = text
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 
-      return `<div class="code-block-wrapper my-3 rounded-xl overflow-hidden border border-border shadow-xs">
-        <div class="flex items-center justify-between px-3.5 py-1.5 bg-slate-100/80 dark:bg-[#161b22] border-b border-border text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+      return `<div class="code-block-wrapper my-3 rounded-xl overflow-hidden border border-border bg-[#f6f8fa] dark:bg-[#14161d] shadow-xs">
+        <div class="flex items-center justify-between px-3.5 py-1.5 bg-slate-100 dark:bg-[#1a1d26] border-b border-border text-[11px] font-mono text-slate-500 dark:text-zinc-400">
           <span class="font-semibold uppercase tracking-wider text-[10px] text-slate-600 dark:text-zinc-300">${language}</span>
           <button type="button" class="copy-code-btn flex items-center gap-1 text-[11px] text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 px-2 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer" data-code="${encodeURIComponent(text)}">
             <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <span class="copy-text">Copy</span>
           </button>
         </div>
-        <pre class="p-3.5 overflow-x-auto text-[12.5px] leading-relaxed font-mono text-slate-800 dark:text-zinc-200 bg-slate-50/60 dark:bg-[#0b0c10] m-0 border-0 rounded-none"><code class="language-${language}">${escaped}</code></pre>
+        <pre class="p-3.5 overflow-x-auto text-[12.5px] leading-relaxed font-mono text-slate-800 dark:text-zinc-200 bg-[#f8fafc]/70 dark:bg-[#0f1117] m-0 border-0 rounded-none"><code class="language-${language}">${escaped}</code></pre>
       </div>`;
     },
 
     codespan({ text }) {
-      return `<code class="px-1.5 py-0.5 rounded bg-surface-highlight dark:bg-zinc-800/90 text-codex-accent dark:text-emerald-400 font-mono text-[12px] border border-border/60 font-medium">${text}</code>`;
+      return `<code class="px-1.5 py-0.5 rounded bg-rose-500/10 dark:bg-rose-950/35 text-rose-600 dark:text-rose-400 font-mono text-[12px] border border-rose-500/20 dark:border-rose-800/40 font-medium">${text}</code>`;
     },
 
     link({ href, title, text }) {
       const titleAttr = title ? `title="${title}"` : '';
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-codex-accent underline font-medium hover:opacity-80 transition-opacity inline-flex items-center gap-0.5" ${titleAttr}><span>${text}</span><svg class="w-3 h-3 inline opacity-60 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-medium transition-colors inline-flex items-center gap-0.5" ${titleAttr}><span>${text}</span><svg class="w-3 h-3 inline opacity-60 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`;
     },
 
     blockquote({ text }) {
@@ -75,21 +75,39 @@ const markedInstance = new Marked({
       return `<blockquote class="my-2.5 border-l-3 border-slate-300 dark:border-zinc-700 pl-3.5 py-0.5 italic text-slate-600 dark:text-zinc-400">${text}</blockquote>`;
     },
 
-    table({ header, rows }) {
-      const headerHtml = header ? `<thead class="bg-surface-highlight font-semibold text-slate-700 dark:text-zinc-300">${header}</thead>` : '';
-      const rowsHtml = rows ? `<tbody class="divide-y divide-border bg-panel">${rows}</tbody>` : '';
-      return `<div class="overflow-x-auto my-3 rounded-xl border border-border shadow-xs"><table class="min-w-full text-xs text-left divide-y divide-border">${headerHtml}${rowsHtml}</table></div>`;
+    table(token) {
+      let headerHtml = '';
+      if (token.header && Array.isArray(token.header)) {
+        for (let i = 0; i < token.header.length; i++) {
+          headerHtml += this.tablecell(token.header[i]);
+        }
+      }
+      headerHtml = this.tablerow({ text: headerHtml });
+
+      let bodyHtml = '';
+      if (token.rows && Array.isArray(token.rows)) {
+        for (let i = 0; i < token.rows.length; i++) {
+          let rowHtml = '';
+          for (let j = 0; j < token.rows[i].length; j++) {
+            rowHtml += this.tablecell(token.rows[i][j]);
+          }
+          bodyHtml += this.tablerow({ text: rowHtml });
+        }
+      }
+
+      return `<div class="overflow-x-auto my-3 rounded-xl border border-border bg-panel shadow-xs"><table class="min-w-full text-xs text-left divide-y divide-border"><thead class="bg-surface-highlight font-semibold text-slate-700 dark:text-zinc-300">${headerHtml}</thead><tbody class="divide-y divide-border bg-panel">${bodyHtml}</tbody></table></div>`;
     },
 
-    tablerow({ text }) {
-      return `<tr class="hover:bg-surface-highlight/50 transition-colors">${text}</tr>`;
+    tablerow(token) {
+      return `<tr class="hover:bg-surface-highlight/40 transition-colors">${token.text}</tr>`;
     },
 
-    tablecell({ text, header, align }) {
-      const tag = header ? 'th' : 'td';
-      const alignCls = align ? `text-${align}` : '';
-      const padCls = header ? 'px-3.5 py-2' : 'px-3.5 py-2 text-slate-700 dark:text-zinc-300';
-      return `<${tag} class="${padCls} ${alignCls}">${text}</${tag}>`;
+    tablecell(token) {
+      const tag = token.header ? 'th' : 'td';
+      const alignCls = token.align ? ` text-${token.align}` : '';
+      const padCls = token.header ? 'px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100' : 'px-3.5 py-2 text-slate-700 dark:text-zinc-300';
+      const content = token.tokens ? this.parser.parseInline(token.tokens) : (token.text || '');
+      return `<${tag} class="${padCls}${alignCls}">${content}</${tag}>`;
     },
 
     hr() {
@@ -155,7 +173,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         className="inline"
       />
       {isStreaming && (
-        <span className="inline-block w-2 h-4 ml-1 bg-codex-accent animate-pulse align-middle" />
+        <span className="inline-block w-1.5 h-4 ml-1 bg-blue-500 dark:bg-blue-400 animate-pulse align-middle" />
       )}
     </div>
   );

@@ -7,7 +7,7 @@
  * 3. Nested ordered and unordered lists with bold inline code headers.
  * 4. Inline code spans styled with pill background and font-mono.
  * 5. Fenced code blocks rendered with language badge, copy button, and code element.
- * 6. Tables rendered with headers and border structure.
+ * 6. Tables rendered with headers, cells, and border structure (fixing [object Object] bug).
  * 7. GitHub-style alerts ([!NOTE], [!TIP], etc.) styled with distinctive callout boxes.
  * 8. User screenshot sample text renders with clean nested hierarchy instead of raw markdown text.
  */
@@ -48,30 +48,30 @@ const markedInstance = new Marked({
     },
 
     code({ text, lang }) {
-      const language = (lang || 'code').trim();
+      const language = (lang || 'text').trim();
       const escaped = text
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 
-      return `<div class="code-block-wrapper my-3 rounded-xl overflow-hidden border border-border shadow-xs">
-        <div class="flex items-center justify-between px-3.5 py-1.5 bg-slate-100/80 dark:bg-[#161b22] border-b border-border text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+      return `<div class="code-block-wrapper my-3 rounded-xl overflow-hidden border border-border bg-[#f6f8fa] dark:bg-[#14161d] shadow-xs">
+        <div class="flex items-center justify-between px-3.5 py-1.5 bg-slate-100 dark:bg-[#1a1d26] border-b border-border text-[11px] font-mono text-slate-500 dark:text-zinc-400">
           <span class="font-semibold uppercase tracking-wider text-[10px] text-slate-600 dark:text-zinc-300">${language}</span>
           <button type="button" class="copy-code-btn flex items-center gap-1 text-[11px] text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 px-2 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer" data-code="${encodeURIComponent(text)}">
             <span class="copy-text">Copy</span>
           </button>
         </div>
-        <pre class="p-3.5 overflow-x-auto text-[12.5px] leading-relaxed font-mono text-slate-800 dark:text-zinc-200 bg-slate-50/60 dark:bg-[#0b0c10] m-0 border-0 rounded-none"><code class="language-${language}">${escaped}</code></pre>
+        <pre class="p-3.5 overflow-x-auto text-[12.5px] leading-relaxed font-mono text-slate-800 dark:text-zinc-200 bg-[#f8fafc]/70 dark:bg-[#0f1117] m-0 border-0 rounded-none"><code class="language-${language}">${escaped}</code></pre>
       </div>`;
     },
 
     codespan({ text }) {
-      return `<code class="px-1.5 py-0.5 rounded bg-surface-highlight dark:bg-zinc-800/90 text-codex-accent dark:text-emerald-400 font-mono text-[12px] border border-border/60 font-medium">${text}</code>`;
+      return `<code class="px-1.5 py-0.5 rounded bg-rose-500/10 dark:bg-rose-950/35 text-rose-600 dark:text-rose-400 font-mono text-[12px] border border-rose-500/20 dark:border-rose-800/40 font-medium">${text}</code>`;
     },
 
     link({ href, title, text }) {
       const titleAttr = title ? `title="${title}"` : '';
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-codex-accent underline font-medium hover:opacity-80 transition-opacity inline-flex items-center gap-0.5" ${titleAttr}><span>${text}</span></a>`;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-medium transition-colors inline-flex items-center gap-0.5" ${titleAttr}><span>${text}</span></a>`;
     },
 
     blockquote({ text }) {
@@ -96,21 +96,39 @@ const markedInstance = new Marked({
       return `<blockquote class="my-2.5 border-l-3 border-slate-300 dark:border-zinc-700 pl-3.5 py-0.5 italic text-slate-600 dark:text-zinc-400">${text}</blockquote>`;
     },
 
-    table({ header, rows }) {
-      const headerHtml = header ? `<thead class="bg-surface-highlight font-semibold text-slate-700 dark:text-zinc-300">${header}</thead>` : '';
-      const rowsHtml = rows ? `<tbody class="divide-y divide-border bg-panel">${rows}</tbody>` : '';
-      return `<div class="overflow-x-auto my-3 rounded-xl border border-border shadow-xs"><table class="min-w-full text-xs text-left divide-y divide-border">${headerHtml}${rowsHtml}</table></div>`;
+    table(token) {
+      let headerHtml = '';
+      if (token.header && Array.isArray(token.header)) {
+        for (let i = 0; i < token.header.length; i++) {
+          headerHtml += this.tablecell(token.header[i]);
+        }
+      }
+      headerHtml = this.tablerow({ text: headerHtml });
+
+      let bodyHtml = '';
+      if (token.rows && Array.isArray(token.rows)) {
+        for (let i = 0; i < token.rows.length; i++) {
+          let rowHtml = '';
+          for (let j = 0; j < token.rows[i].length; j++) {
+            rowHtml += this.tablecell(token.rows[i][j]);
+          }
+          bodyHtml += this.tablerow({ text: rowHtml });
+        }
+      }
+
+      return `<div class="overflow-x-auto my-3 rounded-xl border border-border bg-panel shadow-xs"><table class="min-w-full text-xs text-left divide-y divide-border"><thead class="bg-surface-highlight font-semibold text-slate-700 dark:text-zinc-300">${headerHtml}</thead><tbody class="divide-y divide-border bg-panel">${bodyHtml}</tbody></table></div>`;
     },
 
-    tablerow({ text }) {
-      return `<tr class="hover:bg-surface-highlight/50 transition-colors">${text}</tr>`;
+    tablerow(token) {
+      return `<tr class="hover:bg-surface-highlight/40 transition-colors">${token.text}</tr>`;
     },
 
-    tablecell({ text, header, align }) {
-      const tag = header ? 'th' : 'td';
-      const alignCls = align ? `text-${align}` : '';
-      const padCls = header ? 'px-3.5 py-2' : 'px-3.5 py-2 text-slate-700 dark:text-zinc-300';
-      return `<${tag} class="${padCls} ${alignCls}">${text}</${tag}>`;
+    tablecell(token) {
+      const tag = token.header ? 'th' : 'td';
+      const alignCls = token.align ? ` text-${token.align}` : '';
+      const padCls = token.header ? 'px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100' : 'px-3.5 py-2 text-slate-700 dark:text-zinc-300';
+      const content = token.tokens ? this.parser.parseInline(token.tokens) : (token.text || '');
+      return `<${tag} class="${padCls}${alignCls}">${content}</${tag}>`;
     },
 
     hr() {
@@ -132,12 +150,12 @@ console.log('[Test 1] Headings Typography & Classes');
 console.log();
 
 // ----------------------------------------------------
-// Test 2: Inline code, bold, italic
+// Test 2: Inline Code, Bold & Formatting
 // ----------------------------------------------------
 console.log('[Test 2] Inline Code, Bold & Formatting');
 {
   const html = markedInstance.parse('Here is `inline-code` and **bold text** with *italic*.');
-  assert(html.includes('<code class="px-1.5 py-0.5 rounded bg-surface-highlight'), 'Inline code has styled background & border');
+  assert(html.includes('<code class="px-1.5 py-0.5 rounded bg-rose-500/10'), 'Inline code has styled background & border');
   assert(html.includes('<strong>bold text</strong>'), 'Bold text rendered as <strong>');
   assert(html.includes('<em>italic</em>'), 'Italic text rendered as <em>');
 }
@@ -196,6 +214,39 @@ console.log('[Test 5] User Screenshot Sample Text Rendering');
   assert(html.includes('<li>Giá trị số (<code class="px-1.5 py-0.5 rounded'), 'Nested item 2 formatted with code tag');
   assert(html.includes('<li>Badge trạng thái (<code class="px-1.5 py-0.5 rounded'), 'Nested item 3 formatted with code tag');
   assert(html.includes('<ol start="2">'), 'Second ordered item parsed');
+}
+console.log();
+
+// ----------------------------------------------------
+// Test 6: Tech Stack Table Rendering (No [object Object] Bug)
+// ----------------------------------------------------
+console.log('[Test 6] Tech Stack Table Rendering');
+{
+  const tableSample = `## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Runtime | Node.js >= 20 |
+| Language | TypeScript (ES2022) |
+| HTTP Framework | Fastify 5 |
+| Database | SQLite (better-sqlite3, WAL mode) |
+| Validation | Zod |
+| Logging | Pino + pino-pretty |
+| Auth | google-auth-library, OAuth 2.0 + PKCE |
+| Bundler | tsup |
+| Testing | Vitest (80% coverage threshold) |
+| Frontend | React 19, React Router 7, Tailwind CSS 4, Vite 5 |
+| Deployment | PM2, Nginx |`;
+
+  const html = markedInstance.parse(tableSample);
+  assert(!html.includes('[object Object]'), 'Output does NOT contain [object Object]');
+  assert(html.includes('<table class="min-w-full text-xs text-left divide-y divide-border">'), 'Table rendered with table tag and styling');
+  assert(html.includes('<th class="px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100">Layer</th>'), 'Header cell Layer rendered');
+  assert(html.includes('<th class="px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100">Technology</th>'), 'Header cell Technology rendered');
+  assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300">Runtime</td>'), 'Data cell Runtime rendered');
+  assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300">Node.js &gt;= 20</td>'), 'Data cell Node.js >= 20 rendered');
+  assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300">Fastify 5</td>'), 'Data cell Fastify 5 rendered');
+  assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300">SQLite (better-sqlite3, WAL mode)</td>'), 'Data cell SQLite rendered');
 }
 console.log();
 

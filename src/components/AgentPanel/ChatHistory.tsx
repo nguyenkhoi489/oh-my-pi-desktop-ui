@@ -40,8 +40,8 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                   <User className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-300" />
                 </div>
               ) : (
-                <div className="w-6 h-6 rounded-md bg-codex-500/15 flex items-center justify-center shrink-0">
-                  <Sparkles className="w-3.5 h-3.5 text-codex-accent" />
+                <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                 </div>
               )}
               <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
@@ -60,7 +60,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                 className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
                   status !== 'idle'
                     ? 'opacity-40 cursor-not-allowed text-slate-400'
-                    : 'text-slate-400 hover:text-codex-accent hover:bg-surface-highlight cursor-pointer'
+                    : 'text-slate-400 hover:text-blue-500 hover:bg-surface-highlight cursor-pointer'
                 }`}
                 title={status !== 'idle' ? 'Đang xử lý...' : 'Tạo nhánh mới từ tin nhắn này'}
               >
@@ -117,10 +117,10 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
       {currentStreamText && (
         <div className="flex flex-col gap-2 animate-fade-in">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-codex-500/15 flex items-center justify-center shrink-0">
-              <Sparkles className="w-3.5 h-3.5 text-codex-accent animate-pulse" />
+            <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
+              <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 animate-pulse" />
             </div>
-            <span className="text-xs font-semibold text-codex-accent">
+            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
               OMP Agent
             </span>
           </div>
