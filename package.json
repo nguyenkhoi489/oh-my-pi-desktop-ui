@@ -11,8 +11,11 @@
     "build:renderer": "tsc && vite build",
     "build:electron": "tsc -p tsconfig.node.json",
     "start": "vite",
-    "test": "vite build && npm run test:preload",
-    "test:preload": "node scripts/verify-electron-preload.cjs"
+    "test": "npm run test:preload && npm run test:framer && npm run test:bridge && npm run test:handshake",
+    "test:preload": "node scripts/verify-electron-preload.cjs",
+    "test:framer": "node --experimental-strip-types scripts/verify-ndjson-framer.mjs",
+    "test:bridge": "node --experimental-strip-types scripts/verify-omp-bridge.mjs",
+    "test:handshake": "node --experimental-strip-types scripts/verify-rpc-handshake.mjs"
   },
   "keywords": [
     "omp",
