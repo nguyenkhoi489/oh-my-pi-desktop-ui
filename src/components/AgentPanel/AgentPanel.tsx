@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot } from 'lucide-react';
+import { Sparkles, PanelRightClose } from 'lucide-react';
 import {
   ChatMessage,
   ThinkingBlock,
@@ -16,6 +16,7 @@ interface AgentPanelProps {
   currentStreamText: string;
   status: OmpAgentStatus;
   onSendMessage: (prompt: string, contextFiles?: string[]) => void;
+  onCollapsePanel?: () => void;
 }
 
 export const AgentPanel: React.FC<AgentPanelProps> = ({
@@ -25,20 +26,35 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   currentStreamText,
   status,
   onSendMessage,
+  onCollapsePanel,
 }) => {
   return (
-    <div className="w-96 flex flex-col h-full bg-panel shrink-0 select-none">
+    <div className="w-full flex flex-col h-full bg-panel select-none">
       {/* Agent Panel Header */}
-      <div className="h-9 bg-surface border-b border-border flex items-center justify-between px-3 shrink-0">
+      <div className="h-11 bg-surface border-b border-border flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2">
-          <Bot className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-          <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200">
-            OMP Copilot
+          <div className="w-5 h-5 rounded-md bg-codex-500/15 flex items-center justify-center">
+            <Sparkles className="w-3.5 h-3.5 text-codex-accent" />
+          </div>
+          <span className="text-xs font-semibold text-slate-800 dark:text-zinc-100">
+            OMP Agent Chat
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-zinc-500 font-medium">
-          <span>Tokens: 1.2k</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-surface-highlight text-slate-600 dark:text-zinc-400">
+            1.2k tokens
+          </span>
+
+          {onCollapsePanel && (
+            <button
+              onClick={onCollapsePanel}
+              className="p-1 rounded-md hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+              title="Thu gọn Agent Panel (⌘J)"
+            >
+              <PanelRightClose className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
