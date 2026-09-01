@@ -128,6 +128,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (settings: Partial<AppSettings>) => ipcRenderer.invoke('settings:set', settings),
 
+  // Provider & Custom LLM Management (Phase 8)
+  getModelsConfig: () =>
+    ipcRenderer.invoke('omp:models-config-read'),
+
+  saveModelsConfig: (providers: any[]) =>
+    ipcRenderer.invoke('omp:models-config-write', { providers }),
+
+  getLoginProviders: () =>
+    ipcRenderer.invoke('omp:login-providers'),
+
   // IPC Event Listeners
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => {
     const handler = (_: any, status: OmpAgentStatus) => callback(status);

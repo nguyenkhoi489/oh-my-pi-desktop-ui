@@ -5,6 +5,11 @@ import { fileURLToPath } from 'url';
 import { OmpBridge } from './omp-bridge.ts';
 import type { WorkspaceFile, OmpThinkingLevel, OmpApprovalMode } from './types.ts';
 import { getSettingsStore, type AppSettings } from './settings-store.ts';
+import {
+  readModelsConfig,
+  writeModelsConfig,
+  fetchLoginProviders,
+} from './models-config.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,6 +121,30 @@ ipcMain.handle('settings:set', async (_, partial: Partial<AppSettings>) => {
     ompBridge.setCustomBinaryPath(updated.customBinaryPath);
   }
   return updated;
+});
+
+// IPC Handlers: Provider & Custom LLM Management (Phase 8)
+ipcMain.handle('omp:models-config-read', async () => {
+  return readModelsConfig();
+});
+
+ipcMain.handle('omp:models-config-write', async (_, payload: { providers: any[] }) => {
+  return writeModelsConfig(payload?.providers || []);
+});
+
+ipcMain.handle('omp:login-providers', async () => {
+  let binaryPath: string | undefined;
+  if (ompBridge) {
+    const installStatus = await ompBridge.checkInstallation();
+    if (installStatus.installed && installStatus.binaryPath) {
+      binaryPath = installStatus.binaryPath;
+    }
+  }
+  if (!binaryPath) {
+    const settingsStore = getSettingsStore();
+    binaryPath = settingsStore.get().customBinaryPath;
+  }
+  return fetchLoginProviders(binaryPath);
 });
 
 // IPC Handlers: Model Catalog & Engine State (Phase 2 Additions)

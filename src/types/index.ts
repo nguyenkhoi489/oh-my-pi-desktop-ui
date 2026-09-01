@@ -267,6 +267,46 @@ export interface AppSettings {
   autoCompaction?: boolean;
 }
 
+export interface CustomModelConfig {
+  id: string;
+  name?: string;
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+export interface CustomProviderConfig {
+  id: string;
+  baseUrl: string;
+  api?: string;
+  apiKey?: string;
+  authHeader?: boolean;
+  compat?: {
+    supportsUsageInStreaming?: boolean;
+    [key: string]: unknown;
+  };
+  models?: CustomModelConfig[];
+  hasEnvVar?: boolean;
+}
+
+export interface ModelsConfigReadResult {
+  providers: CustomProviderConfig[];
+  filePath: string;
+  isWritable: boolean;
+  error?: string;
+}
+
+export interface ModelsConfigWriteResult {
+  success: boolean;
+  filePath?: string;
+  backupPath?: string;
+  error?: string;
+}
+
+export interface LoginProviderItem {
+  id: string;
+  name: string;
+}
+
 export interface ElectronAPI {
   checkOmpInstallation: () => Promise<OmpInstallStatus>;
   setCustomBinaryPath: (path: string) => Promise<OmpInstallStatus>;
@@ -318,6 +358,10 @@ export interface ElectronAPI {
   // Settings & Persistence (Phase 7)
   getSettings: () => Promise<AppSettings>;
   setSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
+  // Provider & Custom LLM Management (Phase 8)
+  getModelsConfig: () => Promise<ModelsConfigReadResult>;
+  saveModelsConfig: (providers: CustomProviderConfig[]) => Promise<ModelsConfigWriteResult>;
+  getLoginProviders: () => Promise<{ success: boolean; providers?: LoginProviderItem[]; error?: string }>;
   onOmpNotification: (callback: (notification: OmpNotification) => void) => () => void;
   onOmpEngineStatus: (callback: (statuses: OmpEngineStatusEntry[]) => void) => () => void;
   onOmpWidgetUpdate: (callback: (widgets: OmpWidgetEntry[]) => void) => () => void;
