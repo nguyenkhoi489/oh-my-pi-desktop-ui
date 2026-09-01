@@ -82,7 +82,7 @@ const markedInstance = new Marked({
           headerHtml += this.tablecell(token.header[i]);
         }
       }
-      headerHtml = `<thead class="border-b border-border font-semibold text-slate-900 dark:text-zinc-100">${this.tablerow({ text: headerHtml })}</thead>`;
+      headerHtml = `<thead class="bg-surface-highlight font-semibold text-slate-900 dark:text-zinc-100">${this.tablerow({ text: headerHtml })}</thead>`;
 
       let bodyHtml = '';
       if (token.rows && Array.isArray(token.rows)) {
@@ -94,21 +94,21 @@ const markedInstance = new Marked({
           bodyHtml += this.tablerow({ text: rowHtml });
         }
       }
-      bodyHtml = `<tbody class="divide-y divide-border/60">${bodyHtml}</tbody>`;
+      bodyHtml = `<tbody class="divide-y divide-border bg-transparent">${bodyHtml}</tbody>`;
 
-      return `<div class="overflow-x-auto my-3"><table class="min-w-full text-xs text-left border-collapse">${headerHtml}${bodyHtml}</table></div>`;
+      return `<div class="overflow-x-auto my-3"><table class="min-w-full text-xs text-left border border-border border-collapse">${headerHtml}${bodyHtml}</table></div>`;
     },
 
     tablerow(token) {
-      return `<tr class="hover:bg-surface-highlight/30 transition-colors">${token.text}</tr>`;
+      return `<tr class="hover:bg-surface-highlight/40 transition-colors">${token.text}</tr>`;
     },
 
     tablecell(token) {
       const tag = token.header ? 'th' : 'td';
       const alignCls = token.align ? ` text-${token.align}` : '';
       const padCls = token.header
-        ? 'px-3 py-2 font-semibold text-slate-900 dark:text-zinc-100 border-b border-border'
-        : 'px-3 py-2 text-slate-700 dark:text-zinc-300 border-b border-border/50';
+        ? 'px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100 border border-border'
+        : 'px-3.5 py-2 text-slate-700 dark:text-zinc-300 border border-border';
       const content = token.tokens ? this.parser.parseInline(token.tokens) : (token.text || '');
       return `<${tag} class="${padCls}${alignCls}">${content}</${tag}>`;
     },
