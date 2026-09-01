@@ -79,6 +79,37 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
     }
   }, []);
 
+  const findFileByPath = (tree: WorkspaceFile[], targetPath: string): WorkspaceFile | null => {
+    for (const item of tree) {
+      if (item.path === targetPath) return item;
+      if (item.children && item.children.length > 0) {
+        const found = findFileByPath(item.children, targetPath);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const refreshFiles = useCallback(async () => {
+    if (window.electronAPI && workspacePath) {
+      try {
+        const dirFiles = await window.electronAPI.readDirectory(workspacePath);
+        setFiles(dirFiles);
+        setSelectedFile((currentSelected) => {
+          if (!currentSelected) return null;
+          const stillExists = findFileByPath(dirFiles, currentSelected.path);
+          if (!stillExists) {
+            setFileContent('');
+            return null;
+          }
+          return stillExists;
+        });
+      } catch (err) {
+        console.error('[useWorkspace] Failed to refresh files:', err);
+      }
+    }
+  }, [workspacePath]);
+
   return {
     workspacePath,
     workspaceName,
@@ -89,6 +120,7 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
     setActiveTab,
     openFolderDialog,
     selectFile,
+    refreshFiles,
   };
 }
 

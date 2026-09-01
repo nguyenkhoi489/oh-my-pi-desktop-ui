@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeaderBar } from './components/HeaderBar';
 import { ProjectTree } from './components/Sidebar/ProjectTree';
 import { ThreadList } from './components/Sidebar/ThreadList';
@@ -9,7 +9,7 @@ import { PermissionModal } from './components/Modals/PermissionModal';
 import { OmpRequiredModal } from './components/Modals/OmpRequiredModal';
 import { useOmpRpc } from './hooks/useOmpRpc';
 import { useWorkspace } from './hooks/useWorkspace';
-import { ThemeMode } from './types';
+import { ThemeMode, FileDiffItem } from './types';
 
 export function App() {
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -91,9 +91,42 @@ export function App() {
     setActiveTab,
     openFolderDialog,
     selectFile,
+    refreshFiles,
   } = useWorkspace({
     onProcessStarted: handleProcessStarted,
   });
+
+  // Auto-switch Visual Diff tab when a new pending diff arrives
+  const prevDiffIdRef = useRef<string | null>(activeDiff?.id ?? null);
+  useEffect(() => {
+    if (activeDiff && activeDiff.status === 'pending' && activeDiff.id !== prevDiffIdRef.current) {
+      prevDiffIdRef.current = activeDiff.id;
+      setActiveTab('diff');
+    }
+  }, [activeDiff, setActiveTab]);
+
+  // Refresh ProjectTree when engine creates/deletes a file or after accept/reject of create/delete ops
+  const prevDiffRef = useRef<FileDiffItem | null>(null);
+  useEffect(() => {
+    if (!activeDiff) {
+      prevDiffRef.current = null;
+      return;
+    }
+    const prev = prevDiffRef.current;
+    prevDiffRef.current = activeDiff;
+
+    // 1. When a new diff arrives with op 'create' or 'delete'
+    if (prev?.id !== activeDiff.id && (activeDiff.op === 'create' || activeDiff.op === 'delete')) {
+      refreshFiles();
+    }
+
+    // 2. When activeDiff status transitions away from 'pending' for create/delete ops
+    if (prev && prev.id === activeDiff.id && prev.status === 'pending' && activeDiff.status !== 'pending') {
+      if (activeDiff.op === 'create' || activeDiff.op === 'delete') {
+        refreshFiles();
+      }
+    }
+  }, [activeDiff, refreshFiles]);
 
   // Keyboard shortcut listener: ⌘+K (Omnibar), ⌘+B (Left Sidebar), ⌘+J (Right Sidebar), ⌘+Enter (Accept Diff)
   useEffect(() => {

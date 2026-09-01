@@ -38,6 +38,7 @@ export interface FileDiffItem {
   status: 'pending' | 'accepted' | 'rejected';
   additions: number;
   deletions: number;
+  op?: 'update' | 'create' | 'delete';
 }
 
 export interface WorkspaceFile {
@@ -156,6 +157,7 @@ export interface ElectronAPI {
   readDirectory: (dirPath: string) => Promise<WorkspaceFile[]>;
   readFile: (filePath: string) => Promise<string>;
   saveFile: (filePath: string, content: string) => Promise<any>;
+  deleteFile: (filePath: string) => Promise<boolean>;
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => () => void;
   onOmpStreamToken: (callback: (token: string) => void) => () => void;
   onOmpThinking: (callback: (thinking: ThinkingBlock) => void) => () => void;

@@ -345,7 +345,13 @@ export interface ToolExecutionUpdateEvent {
   type: 'tool_execution_update';
   id?: string;
   toolCallId?: string;
-  output?: unknown;
+  toolName?: string;
+  args?: Record<string, unknown>;
+  partialResult?: {
+    content?: Array<{ type: string; text?: string; [key: string]: unknown }>;
+    details?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -356,6 +362,10 @@ export interface EditToolResultDetails {
   firstChangedLine?: number;
   op?: string;
   path?: string;
+  move?: string | boolean;
+  sourcePath?: string;
+  snapshotsPruned?: boolean;
+  perFileResults?: EditToolResultDetails[];
   [key: string]: unknown;
 }
 

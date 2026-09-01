@@ -37,6 +37,10 @@ import type {
   AgentMessage,
   AgentEndEvent,
   TurnStartEvent,
+  ToolExecutionStartEvent,
+  ToolExecutionUpdateEvent,
+  ToolExecutionEndEvent,
+  EditToolResultDetails,
 } from './omp-rpc-types.ts';
 
 export type BridgeLifecycleState =
@@ -134,6 +138,9 @@ export class OmpBridge {
   private frameLogger: RpcFrameLogger;
   private thinkingAccumulator: ThinkingAccumulator = new ThinkingAccumulator();
   private currentTurnId: string | null = null;
+  private workspacePath: string | null = null;
+  private activeToolCalls: Map<string, ToolCall> = new Map();
+  private writeSnapshots: Map<string, string | null> = new Map();
   private pendingCommands: Map<string, PendingCommand> = new Map();
   private pendingPermissions: Map<string, (approved: boolean) => void> = new Map();
   
@@ -314,7 +321,10 @@ export class OmpBridge {
     this.frameLogger.truncate();
     this.framer.reset();
     this.thinkingAccumulator.reset();
+    this.activeToolCalls.clear();
+    this.writeSnapshots.clear();
     this.currentTurnId = null;
+    this.workspacePath = workspacePath;
 
     const binaryPath = this.detectBinaryPath();
     if (!binaryPath || !fs.existsSync(binaryPath)) {
@@ -688,12 +698,127 @@ export class OmpBridge {
     switch (frame.type) {
       case 'agent_start':
         this.thinkingAccumulator.reset();
+        this.activeToolCalls.clear();
+        this.writeSnapshots.clear();
         break;
 
       case 'turn_start':
         this.currentTurnId = (frame as TurnStartEvent).turnId || String(Date.now());
         this.setStatus('thinking');
         break;
+
+      case 'tool_execution_start': {
+        const startFrame = frame as ToolExecutionStartEvent;
+        const toolCallId = startFrame.toolCallId || String(startFrame.id || Date.now());
+        const toolName = startFrame.toolName || 'tool';
+        const params = (startFrame.args || {}) as Record<string, any>;
+
+        const toolCall: ToolCall = {
+          id: toolCallId,
+          name: toolName,
+          params,
+          status: 'running',
+          startTime: Date.now(),
+        };
+
+        this.activeToolCalls.set(toolCallId, toolCall);
+        this.setStatus('executing_tool');
+
+        // Capture snapshot before write tool execution (Decision D2)
+        if (toolName === 'write' && params.path) {
+          const filePath = path.isAbsolute(params.path)
+            ? params.path
+            : path.resolve(this.workspacePath || process.cwd(), params.path);
+          try {
+            if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+              const snapshot = fs.readFileSync(filePath, 'utf-8');
+              this.writeSnapshots.set(toolCallId, snapshot);
+            } else {
+              this.writeSnapshots.set(toolCallId, null);
+            }
+          } catch {
+            this.writeSnapshots.set(toolCallId, null);
+          }
+        }
+
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:tool-call', toolCall);
+        }
+        break;
+      }
+
+      case 'tool_execution_update': {
+        const updateFrame = frame as ToolExecutionUpdateEvent;
+        const toolCallId = updateFrame.toolCallId || String(updateFrame.id || '');
+        let toolCall = this.activeToolCalls.get(toolCallId);
+        if (!toolCall) {
+          toolCall = {
+            id: toolCallId,
+            name: updateFrame.toolName || 'tool',
+            params: (updateFrame.args || {}) as Record<string, any>,
+            status: 'running',
+            startTime: Date.now(),
+          };
+          this.activeToolCalls.set(toolCallId, toolCall);
+        }
+
+        if (updateFrame.partialResult) {
+          const partialText = updateFrame.partialResult.content?.[0]?.text;
+          toolCall.result = {
+            ...(typeof toolCall.result === 'object' && toolCall.result !== null ? toolCall.result : {}),
+            partial: partialText,
+            details: updateFrame.partialResult.details,
+          };
+          if (this.window && !this.window.isDestroyed()) {
+            this.window.webContents.send('omp:tool-call', toolCall);
+          }
+        }
+        break;
+      }
+
+      case 'tool_execution_end': {
+        const endFrame = frame as ToolExecutionEndEvent;
+        const toolCallId = endFrame.toolCallId || String(endFrame.id || '');
+        let toolCall = this.activeToolCalls.get(toolCallId);
+        if (!toolCall) {
+          toolCall = {
+            id: toolCallId,
+            name: endFrame.toolName || 'tool',
+            params: {},
+            status: 'running',
+            startTime: Date.now(),
+          };
+          this.activeToolCalls.set(toolCallId, toolCall);
+        }
+
+        toolCall.status = endFrame.isError ? 'failed' : 'completed';
+        toolCall.endTime = Date.now();
+        if (endFrame.isError) {
+          toolCall.error =
+            typeof endFrame.error === 'string'
+              ? endFrame.error
+              : (endFrame.error ? JSON.stringify(endFrame.error) : 'Tool execution failed');
+        }
+        toolCall.result = endFrame.result;
+
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:tool-call', toolCall);
+        }
+
+        this.setStatus('thinking');
+
+        if (!endFrame.isError) {
+          const diffItems = this.extractFileDiffs(endFrame, toolCall);
+          for (const diffItem of diffItems) {
+            if (this.window && !this.window.isDestroyed()) {
+              this.window.webContents.send('omp:diff-generated', diffItem);
+            }
+          }
+        }
+
+        this.writeSnapshots.delete(toolCallId);
+        break;
+      }
 
       case 'message_start':
         if ((frame as any).role === 'assistant' || (frame as any).message?.role === 'assistant') {
@@ -773,13 +898,190 @@ export class OmpBridge {
       case 'agent_end':
         this.setStatus('idle');
         this.thinkingAccumulator.reset();
+        this.activeToolCalls.clear();
+        this.writeSnapshots.clear();
         break;
 
       case 'abort':
         this.setStatus('idle');
         this.thinkingAccumulator.reset();
+        this.activeToolCalls.clear();
+        this.writeSnapshots.clear();
         break;
     }
+  }
+
+  private countDiffStats(
+    diffText?: string,
+    originalContent?: string,
+    modifiedContent?: string
+  ): { additions: number; deletions: number } {
+    if (typeof diffText === 'string' && diffText.trim().length > 0) {
+      let additions = 0;
+      let deletions = 0;
+      const lines = diffText.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          additions++;
+        } else if (line.startsWith('-') && !line.startsWith('---')) {
+          deletions++;
+        }
+      }
+      return { additions, deletions };
+    }
+
+    const origLines = originalContent && originalContent.length > 0 ? originalContent.split('\n').length : 0;
+    const modLines = modifiedContent && modifiedContent.length > 0 ? modifiedContent.split('\n').length : 0;
+    return {
+      additions: modLines,
+      deletions: origLines,
+    };
+  }
+
+  private extractFileDiffs(frame: ToolExecutionEndEvent, toolCall?: ToolCall): FileDiffItem[] {
+    if (frame.isError) {
+      return [];
+    }
+
+    const toolName = frame.toolName || toolCall?.name;
+    const toolCallId = frame.toolCallId || toolCall?.id || String(Date.now());
+    const baseDir = this.workspacePath || process.cwd();
+
+    // 1. Tool: 'edit'
+    if (toolName === 'edit') {
+      const details = (frame.result as any)?.details as EditToolResultDetails | undefined;
+      if (!details) {
+        return [];
+      }
+
+      const diffItems: FileDiffItem[] = [];
+
+      // Multi-file results (perFileResults)
+      if (Array.isArray(details.perFileResults) && details.perFileResults.length > 0) {
+        details.perFileResults.forEach((entry, idx) => {
+          if (!entry || entry.snapshotsPruned) {
+            if (entry?.snapshotsPruned) {
+              console.log(`[OmpBridge] Edit snapshots pruned (>32KB), skipping diff item for ${entry.path}`);
+            }
+            return;
+          }
+
+          const rawPath = entry.path;
+          if (!rawPath) return;
+
+          const isDelete = entry.op === 'delete';
+          if (!isDelete && !entry.diff && entry.oldText == null && entry.newText == null) {
+            // Noop edit
+            return;
+          }
+
+          const originalContent = entry.oldText ?? '';
+          const modifiedContent = isDelete ? '' : (entry.newText ?? '');
+          if (!isDelete && entry.oldText == null && entry.newText == null) {
+            return;
+          }
+
+          const filePath = path.isAbsolute(rawPath) ? rawPath : path.resolve(baseDir, rawPath);
+          const relativePath = this.workspacePath ? path.relative(this.workspacePath, filePath) : rawPath;
+          const stats = this.countDiffStats(entry.diff, originalContent, modifiedContent);
+
+          diffItems.push({
+            id: `diff-${toolCallId}-${idx}-${Date.now()}`,
+            filePath,
+            relativePath,
+            originalContent,
+            modifiedContent,
+            status: 'pending',
+            additions: stats.additions,
+            deletions: stats.deletions,
+            op: (entry.op as any) || (isDelete ? 'delete' : 'update'),
+          });
+        });
+
+        return diffItems;
+      }
+
+      // Single file edit
+      if (details.snapshotsPruned) {
+        console.log(`[OmpBridge] Edit snapshots pruned (>32KB), skipping diff item for ${details.path}`);
+        return [];
+      }
+
+      const rawPath = details.path || (toolCall?.params?.path as string) || ((frame as any).args?.path as string);
+      if (!rawPath) return [];
+
+      const isDelete = details.op === 'delete';
+      if (!isDelete && !details.diff && details.oldText == null && details.newText == null) {
+        // Noop edit
+        return [];
+      }
+
+      const originalContent = details.oldText ?? '';
+      const modifiedContent = isDelete ? '' : (details.newText ?? '');
+      if (!isDelete && details.oldText == null && details.newText == null) {
+        return [];
+      }
+
+      const filePath = path.isAbsolute(rawPath) ? rawPath : path.resolve(baseDir, rawPath);
+      const relativePath = this.workspacePath ? path.relative(this.workspacePath, filePath) : rawPath;
+      const stats = this.countDiffStats(details.diff, originalContent, modifiedContent);
+
+      return [
+        {
+          id: `diff-${toolCallId}-${Date.now()}`,
+          filePath,
+          relativePath,
+          originalContent,
+          modifiedContent,
+          status: 'pending',
+          additions: stats.additions,
+          deletions: stats.deletions,
+          op: (details.op as any) || (isDelete ? 'delete' : 'update'),
+        },
+      ];
+    }
+
+    // 2. Tool: 'write'
+    if (toolName === 'write') {
+      const args = (toolCall?.params || (frame as any).args || {}) as Record<string, any>;
+      const details = (frame.result as any)?.details as Record<string, any> | undefined;
+      const rawPath = (details?.resolvedPath as string) || (args?.path as string);
+      if (!rawPath) return [];
+
+      const filePath = path.isAbsolute(rawPath) ? rawPath : path.resolve(baseDir, rawPath);
+      const relativePath = this.workspacePath ? path.relative(this.workspacePath, filePath) : (args?.path || rawPath);
+
+      const snapshot = this.writeSnapshots.has(toolCallId) ? this.writeSnapshots.get(toolCallId) : null;
+      const newContent = typeof args.content === 'string' ? args.content : '';
+
+      let originalContent = snapshot ?? '';
+      let op: 'update' | 'create' = snapshot != null ? 'update' : 'create';
+
+      // Race check (D2): if snapshot === newContent, snapshot was captured after engine write, treat as create
+      if (snapshot !== null && snapshot === newContent) {
+        originalContent = '';
+        op = 'create';
+      }
+
+      const stats = this.countDiffStats('', originalContent, newContent);
+
+      const diffItem: FileDiffItem = {
+        id: `diff-${toolCallId}-${Date.now()}`,
+        filePath,
+        relativePath,
+        originalContent,
+        modifiedContent: newContent,
+        status: 'pending',
+        additions: stats.additions,
+        deletions: stats.deletions,
+        op,
+      };
+
+      return [diffItem];
+    }
+
+    // 3. ast_edit, read, etc. -> No diff
+    return [];
   }
 
   private writeFrame(frame: OmpOutboundFrame) {
@@ -812,6 +1114,9 @@ export class OmpBridge {
     this.setStatus('idle');
     this.rejectAllPending('OMP process terminated');
     this.thinkingAccumulator.reset();
+    this.activeToolCalls.clear();
+    this.writeSnapshots.clear();
+    this.workspacePath = null;
     this.currentTurnId = null;
     this.framer.reset();
   }

@@ -219,6 +219,22 @@ ipcMain.handle('fs:save-file', async (_, filePath: string, content: string) => {
   }
 });
 
+ipcMain.handle('fs:delete-file', async (_, filePath: string) => {
+  try {
+    const resolved = path.resolve(filePath);
+    const stats = await fs.stat(resolved);
+    if (stats.isDirectory()) {
+      console.warn('[fs:delete-file] Refusing to delete directory:', resolved);
+      return false;
+    }
+    await fs.rm(resolved, { force: true, recursive: false });
+    return true;
+  } catch (err) {
+    console.error('Error deleting file:', err);
+    return false;
+  }
+});
+
 app.whenReady().then(() => {
   createWindow();
 

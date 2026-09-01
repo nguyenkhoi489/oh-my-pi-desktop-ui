@@ -34,6 +34,7 @@ export function useOmpRpc() {
   // rAF token batching refs
   const tokenBufferRef = useRef<string>('');
   const rafIdRef = useRef<number | null>(null);
+  const activeToolCallsRef = useRef<ToolCall[]>([]);
 
   const flushTokens = useCallback(() => {
     if (tokenBufferRef.current) {
@@ -210,12 +211,15 @@ export function useOmpRpc() {
     const unsubTool = window.electronAPI.onOmpToolCall((toolCall) => {
       setActiveToolCalls((prev) => {
         const index = prev.findIndex((t) => t.id === toolCall.id);
+        let updated: ToolCall[];
         if (index >= 0) {
-          const updated = [...prev];
+          updated = [...prev];
           updated[index] = toolCall;
-          return updated;
+        } else {
+          updated = [...prev, toolCall];
         }
-        return [...prev, toolCall];
+        activeToolCallsRef.current = updated;
+        return updated;
       });
     });
 
@@ -233,9 +237,20 @@ export function useOmpRpc() {
         rafIdRef.current = null;
       }
       tokenBufferRef.current = '';
-      setMessages((prev) => [...prev, msg]);
+      const currentTools = activeToolCallsRef.current;
+      const finalMsg: ChatMessage = {
+        ...msg,
+        toolCalls:
+          msg.toolCalls && msg.toolCalls.length > 0
+            ? msg.toolCalls
+            : currentTools.length > 0
+              ? [...currentTools]
+              : undefined,
+      };
+      setMessages((prev) => [...prev, finalMsg]);
       setCurrentStreamText('');
       setCurrentThinking(null);
+      activeToolCallsRef.current = [];
       setActiveToolCalls([]);
     });
 
@@ -275,6 +290,7 @@ export function useOmpRpc() {
       setMessages((prev) => [...prev, userMsg]);
       setCurrentStreamText('');
       setCurrentThinking(null);
+      activeToolCallsRef.current = [];
       setActiveToolCalls([]);
 
       if (window.electronAPI) {
@@ -302,11 +318,13 @@ export function useOmpRpc() {
             status: 'running',
             startTime: Date.now(),
           };
+          activeToolCallsRef.current = [mockTool];
           setActiveToolCalls([mockTool]);
 
           setTimeout(() => {
             mockTool.status = 'completed';
             mockTool.endTime = Date.now();
+            activeToolCallsRef.current = [mockTool];
             setActiveToolCalls([mockTool]);
             setStatus('streaming');
 
@@ -326,10 +344,12 @@ export function useOmpRpc() {
                     role: 'assistant',
                     content: reply,
                     timestamp: Date.now(),
+                    toolCalls: [mockTool],
                   },
                 ]);
                 setCurrentStreamText('');
                 setCurrentThinking(null);
+                activeToolCallsRef.current = [];
                 setActiveToolCalls([]);
               }
             }, 30);
@@ -355,14 +375,24 @@ export function useOmpRpc() {
   const acceptDiff = useCallback(async () => {
     if (!activeDiff) return;
     if (window.electronAPI) {
-      await window.electronAPI.saveFile(activeDiff.filePath, activeDiff.modifiedContent);
+      if (activeDiff.op !== 'delete') {
+        await window.electronAPI.saveFile(activeDiff.filePath, activeDiff.modifiedContent);
+      }
     }
     setActiveDiff((prev) => (prev ? { ...prev, status: 'accepted' } : null));
   }, [activeDiff]);
 
-  const rejectDiff = useCallback(() => {
+  const rejectDiff = useCallback(async () => {
+    if (!activeDiff) return;
+    if (window.electronAPI) {
+      if (activeDiff.op === 'create') {
+        await window.electronAPI.deleteFile(activeDiff.filePath);
+      } else if (activeDiff.op === 'delete' || activeDiff.op === 'update' || !activeDiff.op) {
+        await window.electronAPI.saveFile(activeDiff.filePath, activeDiff.originalContent);
+      }
+    }
     setActiveDiff((prev) => (prev ? { ...prev, status: 'rejected' } : null));
-  }, []);
+  }, [activeDiff]);
 
   return {
     status,

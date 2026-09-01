@@ -54,6 +54,7 @@ export interface FileDiffItem {
   status: 'pending' | 'accepted' | 'rejected';
   additions: number;
   deletions: number;
+  op?: 'update' | 'create' | 'delete';
 }
 
 export interface WorkspaceFolder {
@@ -167,6 +168,7 @@ export interface ElectronAPI {
   readDirectory: (dirPath: string) => Promise<WorkspaceFile[]>;
   readFile: (filePath: string) => Promise<string>;
   saveFile: (filePath: string, content: string) => Promise<boolean>;
+  deleteFile: (filePath: string) => Promise<boolean>;
   
   // Event listeners from Main to Renderer
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => () => void;

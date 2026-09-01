@@ -62,6 +62,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveFile: (filePath: string, content: string) =>
     ipcRenderer.invoke('fs:save-file', filePath, content),
 
+  deleteFile: (filePath: string) =>
+    ipcRenderer.invoke('fs:delete-file', filePath),
+
   // IPC Event Listeners
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => {
     const handler = (_: any, status: OmpAgentStatus) => callback(status);
