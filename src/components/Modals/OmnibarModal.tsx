@@ -41,11 +41,11 @@ export const OmnibarModal: React.FC<OmnibarModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/40 backdrop-blur-xs animate-fadeIn">
-      <div className="w-full max-w-xl bg-panel border border-border rounded-2xl shadow-2xl overflow-hidden glow-purple">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+      <div className="w-full max-w-xl bg-panel border border-border rounded-2xl shadow-2xl overflow-hidden">
         {/* Input Bar */}
-        <div className="flex items-center px-4 py-3 border-b border-border bg-surface">
-          <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 mr-3 shrink-0 animate-pulse" />
+        <div className="flex items-center px-4 py-3.5 border-b border-border bg-surface">
+          <Sparkles className="w-4 h-4 text-codex-accent mr-3 shrink-0" />
           <input
             autoFocus
             type="text"
@@ -57,16 +57,16 @@ export const OmnibarModal: React.FC<OmnibarModalProps> = ({
           />
           <button
             onClick={onClose}
-            className="p-1 rounded text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300"
+            className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Quick Suggestion List */}
-        <div className="p-2 space-y-1">
-          <div className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500 uppercase px-2 py-1">
-            Gợi ý thao tác nhanh
+        <div className="p-2.5 space-y-1">
+          <div className="text-[11px] font-bold text-slate-400 dark:text-zinc-500 uppercase px-2.5 py-1 tracking-wider">
+            Quick Actions
           </div>
           {quickActions.map((act, i) => {
             const Icon = act.icon;
@@ -76,22 +76,22 @@ export const OmnibarModal: React.FC<OmnibarModalProps> = ({
                 onClick={() => {
                   setPrompt(act.cmd);
                 }}
-                className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-700 dark:text-zinc-300 hover:bg-surface-highlight hover:text-purple-700 dark:hover:text-purple-200 cursor-pointer transition-colors"
+                className="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs text-slate-700 dark:text-zinc-300 hover:bg-surface-highlight hover:text-slate-900 dark:hover:text-zinc-100 cursor-pointer transition-colors"
               >
-                <div className="flex items-center gap-2">
-                  <Icon className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400" />
-                  <span>{act.label}</span>
+                <div className="flex items-center gap-2.5">
+                  <Icon className="w-4 h-4 text-slate-400 dark:text-zinc-400" />
+                  <span className="font-medium">{act.label}</span>
                 </div>
-                <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono">Select</span>
+                <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-mono">Select</span>
               </div>
             );
           })}
         </div>
 
         {/* Footer info */}
-        <div className="px-4 py-2 bg-surface border-t border-border flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-500">
-          <span>Nhấn <kbd className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-zinc-800 text-slate-800 dark:text-zinc-300 font-medium">↵</kbd> để chạy</span>
-          <span>Nhấn <kbd className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-zinc-800 text-slate-800 dark:text-zinc-300 font-medium">Esc</kbd> để đóng</span>
+        <div className="px-4 py-2.5 bg-surface border-t border-border flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
+          <span>Nhấn <kbd className="px-1.5 py-0.5 rounded bg-surface-highlight text-slate-800 dark:text-zinc-200 font-medium border border-border">↵</kbd> để chạy</span>
+          <span>Nhấn <kbd className="px-1.5 py-0.5 rounded bg-surface-highlight text-slate-800 dark:text-zinc-200 font-medium border border-border">Esc</kbd> để đóng</span>
         </div>
       </div>
     </div>

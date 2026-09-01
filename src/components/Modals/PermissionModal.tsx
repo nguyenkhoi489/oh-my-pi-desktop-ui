@@ -14,25 +14,25 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
   if (!request) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs animate-fadeIn">
-      <div className="w-full max-w-md bg-panel border border-amber-300 dark:border-amber-500/40 rounded-2xl shadow-2xl overflow-hidden p-5 space-y-4">
-        <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
-          <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-500/10 flex items-center justify-center shrink-0 border border-amber-300 dark:border-amber-500/30">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+      <div className="w-full max-w-md bg-panel border border-border rounded-2xl shadow-2xl overflow-hidden p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0 border border-amber-500/30 text-amber-500">
             <ShieldAlert className="w-5 h-5" />
           </div>
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">Cấp quyền thực thi cho Agent</h3>
-            <p className="text-xs text-slate-500 dark:text-zinc-400">OMP Agent yêu cầu quyền chạy hành động sau:</p>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">OMP Agent yêu cầu quyền chạy hành động sau:</p>
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-surface border border-border space-y-2 text-xs">
+        <div className="p-4 rounded-xl bg-surface border border-border space-y-2.5 text-xs">
           <div className="font-semibold text-slate-800 dark:text-zinc-200">{request.description}</div>
 
           {request.command && (
             <div className="space-y-1">
-              <div className="text-[10px] text-slate-500 font-mono uppercase">Lệnh Shell:</div>
-              <pre className="p-2 rounded bg-slate-900 text-amber-300 font-mono text-[11px] overflow-x-auto">
+              <div className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono uppercase tracking-wider">Lệnh Shell:</div>
+              <pre className="p-2.5 rounded-lg bg-background text-amber-500 font-mono text-[11.5px] overflow-x-auto border border-border">
                 {request.command}
               </pre>
             </div>
@@ -40,27 +40,27 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
 
           {request.targetFile && (
             <div className="space-y-1">
-              <div className="text-[10px] text-slate-500 font-mono uppercase">File bị tác động:</div>
-              <div className="font-mono text-slate-800 dark:text-zinc-300 text-[11px]">{request.targetFile}</div>
+              <div className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono uppercase tracking-wider">File bị tác động:</div>
+              <div className="font-mono text-slate-800 dark:text-zinc-300 text-xs">{request.targetFile}</div>
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2">
+        <div className="flex items-center justify-end gap-2.5 pt-2">
           <button
             onClick={() => onRespond(false)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300 border border-border transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300 border border-border transition-colors cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
-            <span>Từ chối (Deny)</span>
+            <span>Từ chối</span>
           </button>
 
           <button
             onClick={() => onRespond(true)}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow-md shadow-amber-600/20 transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow-sm transition-all cursor-pointer"
           >
             <Check className="w-3.5 h-3.5" />
-            <span>Cho phép (Allow)</span>
+            <span>Cho phép chạy</span>
           </button>
         </div>
       </div>

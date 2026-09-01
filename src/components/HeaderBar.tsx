@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   FolderOpen,
   Sparkles,
@@ -9,8 +9,13 @@ import {
   RotateCw,
   Sun,
   Moon,
+  Check,
+  PanelLeft,
+  PanelLeftClose,
+  PanelRight,
+  PanelRightClose,
 } from 'lucide-react';
-import { OmpAgentStatus, ThemeMode } from '../types';
+import { OmpAgentStatus, OmpInstallStatus, ThemeMode } from '../types';
 
 interface HeaderBarProps {
   workspaceName: string;
@@ -23,7 +28,18 @@ interface HeaderBarProps {
   onOpenOmnibar: () => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
+  isLeftSidebarOpen: boolean;
+  onToggleLeftSidebar: () => void;
+  isRightSidebarOpen: boolean;
+  onToggleRightSidebar: () => void;
 }
+
+const AVAILABLE_MODELS = [
+  'claude-3-7-sonnet',
+  'gpt-4o',
+  'pi-deepseek-r1',
+  'qwen-2.5-coder-32b',
+];
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   workspaceName,
@@ -36,39 +52,56 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onOpenOmnibar,
   theme,
   onToggleTheme,
+  isLeftSidebarOpen,
+  onToggleLeftSidebar,
+  isRightSidebarOpen,
+  onToggleRightSidebar,
 }) => {
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsModelDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const getStatusBadge = () => {
     switch (status) {
       case 'thinking':
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 animate-pulse">
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-600 dark:bg-purple-400"></span>
+          <span className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-codex-500/10 text-codex-500 dark:text-codex-400 border border-codex-500/20">
+            <span className="w-2 h-2 rounded-full bg-codex-500 animate-pulse"></span>
             Thinking (AST / LSP)...
           </span>
         );
       case 'executing_tool':
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30">
-            <RotateCw className="w-3 h-3 animate-spin text-blue-600 dark:text-blue-400" />
+          <span className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+            <RotateCw className="w-3.5 h-3.5 animate-spin text-blue-500" />
             Executing Tool
           </span>
         );
       case 'streaming':
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-            <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+          <span className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+            <Zap className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
             Generating Response
           </span>
         );
       case 'waiting_permission':
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-bounce">
+          <span className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
             Requires Approval
           </span>
         );
       default:
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700/50">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-surface text-slate-500 dark:text-zinc-400 border border-border">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-zinc-500"></span>
             Idle
           </span>
@@ -77,29 +110,48 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   };
 
   return (
-    <header className="h-11 bg-panel border-b border-border flex items-center justify-between px-3 pl-20 app-drag-region select-none shadow-sm dark:shadow-none">
-      {/* Left: Project Folder Picker */}
-      <div className="flex items-center gap-3 app-no-drag">
+    <header className="h-12 bg-panel border-b border-border flex items-center justify-between px-3 pl-20 app-drag-region select-none">
+      {/* Left: Project Folder Picker, Sidebar Toggle & OMP Status */}
+      <div className="flex items-center gap-2.5 app-no-drag">
+        {/* Toggle Left Sidebar Button */}
         <button
-          onClick={onOpenFolder}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300 border border-border hover:border-slate-300 dark:hover:border-zinc-600 transition-colors"
-          title="Mở thư mục dự án"
+          onClick={onToggleLeftSidebar}
+          className={`p-1.5 rounded-lg text-xs border transition-colors cursor-pointer ${
+            isLeftSidebarOpen
+              ? 'bg-surface-highlight text-codex-accent border-border'
+              : 'bg-surface text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
+          }`}
+          title={isLeftSidebarOpen ? 'Thu gọn Explorer (⌘B)' : 'Mở rộng Explorer (⌘B)'}
         >
-          <FolderOpen className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400" />
-          <span className="max-w-[140px] truncate">{workspaceName}</span>
-          <ChevronDown className="w-3 h-3 text-slate-400 dark:text-zinc-500" />
+          {isLeftSidebarOpen ? (
+            <PanelLeftClose className="w-4 h-4" />
+          ) : (
+            <PanelLeft className="w-4 h-4" />
+          )}
         </button>
 
-        <div className="h-4 w-[1px] bg-slate-200 dark:bg-zinc-800" />
+        <button
+          onClick={onOpenFolder}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 border border-border transition-colors cursor-pointer"
+          title="Mở thư mục dự án"
+        >
+          <FolderOpen className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400 shrink-0" />
+          <span className="max-w-[150px] truncate font-medium">{workspaceName}</span>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500 shrink-0" />
+        </button>
+
+        <div className="h-4 w-[1px] bg-border" />
 
         {/* Antigravity / OMP Branding Badge */}
-        <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-zinc-400">
-          <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-          <span className="font-bold text-slate-900 dark:text-zinc-200">OMP</span>
+        <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-1.5 font-bold tracking-tight text-slate-900 dark:text-zinc-100">
+            <Sparkles className="w-3.5 h-3.5 text-codex-accent" />
+            <span>OMP</span>
+          </div>
 
           {installStatus?.installed ? (
             <span
-              className="text-[10px] uppercase font-semibold tracking-wider px-1.5 py-0.2 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 rounded border border-emerald-300 dark:border-emerald-500/30 flex items-center gap-1"
+              className="text-[11px] font-medium px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-md border border-emerald-500/20 flex items-center gap-1.5"
               title={`OMP Binary: ${installStatus.binaryPath}`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -108,7 +160,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           ) : (
             <button
               onClick={onOpenInstallModal}
-              className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.2 bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-500/30 hover:bg-amber-200 transition-colors flex items-center gap-1"
+              className="text-[11px] font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-md border border-amber-500/30 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Click để xem hướng dẫn cài đặt OMP"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
@@ -119,25 +171,73 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
 
       {/* Center: Model Selector & Agent Status */}
-      <div className="flex items-center gap-2 app-no-drag">
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-surface border border-border text-slate-700 dark:text-zinc-300 hover:border-slate-300 dark:hover:border-zinc-600 cursor-pointer transition-colors">
-          <Cpu className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-          <span className="font-medium">{selectedModel}</span>
-          <ChevronDown className="w-3 h-3 text-slate-400 dark:text-zinc-500" />
+      <div className="flex items-center gap-2.5 app-no-drag">
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-surface hover:bg-surface-highlight border border-border text-slate-800 dark:text-zinc-200 transition-colors font-medium cursor-pointer"
+          >
+            <Cpu className="w-3.5 h-3.5 text-codex-accent shrink-0" />
+            <span className="font-mono text-[12px]">{selectedModel}</span>
+            <ChevronDown className="w-3 h-3 text-slate-400 dark:text-zinc-500 shrink-0" />
+          </button>
+
+          {isModelDropdownOpen && (
+            <div className="absolute top-full mt-1.5 left-0 w-52 bg-panel border border-border rounded-xl shadow-xl py-1.5 z-50 animate-fade-in">
+              <div className="px-3 py-1 text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                Select Model
+              </div>
+              {AVAILABLE_MODELS.map((model) => (
+                <button
+                  key={model}
+                  onClick={() => {
+                    onSelectModel(model);
+                    setIsModelDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition-colors cursor-pointer ${
+                    selectedModel === model
+                      ? 'bg-codex-accent/10 text-codex-accent font-semibold'
+                      : 'text-slate-700 dark:text-zinc-300 hover:bg-surface-highlight'
+                  }`}
+                >
+                  <span className="font-mono">{model}</span>
+                  {selectedModel === model && <Check className="w-3.5 h-3.5 text-codex-accent" />}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {getStatusBadge()}
       </div>
 
-      {/* Right: Theme Toggle & Quick Action ⌘K */}
-      <div className="flex items-center gap-1.5 app-no-drag">
+      {/* Right: Right Sidebar Toggle, Theme Toggle & Quick Action ⌘K */}
+      <div className="flex items-center gap-2 app-no-drag">
+        {/* Toggle Right Agent Panel Button */}
+        <button
+          onClick={onToggleRightSidebar}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors cursor-pointer ${
+            isRightSidebarOpen
+              ? 'bg-surface-highlight text-codex-accent border-border font-semibold shadow-xs'
+              : 'bg-surface text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
+          }`}
+          title={isRightSidebarOpen ? 'Thu gọn Agent Panel (⌘J)' : 'Mở rộng Agent Panel (⌘J)'}
+        >
+          {isRightSidebarOpen ? (
+            <PanelRightClose className="w-3.5 h-3.5 text-codex-accent" />
+          ) : (
+            <PanelRight className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400" />
+          )}
+          <span className="font-medium text-[11.5px]">Copilot</span>
+        </button>
+
         <button
           onClick={onToggleTheme}
-          className="p-1.5 rounded-md text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 border border-border transition-colors"
+          className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
           title={`Chuyển sang chế độ ${theme === 'light' ? 'Dark' : 'Light'}`}
         >
           {theme === 'light' ? (
-            <Moon className="w-3.5 h-3.5 text-slate-600" />
+            <Moon className="w-3.5 h-3.5 text-slate-700" />
           ) : (
             <Sun className="w-3.5 h-3.5 text-amber-400" />
           )}
@@ -145,11 +245,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
         <button
           onClick={onOpenOmnibar}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 border border-border transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
           title="Mở thanh lệnh nhanh (⌘K)"
         >
-          <Command className="w-3 h-3" />
-          <span className="font-semibold">K</span>
+          <Command className="w-3.5 h-3.5" />
+          <span className="font-semibold text-[11px]">K</span>
         </button>
       </div>
     </header>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { HeaderBar } from './components/HeaderBar';
 import { ProjectTree } from './components/Sidebar/ProjectTree';
 import { ThreadList } from './components/Sidebar/ThreadList';
@@ -15,6 +15,8 @@ export function App() {
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [isOmnibarOpen, setIsOmnibarOpen] = useState<boolean>(false);
   const [isOmpModalOpen, setIsOmpModalOpen] = useState<boolean>(false);
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(true);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(true);
 
   // Sync theme class on HTML root element
   useEffect(() => {
@@ -30,6 +32,14 @@ export function App() {
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
+
+  const toggleLeftSidebar = () => {
+    setIsLeftSidebarOpen((prev) => !prev);
+  };
+
+  const toggleRightSidebar = () => {
+    setIsRightSidebarOpen((prev) => !prev);
   };
 
   const {
@@ -63,7 +73,6 @@ export function App() {
   }, [installStatus]);
 
   const {
-    workspacePath,
     workspaceName,
     files,
     selectedFile,
@@ -74,12 +83,23 @@ export function App() {
     selectFile,
   } = useWorkspace();
 
-  // Keyboard shortcut listener: ⌘+K
+  // Keyboard shortcut listener: ⌘+K (Omnibar), ⌘+B (Left Sidebar), ⌘+J (Right Sidebar), ⌘+Enter (Accept Diff)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // ⌘+K: Omnibar
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setIsOmnibarOpen((prev) => !prev);
+      }
+      // ⌘+B: Toggle Left Sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        setIsLeftSidebarOpen((prev) => !prev);
+      }
+      // ⌘+J: Toggle Right Agent Panel
+      if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
+        e.preventDefault();
+        setIsRightSidebarOpen((prev) => !prev);
       }
       // ⌘+Enter to accept diff
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && activeDiff && activeDiff.status === 'pending') {
@@ -106,18 +126,29 @@ export function App() {
         onOpenOmnibar={() => setIsOmnibarOpen(true)}
         theme={theme}
         onToggleTheme={toggleTheme}
+        isLeftSidebarOpen={isLeftSidebarOpen}
+        onToggleLeftSidebar={toggleLeftSidebar}
+        isRightSidebarOpen={isRightSidebarOpen}
+        onToggleRightSidebar={toggleRightSidebar}
       />
 
       {/* 2. Main 3-Column Layout */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Left Sidebar: File Tree & Sessions */}
-        <div className="w-60 bg-panel border-r border-border flex flex-col shrink-0 select-none">
-          <ProjectTree
-            files={files}
-            selectedFile={selectedFile}
-            onSelectFile={selectFile}
-          />
-          <ThreadList onNewThread={() => {}} />
+        <div
+          className={`bg-panel border-r border-border flex flex-col shrink-0 select-none transition-all duration-200 overflow-hidden ${
+            isLeftSidebarOpen ? 'w-60 opacity-100' : 'w-0 opacity-0 border-r-0 pointer-events-none'
+          }`}
+        >
+          <div className="w-60 h-full flex flex-col">
+            <ProjectTree
+              files={files}
+              selectedFile={selectedFile}
+              onSelectFile={selectFile}
+              onCollapseSidebar={() => setIsLeftSidebarOpen(false)}
+            />
+            <ThreadList onNewThread={() => {}} />
+          </div>
         </div>
 
         {/* Center Canvas: Visual Diff / Editor / Artifacts / Terminal */}
@@ -133,14 +164,23 @@ export function App() {
         />
 
         {/* Right Copilot Panel: Reasoning Stepper, Tool Cards & Chat */}
-        <AgentPanel
-          messages={messages}
-          currentThinking={currentThinking}
-          activeToolCalls={activeToolCalls}
-          currentStreamText={currentStreamText}
-          status={status}
-          onSendMessage={sendMessage}
-        />
+        <div
+          className={`bg-panel border-l border-border flex flex-col shrink-0 select-none transition-all duration-200 overflow-hidden ${
+            isRightSidebarOpen ? 'w-[420px] opacity-100' : 'w-0 opacity-0 border-l-0 pointer-events-none'
+          }`}
+        >
+          <div className="w-[420px] h-full flex flex-col">
+            <AgentPanel
+              messages={messages}
+              currentThinking={currentThinking}
+              activeToolCalls={activeToolCalls}
+              currentStreamText={currentStreamText}
+              status={status}
+              onSendMessage={sendMessage}
+              onCollapsePanel={() => setIsRightSidebarOpen(false)}
+            />
+          </div>
+        </div>
       </div>
 
       {/* 3. Global Modals */}
