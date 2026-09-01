@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ArtifactDocument } from '../../types';
 import { DEMO_ARTIFACTS } from '../../mock/demoData';
+import { MarkdownRenderer } from '../Common/MarkdownRenderer';
 
 interface ArtifactViewerProps {
   artifacts?: ArtifactDocument[];
@@ -224,11 +225,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
                 {currentArtifact.description}
               </p>
             )}
-            <div className="prose dark:prose-invert max-w-none text-[13px] leading-relaxed font-sans text-slate-800 dark:text-zinc-200">
-              <pre className="p-4 rounded-xl bg-surface border border-border font-mono whitespace-pre-wrap text-xs">
-                {currentArtifact.content}
-              </pre>
-            </div>
+            <MarkdownRenderer content={currentArtifact.content} />
           </div>
         )}
 

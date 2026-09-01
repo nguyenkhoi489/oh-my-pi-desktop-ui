@@ -11,6 +11,9 @@ import {
   OmpModelInfo,
   OmpThinkingLevel,
   OmpEngineState,
+  OmpSessionInfo,
+  OmpBranchEntry,
+  OmpSubagentInfo,
 } from '../types';
 import { DEMO_MESSAGES, DEMO_INITIAL_DIFF } from '../mock/demoData';
 
@@ -26,6 +29,9 @@ export function useOmpRpc() {
   const [activeDiff, setActiveDiff] = useState<FileDiffItem | null>(() => (isElectron ? null : DEMO_INITIAL_DIFF));
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
 
+  // Subagents Hub state (Phase 3)
+  const [subagents, setSubagents] = useState<OmpSubagentInfo[]>([]);
+
   // Extension UI Request queue (FIFO)
   const [uiRequestQueue, setUiRequestQueue] = useState<OmpUiRequest[]>([]);
   const uiRequestQueueRef = useRef<OmpUiRequest[]>([]);
@@ -36,6 +42,10 @@ export function useOmpRpc() {
   const [selectedModel, setSelectedModel] = useState<OmpModelInfo | null>(null);
   const [thinkingLevel, setThinkingLevel] = useState<OmpThinkingLevel>('off');
   const [engineState, setEngineState] = useState<OmpEngineState | null>(null);
+
+  // Sessions state (Phase 2)
+  const [sessions, setSessions] = useState<OmpSessionInfo[]>([]);
+  const [activeSessionPath, setActiveSessionPath] = useState<string | null>(null);
 
   // rAF token batching refs
   const tokenBufferRef = useRef<string>('');
@@ -176,18 +186,205 @@ export function useOmpRpc() {
     []
   );
 
+  const refreshSessions = useCallback(async (): Promise<OmpSessionInfo[]> => {
+    if (!window.electronAPI) return [];
+    try {
+      const res = await window.electronAPI.listSessions();
+      if (res.success && Array.isArray(res.sessions)) {
+        setSessions(res.sessions);
+        const active = res.sessions.find((s) => s.active);
+        if (active) {
+          setActiveSessionPath(active.path);
+        } else if (engineState?.sessionFile) {
+          setActiveSessionPath(engineState.sessionFile);
+        }
+        return res.sessions;
+      }
+    } catch (err) {
+      console.warn('[useOmpRpc] Failed to fetch sessions:', err);
+    }
+    return [];
+  }, [engineState?.sessionFile]);
+
+  const correlateBranchEntries = useCallback(
+    async (currentMsgs: ChatMessage[]): Promise<ChatMessage[]> => {
+      if (!window.electronAPI) return currentMsgs;
+      try {
+        const branchRes = await window.electronAPI.getBranchEntries();
+        if (branchRes.success && Array.isArray(branchRes.entries)) {
+          const timestampCounts = new Map<number, OmpBranchEntry[]>();
+          for (const entry of branchRes.entries) {
+            if (entry.role === 'user' && typeof entry.timestamp === 'number') {
+              const list = timestampCounts.get(entry.timestamp) || [];
+              list.push(entry);
+              timestampCounts.set(entry.timestamp, list);
+            }
+          }
+          return currentMsgs.map((m) => {
+            if (m.role === 'user') {
+              const matches = timestampCounts.get(m.timestamp);
+              if (matches && matches.length === 1) {
+                return { ...m, entryId: matches[0].entryId };
+              }
+              return { ...m, entryId: undefined };
+            }
+            return m;
+          });
+        }
+      } catch (err) {
+        console.warn('[useOmpRpc] Failed to correlate branch entries:', err);
+      }
+      return currentMsgs;
+    },
+    []
+  );
+
+  const switchSession = useCallback(
+    async (sessionPath: string): Promise<boolean> => {
+      if (status !== 'idle') {
+        console.warn('[useOmpRpc] Cannot switch session while agent is busy (status:', status, ')');
+        return false;
+      }
+
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.switchSession(sessionPath);
+          if (res.success) {
+            const histRes = await window.electronAPI.loadHistory();
+            if (histRes.success && Array.isArray(histRes.messages)) {
+              if (rafIdRef.current !== null) {
+                cancelAnimationFrame(rafIdRef.current);
+                rafIdRef.current = null;
+              }
+              tokenBufferRef.current = '';
+              setCurrentStreamText('');
+              setCurrentThinking(null);
+              activeToolCallsRef.current = [];
+              setActiveToolCalls([]);
+              setActiveDiff(null);
+              setUiRequestQueue([]);
+              uiRequestQueueRef.current = [];
+
+              const correlated = await correlateBranchEntries(histRes.messages);
+              setMessages(correlated);
+              setActiveSessionPath(sessionPath);
+              await refreshSessions();
+              await refreshEngineState();
+              return true;
+            }
+          } else if (res.error === 'session_busy') {
+            console.warn('[useOmpRpc] Session switch rejected: engine is busy');
+          }
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to switch session:', err);
+        }
+        return false;
+      } else {
+        setActiveSessionPath(sessionPath);
+        return true;
+      }
+    },
+    [status, correlateBranchEntries, refreshSessions, refreshEngineState]
+  );
+
+  const newSession = useCallback(
+    async (parentSession?: string): Promise<boolean> => {
+      if (status !== 'idle') {
+        console.warn('[useOmpRpc] Cannot create new session while agent is busy (status:', status, ')');
+        return false;
+      }
+
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.newSession(parentSession);
+          if (res.success) {
+            if (rafIdRef.current !== null) {
+              cancelAnimationFrame(rafIdRef.current);
+              rafIdRef.current = null;
+            }
+            tokenBufferRef.current = '';
+            setMessages([]);
+            setCurrentStreamText('');
+            setCurrentThinking(null);
+            activeToolCallsRef.current = [];
+            setActiveToolCalls([]);
+            setActiveDiff(null);
+            setUiRequestQueue([]);
+            uiRequestQueueRef.current = [];
+            setActiveSessionPath(null);
+            await refreshSessions();
+            await refreshEngineState();
+            return true;
+          }
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to create new session:', err);
+        }
+        return false;
+      } else {
+        setMessages([]);
+        setActiveDiff(null);
+        return true;
+      }
+    },
+    [status, refreshSessions, refreshEngineState]
+  );
+
+  const branchFromMessage = useCallback(
+    async (entryId: string): Promise<boolean> => {
+      if (status !== 'idle') {
+        console.warn('[useOmpRpc] Cannot branch session while agent is busy (status:', status, ')');
+        return false;
+      }
+
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.branchSession(entryId);
+          if (res.success) {
+            const histRes = await window.electronAPI.loadHistory();
+            if (histRes.success && Array.isArray(histRes.messages)) {
+              if (rafIdRef.current !== null) {
+                cancelAnimationFrame(rafIdRef.current);
+                rafIdRef.current = null;
+              }
+              tokenBufferRef.current = '';
+              setCurrentStreamText('');
+              setCurrentThinking(null);
+              activeToolCallsRef.current = [];
+              setActiveToolCalls([]);
+              setActiveDiff(null);
+              setUiRequestQueue([]);
+              uiRequestQueueRef.current = [];
+
+              const correlated = await correlateBranchEntries(histRes.messages);
+              setMessages(correlated);
+              await refreshSessions();
+              await refreshEngineState();
+              return true;
+            }
+          }
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to branch session:', err);
+        }
+        return false;
+      }
+      return true;
+    },
+    [status, correlateBranchEntries, refreshSessions, refreshEngineState]
+  );
+
   // Check installation immediately on launch
   useEffect(() => {
     checkInstallation();
   }, [checkInstallation]);
 
-  // Load models and engine state when installed
+  // Load models, engine state, and sessions when installed
   useEffect(() => {
     if (installStatus?.installed && window.electronAPI) {
       refreshModels();
       refreshEngineState();
+      refreshSessions();
     }
-  }, [installStatus?.installed, refreshModels, refreshEngineState]);
+  }, [installStatus?.installed, refreshModels, refreshEngineState, refreshSessions]);
 
   // Connect to Electron IPC listeners
   useEffect(() => {
@@ -200,6 +397,7 @@ export function useOmpRpc() {
       setStatus(newStatus);
       if (newStatus === 'idle') {
         refreshEngineState();
+        refreshSessions();
       }
     });
 
@@ -272,12 +470,27 @@ export function useOmpRpc() {
               ? [...currentTools]
               : undefined,
       };
-      setMessages((prev) => [...prev, finalMsg]);
+      setMessages((prev) => {
+        const next = [...prev, finalMsg];
+        correlateBranchEntries(next)
+          .then((annotated) => {
+            setMessages(annotated);
+          })
+          .catch(() => {});
+        return next;
+      });
       setCurrentStreamText('');
       setCurrentThinking(null);
       activeToolCallsRef.current = [];
       setActiveToolCalls([]);
+      refreshSessions();
     });
+
+    const unsubSubagents = window.electronAPI.onOmpSubagentUpdate
+      ? window.electronAPI.onOmpSubagentUpdate((updated) => {
+          setSubagents(updated || []);
+        })
+      : () => {};
 
     return () => {
       if (rafIdRef.current !== null) {
@@ -294,6 +507,7 @@ export function useOmpRpc() {
       unsubUiRequest();
       unsubUiCancel();
       unsubComplete();
+      unsubSubagents();
     };
   }, [flushTokens, refreshEngineState]);
 
@@ -503,6 +717,13 @@ export function useOmpRpc() {
     changeThinkingLevel,
     refreshModels,
     refreshEngineState,
+    sessions,
+    activeSessionPath,
+    refreshSessions,
+    switchSession,
+    newSession,
+    branchFromMessage,
+    subagents,
     sendMessage,
     respondPermission,
     acceptDiff,

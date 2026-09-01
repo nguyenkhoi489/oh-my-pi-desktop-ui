@@ -53,6 +53,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getState: () =>
     ipcRenderer.invoke('omp:get-state'),
 
+  // Sessions & Subagent Hub (Phase 1 Additions)
+  listSessions: () =>
+    ipcRenderer.invoke('omp:list-sessions'),
+
+  newSession: (parentSession?: string) =>
+    ipcRenderer.invoke('omp:new-session', parentSession),
+
+  switchSession: (sessionPath: string) =>
+    ipcRenderer.invoke('omp:switch-session', sessionPath),
+
+  branchSession: (entryId: string) =>
+    ipcRenderer.invoke('omp:branch-session', entryId),
+
+  loadHistory: () =>
+    ipcRenderer.invoke('omp:load-history'),
+
+  getBranchEntries: () =>
+    ipcRenderer.invoke('omp:branch-entries'),
+
+  getSubagents: () =>
+    ipcRenderer.invoke('omp:get-subagents'),
+
   // File System & Dialogs
   selectFolder: () =>
     ipcRenderer.invoke('fs:select-folder'),
@@ -122,5 +144,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: any, msg: ChatMessage) => callback(msg);
     ipcRenderer.on('omp:message-complete', handler);
     return () => ipcRenderer.removeListener('omp:message-complete', handler);
+  },
+
+  onOmpSubagentUpdate: (callback: (subagents: any[]) => void) => {
+    const handler = (_: any, subagents: any[]) => callback(subagents);
+    ipcRenderer.on('omp:subagent-update', handler);
+    return () => ipcRenderer.removeListener('omp:subagent-update', handler);
   },
 });

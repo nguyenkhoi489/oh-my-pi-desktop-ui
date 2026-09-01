@@ -43,6 +43,7 @@ export interface ChatMessage {
   timestamp: number;
   thinking?: ThinkingBlock;
   toolCalls?: ToolCall[];
+  entryId?: string;
 }
 
 export interface FileDiffItem {
@@ -134,6 +135,33 @@ export interface OmpModelInfo {
   [key: string]: unknown;
 }
 
+export interface OmpSubagentInfo {
+  id: string;
+  index?: number;
+  agent: string;
+  description?: string;
+  status: string;
+  task?: string;
+  sessionFile?: string;
+  progressText?: string;
+  lastUpdate?: number;
+}
+
+export interface OmpSessionInfo {
+  path: string;
+  id: string;
+  title: string;
+  timestamp: string;
+  updatedAt?: string;
+  active?: boolean;
+}
+
+export interface OmpBranchEntry {
+  entryId: string;
+  role: string;
+  timestamp?: number;
+}
+
 export interface OmpEngineState {
   model?: OmpModelInfo;
   isStreaming?: boolean;
@@ -142,6 +170,8 @@ export interface OmpEngineState {
   followUpMode?: string;
   interruptMode?: string;
   sessionId?: string;
+  sessionFile?: string;
+  sessionName?: string;
   autoCompactionEnabled?: boolean;
   queuedMessageCount?: number;
   fastModeEnabled?: boolean;
@@ -176,6 +206,15 @@ export interface ElectronAPI {
   setThinkingLevel: (level: OmpThinkingLevel) => Promise<{ success: boolean; error?: string }>;
   getEngineState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
   getState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
+
+  // Sessions & Subagent Hub (Phase 1 & 3 Additions)
+  listSessions: () => Promise<{ success: boolean; sessions?: OmpSessionInfo[]; error?: string }>;
+  newSession: (parentSession?: string) => Promise<{ success: boolean; error?: string }>;
+  switchSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
+  branchSession: (entryId: string) => Promise<{ success: boolean; error?: string }>;
+  loadHistory: () => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
+  getBranchEntries: () => Promise<{ success: boolean; entries?: OmpBranchEntry[]; error?: string }>;
+  getSubagents?: () => Promise<OmpSubagentInfo[]>;
   
   // Workspace / Filesystem
   selectFolder: () => Promise<string | null>;
@@ -194,6 +233,7 @@ export interface ElectronAPI {
   onOmpUiRequest: (callback: (request: OmpUiRequest) => void) => () => void;
   onOmpUiRequestCancel: (callback: (targetId: string) => void) => () => void;
   onOmpMessageComplete: (callback: (message: ChatMessage) => void) => () => void;
+  onOmpSubagentUpdate: (callback: (subagents: OmpSubagentInfo[]) => void) => () => void;
 }
 
 declare global {

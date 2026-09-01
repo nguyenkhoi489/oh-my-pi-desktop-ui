@@ -117,6 +117,42 @@ ipcMain.handle('omp:get-state', async () => {
   return ompBridge.getState();
 });
 
+// IPC Handlers: Sessions & Subagent Hub (Phase 1 Additions)
+ipcMain.handle('omp:list-sessions', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.listSessions();
+});
+
+ipcMain.handle('omp:new-session', async (_, parentSession?: string) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.newSession(parentSession);
+});
+
+ipcMain.handle('omp:switch-session', async (_, sessionPath: string) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.switchSession(sessionPath);
+});
+
+ipcMain.handle('omp:branch-session', async (_, entryId: string) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.branchSession(entryId);
+});
+
+ipcMain.handle('omp:load-history', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.loadHistory();
+});
+
+ipcMain.handle('omp:branch-entries', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.getBranchEntries();
+});
+
+ipcMain.handle('omp:get-subagents', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return { success: true, subagents: ompBridge.getSubagents() };
+});
+
 // IPC Handlers: File System & Workspace
 ipcMain.handle('fs:select-folder', async () => {
   if (!mainWindow) return null;

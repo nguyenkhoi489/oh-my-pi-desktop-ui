@@ -105,14 +105,22 @@ export interface SetThinkingLevelCommand {
 export interface SwitchSessionCommand {
   type: 'switch_session';
   id?: string;
+  sessionPath: string;
   sessionId?: string;
-  sessionPath?: string;
   [key: string]: unknown;
 }
 
 export interface BranchCommand {
   type: 'branch';
   id?: string;
+  entryId: string;
+  [key: string]: unknown;
+}
+
+export interface SetSubagentSubscriptionCommand {
+  type: 'set_subagent_subscription';
+  id?: string;
+  level: 'off' | 'progress' | 'events';
   [key: string]: unknown;
 }
 
@@ -125,8 +133,9 @@ export interface GetSubagentsCommand {
 export interface GetMessagesPageCommand {
   type: 'get_messages_page';
   id?: string;
-  page?: number;
+  cursor?: number;
   limit?: number;
+  page?: number;
   [key: string]: unknown;
 }
 
@@ -154,6 +163,7 @@ export interface ForkCommand {
 export interface NewSessionCommand {
   type: 'new_session';
   id?: string;
+  parentSession?: string;
   [key: string]: unknown;
 }
 
@@ -166,6 +176,7 @@ export type OmpCommandFrame =
   | GetAvailableModelsCommand
   | SetModelCommand
   | SetThinkingLevelCommand
+  | SetSubagentSubscriptionCommand
   | SwitchSessionCommand
   | BranchCommand
   | GetSubagentsCommand
@@ -433,17 +444,72 @@ export interface AvailableCommandsUpdateEvent {
   [key: string]: unknown;
 }
 
+export interface SubagentLifecyclePayload {
+  id: string;
+  agent: string;
+  agentSource?: string;
+  parentToolCallId?: string;
+  detached?: boolean;
+  status: string;
+  sessionFile?: string;
+  index?: number;
+  description?: string;
+  task?: string;
+  [key: string]: unknown;
+}
+
+export interface SubagentProgressDetail {
+  index?: number;
+  id?: string;
+  agent?: string;
+  agentSource?: string;
+  status?: string;
+  task?: string;
+  assignment?: string;
+  lastIntent?: string;
+  description?: string;
+  recentTools?: unknown[];
+  recentOutput?: unknown[];
+  toolCount?: number;
+  requests?: number;
+  tokens?: number;
+  cost?: number;
+  durationMs?: number;
+  contextTokens?: number;
+  extractedToolData?: unknown;
+  [key: string]: unknown;
+}
+
+export interface SubagentProgressPayload {
+  index?: number;
+  agent?: string;
+  agentSource?: string;
+  task?: string;
+  assignment?: string;
+  parentToolCallId?: string;
+  detached?: boolean;
+  sessionFile?: string;
+  id?: string;
+  status?: string;
+  progress?: SubagentProgressDetail;
+  [key: string]: unknown;
+}
+
 export interface SubagentLifecycleEvent {
   type: 'subagent_lifecycle';
+  id?: string;
   subagentId?: string;
   state?: string;
+  payload?: SubagentLifecyclePayload;
   [key: string]: unknown;
 }
 
 export interface SubagentProgressEvent {
   type: 'subagent_progress';
+  id?: string;
   subagentId?: string;
   progress?: unknown;
+  payload?: SubagentProgressPayload;
   [key: string]: unknown;
 }
 
@@ -451,6 +517,7 @@ export interface SubagentEvent {
   type: 'subagent_event';
   subagentId?: string;
   event?: unknown;
+  payload?: unknown;
   [key: string]: unknown;
 }
 
@@ -521,6 +588,51 @@ export interface GetAvailableModelsResponseData {
   [key: string]: unknown;
 }
 
+export interface SessionChangeResponseData {
+  cancelled?: boolean;
+  text?: string;
+  [key: string]: unknown;
+}
+
+export interface OmpSubagentInfo {
+  id: string;
+  index?: number;
+  agent: string;
+  description?: string;
+  status: string;
+  task?: string;
+  sessionFile?: string;
+  progressText?: string;
+  lastUpdate?: number;
+}
+
+export interface GetSubagentsResponseData {
+  subagents: Array<{
+    id: string;
+    index?: number;
+    agent: string;
+    description?: string;
+    status: string;
+    task?: string;
+    assignment?: string;
+    sessionFile?: string;
+    lastUpdate?: number;
+    progress?: unknown;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+export interface GetMessagesPageResponseData {
+  messages: AgentMessage[];
+  totalMessages?: number;
+  sessionId?: string;
+  leafId?: string;
+  messageCount?: number;
+  cursor?: number;
+  [key: string]: unknown;
+}
+
 export interface OmpEngineState {
   model?: OmpModelInfo;
   isStreaming?: boolean;
@@ -529,6 +641,8 @@ export interface OmpEngineState {
   followUpMode?: string;
   interruptMode?: string;
   sessionId?: string;
+  sessionFile?: string;
+  sessionName?: string;
   autoCompactionEnabled?: boolean;
   queuedMessageCount?: number;
   fastModeEnabled?: boolean;

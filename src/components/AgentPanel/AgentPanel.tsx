@@ -16,6 +16,7 @@ interface AgentPanelProps {
   currentStreamText: string;
   status: OmpAgentStatus;
   onSendMessage: (prompt: string, contextFiles?: string[]) => void;
+  onBranchSession?: (entryId: string) => void;
   onCollapsePanel?: () => void;
 }
 
@@ -26,6 +27,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   currentStreamText,
   status,
   onSendMessage,
+  onBranchSession,
   onCollapsePanel,
 }) => {
   return (
@@ -64,6 +66,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         currentThinking={currentThinking}
         activeToolCalls={activeToolCalls}
         currentStreamText={currentStreamText}
+        status={status}
+        onBranchSession={onBranchSession}
       />
 
       {/* Docked Prompt Composer */}

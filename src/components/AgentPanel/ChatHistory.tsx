@@ -1,14 +1,17 @@
 import React, { useEffect, useRef } from 'react';
-import { User, Sparkles } from 'lucide-react';
-import { ChatMessage, ThinkingBlock, ToolCall } from '../../types';
+import { User, Sparkles, GitBranch } from 'lucide-react';
+import { ChatMessage, ThinkingBlock, ToolCall, OmpAgentStatus } from '../../types';
 import { ThinkingCard } from './ThinkingCard';
 import { ToolCallCard } from './ToolCallCard';
+import { MarkdownRenderer } from '../Common/MarkdownRenderer';
 
 interface ChatHistoryProps {
   messages: ChatMessage[];
   currentThinking: ThinkingBlock | null;
   activeToolCalls: ToolCall[];
   currentStreamText: string;
+  status?: OmpAgentStatus;
+  onBranchSession?: (entryId: string) => void;
 }
 
 export const ChatHistory: React.FC<ChatHistoryProps> = ({
@@ -16,6 +19,8 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
   currentThinking,
   activeToolCalls,
   currentStreamText,
+  status = 'idle',
+  onBranchSession,
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -28,19 +33,41 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
       {messages.map((msg) => (
         <div key={msg.id} className="flex flex-col gap-2">
           {/* Message Header */}
-          <div className="flex items-center gap-2">
-            {msg.role === 'user' ? (
-              <div className="w-6 h-6 rounded-md bg-surface-highlight flex items-center justify-center shrink-0">
-                <User className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-300" />
-              </div>
-            ) : (
-              <div className="w-6 h-6 rounded-md bg-codex-500/15 flex items-center justify-center shrink-0">
-                <Sparkles className="w-3.5 h-3.5 text-codex-accent" />
-              </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {msg.role === 'user' ? (
+                <div className="w-6 h-6 rounded-md bg-surface-highlight flex items-center justify-center shrink-0">
+                  <User className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-300" />
+                </div>
+              ) : (
+                <div className="w-6 h-6 rounded-md bg-codex-500/15 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-3.5 h-3.5 text-codex-accent" />
+                </div>
+              )}
+              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                {msg.role === 'user' ? 'You' : 'OMP Agent'}
+              </span>
+            </div>
+
+            {msg.role === 'user' && msg.entryId && (
+              <button
+                onClick={() => {
+                  if (status === 'idle' && onBranchSession) {
+                    onBranchSession(msg.entryId!);
+                  }
+                }}
+                disabled={status !== 'idle'}
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                  status !== 'idle'
+                    ? 'opacity-40 cursor-not-allowed text-slate-400'
+                    : 'text-slate-400 hover:text-codex-accent hover:bg-surface-highlight cursor-pointer'
+                }`}
+                title={status !== 'idle' ? 'Đang xử lý...' : 'Tạo nhánh mới từ tin nhắn này'}
+              >
+                <GitBranch className="w-3 h-3" />
+                <span>Branch</span>
+              </button>
             )}
-            <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
-              {msg.role === 'user' ? 'You' : 'OMP Agent'}
-            </span>
           </div>
 
           {/* Thinking Block if attached */}
@@ -63,7 +90,11 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                 : 'bg-transparent text-slate-800 dark:text-zinc-200'
             }`}
           >
-            <div className="whitespace-pre-wrap font-sans">{msg.content}</div>
+            {msg.role === 'user' ? (
+              <div className="whitespace-pre-wrap font-sans">{msg.content}</div>
+            ) : (
+              <MarkdownRenderer content={msg.content} />
+            )}
           </div>
         </div>
       ))}
@@ -93,9 +124,8 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
               OMP Agent
             </span>
           </div>
-          <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed text-slate-800 dark:text-zinc-200 whitespace-pre-wrap">
-            {currentStreamText}
-            <span className="inline-block w-2 h-4 ml-1 bg-codex-accent animate-pulse align-middle" />
+          <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed text-slate-800 dark:text-zinc-200">
+            <MarkdownRenderer content={currentStreamText} isStreaming={true} />
           </div>
         </div>
       )}

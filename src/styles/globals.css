@@ -113,3 +113,66 @@ pre {
   background-color: #0b0c10 !important;
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
+
+/* Rich Markdown Content Formatting */
+.markdown-content {
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.markdown-content > *:first-child {
+  margin-top: 0 !important;
+}
+
+.markdown-content > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+.markdown-content p {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-content ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+  margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+  margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.markdown-content li {
+  margin-top: 0.2rem;
+  margin-bottom: 0.2rem;
+}
+
+.markdown-content li > ul,
+.markdown-content li > ol {
+  margin-top: 0.15rem;
+  margin-bottom: 0.15rem;
+}
+
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.markdown-content th,
+.markdown-content td {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--color-border);
+}
+
+.markdown-content th {
+  background-color: var(--color-surface);
+  font-weight: 600;
+}
+

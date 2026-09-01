@@ -12,6 +12,9 @@ import type {
   PermissionRequest,
   OmpUiRequest,
   OmpInstallStatus,
+  OmpSessionInfo,
+  OmpBranchEntry,
+  OmpSubagentInfo,
 } from './types.ts';
 import { NdjsonFramer } from './ndjson-framer.ts';
 import { RpcFrameLogger } from './rpc-frame-logger.ts';
@@ -23,6 +26,15 @@ import type {
   ResponseFrame,
   NegotiateProtocolCommand,
   PromptCommand,
+  NewSessionCommand,
+  SwitchSessionCommand,
+  BranchCommand,
+  GetMessagesPageCommand,
+  SetSubagentSubscriptionCommand,
+  GetSubagentsCommand,
+  GetSubagentsResponseData,
+  SessionChangeResponseData,
+  GetMessagesPageResponseData,
   ExtensionUiResponseCommand,
   ExtensionUiRequestEvent,
   GetAvailableModelsCommand,
@@ -43,6 +55,8 @@ import type {
   ToolExecutionUpdateEvent,
   ToolExecutionEndEvent,
   EditToolResultDetails,
+  SubagentLifecycleEvent,
+  SubagentProgressEvent,
 } from './omp-rpc-types.ts';
 
 export type BridgeLifecycleState =
@@ -146,6 +160,9 @@ export class OmpBridge {
   private pendingCommands: Map<string, PendingCommand> = new Map();
   private pendingPermissions: Map<string, (approved: boolean) => void> = new Map();
   private pendingUiRequests: Map<string, OmpUiRequest> = new Map();
+  private activeSubagents: Map<string, OmpSubagentInfo> = new Map();
+  private currentSessionFile: string | null = null;
+  private currentSessionId: string | null = null;
   
   private handshakePromise: {
     resolve: (val: { success: boolean; pid?: number }) => void;
@@ -176,6 +193,102 @@ export class OmpBridge {
 
   public getLifecycleState(): BridgeLifecycleState {
     return this.lifecycleState;
+  }
+
+  public getCurrentSessionFile(): string | null {
+    return this.currentSessionFile;
+  }
+
+  public getCurrentSessionId(): string | null {
+    return this.currentSessionId;
+  }
+
+  public getSessionInfo(): { sessionId: string | null; sessionFile: string | null } {
+    return {
+      sessionId: this.currentSessionId,
+      sessionFile: this.currentSessionFile,
+    };
+  }
+
+  public setSessionInfo(sessionFile: string | null, sessionId: string | null) {
+    this.currentSessionFile = sessionFile;
+    this.currentSessionId = sessionId;
+  }
+
+  public getSubagents(): OmpSubagentInfo[] {
+    return Array.from(this.activeSubagents.values());
+  }
+
+  public async setSubagentSubscription(
+    level: 'off' | 'progress' | 'events' = 'progress'
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const res = await this.sendCommand<unknown>({
+        type: 'set_subagent_subscription',
+        id: this.generateId(),
+        level,
+      });
+      return { success: Boolean(res?.success) };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to set subagent subscription' };
+    }
+  }
+
+  public async refreshSubagentsOnDemand(): Promise<{ success: boolean; subagents?: OmpSubagentInfo[]; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const res = await this.sendCommand<GetSubagentsResponseData>({
+        type: 'get_subagents',
+        id: this.generateId(),
+      });
+      if (res.success && res.data && Array.isArray(res.data.subagents)) {
+        let changed = false;
+        for (const s of res.data.subagents) {
+          if (s && s.id) {
+            const status = String(s.status || '').toLowerCase();
+            const isTerminal = status !== 'started' && status !== 'running';
+            if (isTerminal) {
+              if (this.activeSubagents.has(s.id)) {
+                this.activeSubagents.delete(s.id);
+                changed = true;
+              }
+            } else {
+              const prev = this.activeSubagents.get(s.id);
+              this.activeSubagents.set(s.id, {
+                id: s.id,
+                index: typeof s.index === 'number' ? s.index : prev?.index,
+                agent: s.agent || prev?.agent || 'task',
+                description: s.description || prev?.description,
+                status: s.status || 'running',
+                task: s.task || prev?.task,
+                sessionFile: s.sessionFile || prev?.sessionFile,
+                progressText: prev?.progressText,
+                lastUpdate: typeof s.lastUpdate === 'number' ? s.lastUpdate : Date.now(),
+              });
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          this.emitSubagentUpdate();
+        }
+        return { success: true, subagents: this.getSubagents() };
+      }
+      return { success: false, error: res.error || 'Failed to fetch subagents' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error executing get_subagents' };
+    }
+  }
+
+  private emitSubagentUpdate() {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('omp:subagent-update', Array.from(this.activeSubagents.values()));
+    }
   }
 
   public setCustomBinaryPath(rawPath: string) {
@@ -331,6 +444,9 @@ export class OmpBridge {
     this.activeToolCalls.clear();
     this.writeSnapshots.clear();
     this.pendingUiRequests.clear();
+    this.activeSubagents.clear();
+    this.currentSessionFile = null;
+    this.currentSessionId = null;
     this.currentTurnId = null;
     this.workspacePath = workspacePath;
 
@@ -639,12 +755,430 @@ export class OmpBridge {
         id: this.generateId(),
       });
       if (res.success && res.data) {
+        if (res.data.sessionFile) {
+          this.currentSessionFile = res.data.sessionFile;
+        }
+        if (res.data.sessionId) {
+          this.currentSessionId = res.data.sessionId;
+        }
         return { success: true, state: res.data };
       }
       return { success: false, error: res.error || 'Failed to get state' };
     } catch (err: any) {
       return { success: false, error: err.message || 'Error executing get_state' };
     }
+  }
+
+  public async listSessions(
+    customSessionDir?: string
+  ): Promise<{ success: boolean; sessions?: OmpSessionInfo[]; error?: string }> {
+    try {
+      const sessionDir =
+        customSessionDir ||
+        (this.currentSessionFile ? path.dirname(this.currentSessionFile) : null);
+      if (!sessionDir || !fs.existsSync(sessionDir)) {
+        return { success: true, sessions: [] };
+      }
+
+      const entries = fs.readdirSync(sessionDir, { withFileTypes: true });
+      const sessions: OmpSessionInfo[] = [];
+
+      for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith('.jsonl')) {
+          continue;
+        }
+
+        const fullPath = path.join(sessionDir, entry.name);
+        try {
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          const lines = content.split('\n');
+
+          let title = '';
+          let updatedAt: string | undefined;
+          let sessionId = '';
+          let timestamp = '';
+          let hasValidHeader = false;
+
+          for (let i = 0; i < Math.min(lines.length, 5); i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            try {
+              const parsed = JSON.parse(line);
+              if (parsed.type === 'title') {
+                hasValidHeader = true;
+                if (typeof parsed.title === 'string' && parsed.title.trim().length > 0) {
+                  title = parsed.title.trim();
+                }
+                if (parsed.updatedAt) {
+                  updatedAt = String(parsed.updatedAt);
+                }
+              } else if (parsed.type === 'session') {
+                hasValidHeader = true;
+                if (parsed.id) {
+                  sessionId = String(parsed.id);
+                }
+                if (parsed.timestamp) {
+                  timestamp = String(parsed.timestamp);
+                }
+                if (!title && typeof parsed.title === 'string' && parsed.title.trim().length > 0) {
+                  title = parsed.title.trim();
+                }
+              }
+            } catch {
+              // Ignore malformed line
+            }
+          }
+
+          if (!hasValidHeader) {
+            continue;
+          }
+
+          if (!sessionId) {
+            sessionId = path.basename(entry.name, '.jsonl');
+          }
+          if (!timestamp) {
+            const stat = fs.statSync(fullPath);
+            timestamp = stat.mtime.toISOString();
+          }
+          if (!title) {
+            title = 'New Session';
+          }
+
+          const isActive = this.currentSessionFile
+            ? path.resolve(fullPath) === path.resolve(this.currentSessionFile)
+            : false;
+
+          sessions.push({
+            path: fullPath,
+            id: sessionId,
+            title,
+            timestamp,
+            updatedAt: updatedAt || timestamp,
+            active: isActive,
+          });
+        } catch {
+          // File unreadable / corrupted -> skip safely, do not throw
+        }
+      }
+
+      sessions.sort((a, b) => {
+        const tA = new Date(a.timestamp).getTime();
+        const tB = new Date(b.timestamp).getTime();
+        return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
+      });
+
+      return { success: true, sessions };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to list sessions' };
+    }
+  }
+
+  public async newSession(
+    parentSession?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    if (this.status === 'thinking' || this.status === 'streaming' || this.status === 'executing_tool') {
+      return { success: false, error: 'session_busy' };
+    }
+    try {
+      const cmd: NewSessionCommand = {
+        type: 'new_session',
+        id: this.generateId(),
+        ...(parentSession ? { parentSession } : {}),
+      };
+      const res = await this.sendCommand<SessionChangeResponseData>(cmd);
+      if (res.success && !res.data?.cancelled) {
+        this.resetSessionAccumulators();
+        await this.getState().catch(() => {});
+        return { success: true };
+      }
+      if (res.data?.cancelled) {
+        return { success: false, error: 'cancelled' };
+      }
+      return { success: false, error: res.error || 'Failed to create new session' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error executing new_session' };
+    }
+  }
+
+  public async switchSession(
+    sessionPath: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    if (this.status === 'thinking' || this.status === 'streaming' || this.status === 'executing_tool') {
+      return { success: false, error: 'session_busy' };
+    }
+    try {
+      const cmd: SwitchSessionCommand = {
+        type: 'switch_session',
+        id: this.generateId(),
+        sessionPath,
+      };
+      const res = await this.sendCommand<SessionChangeResponseData>(cmd);
+      if (res.success && !res.data?.cancelled) {
+        this.resetSessionAccumulators();
+        await this.getState().catch(() => {});
+        return { success: true };
+      }
+      if (res.data?.cancelled) {
+        return { success: false, error: 'cancelled' };
+      }
+      return { success: false, error: res.error || 'Failed to switch session' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error executing switch_session' };
+    }
+  }
+
+  public async branchSession(
+    entryId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    if (this.status === 'thinking' || this.status === 'streaming' || this.status === 'executing_tool') {
+      return { success: false, error: 'session_busy' };
+    }
+    try {
+      const cmd: BranchCommand = {
+        type: 'branch',
+        id: this.generateId(),
+        entryId,
+      };
+      const res = await this.sendCommand<SessionChangeResponseData>(cmd);
+      if (res.success && !res.data?.cancelled) {
+        this.resetSessionAccumulators();
+        await this.getState().catch(() => {});
+        return { success: true };
+      }
+      if (res.data?.cancelled) {
+        return { success: false, error: 'cancelled' };
+      }
+      return { success: false, error: res.error || 'Failed to branch session' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error executing branch' };
+    }
+  }
+
+  public async loadHistory(): Promise<{
+    success: boolean;
+    messages?: ChatMessage[];
+    error?: string;
+  }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    if (this.status === 'thinking' || this.status === 'streaming' || this.status === 'executing_tool') {
+      return { success: false, error: 'session_busy' };
+    }
+    try {
+      let allRawMessages: AgentMessage[] = [];
+      const firstPage = await this.sendCommand<GetMessagesPageResponseData>({
+        type: 'get_messages_page',
+        id: this.generateId(),
+      });
+      if (!firstPage.success || !firstPage.data) {
+        return { success: false, error: firstPage.error || 'Failed to load messages page' };
+      }
+
+      allRawMessages = Array.isArray(firstPage.data.messages) ? [...firstPage.data.messages] : [];
+      const totalMessages = firstPage.data.totalMessages ?? allRawMessages.length;
+      let cursor = firstPage.data.cursor;
+
+      while (allRawMessages.length < totalMessages && typeof cursor === 'number') {
+        const prevCursor = cursor;
+        const nextPage = await this.sendCommand<GetMessagesPageResponseData>({
+          type: 'get_messages_page',
+          id: this.generateId(),
+          cursor,
+        });
+        if (
+          !nextPage.success ||
+          !nextPage.data ||
+          !Array.isArray(nextPage.data.messages) ||
+          nextPage.data.messages.length === 0
+        ) {
+          break;
+        }
+        allRawMessages.push(...nextPage.data.messages);
+        if (nextPage.data.cursor === prevCursor) {
+          break;
+        }
+        cursor = nextPage.data.cursor;
+      }
+
+      const messages = this.translateHistoryMessages(allRawMessages);
+      return { success: true, messages };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error executing loadHistory' };
+    }
+  }
+
+  public translateHistoryMessages(rawMessages: AgentMessage[]): ChatMessage[] {
+    const result: ChatMessage[] = [];
+    const toolCallsMap = new Map<string, ToolCall>();
+
+    for (let i = 0; i < rawMessages.length; i++) {
+      const msg = rawMessages[i];
+      if (!msg || typeof msg !== 'object') continue;
+
+      const role = msg.role;
+      const timestamp =
+        typeof msg.completedAt === 'number'
+          ? msg.completedAt
+          : typeof msg.timestamp === 'number'
+          ? msg.timestamp
+          : Date.now();
+
+      if (role === 'user') {
+        let userText = '';
+        if (Array.isArray(msg.content)) {
+          const parts: string[] = [];
+          for (const b of msg.content) {
+            if (b && (b.type === 'text' || !b.type) && typeof (b as any).text === 'string') {
+              parts.push((b as any).text);
+            }
+          }
+          userText = parts.join('\n');
+        } else if (typeof (msg as any).prompt === 'string') {
+          userText = (msg as any).prompt;
+        } else if (typeof (msg as any).text === 'string') {
+          userText = (msg as any).text;
+        }
+
+        result.push({
+          id: `msg-user-${timestamp}-${i}`,
+          role: 'user',
+          content: userText,
+          timestamp,
+        });
+      } else if (role === 'assistant') {
+        const textParts: string[] = [];
+        let thinkingBlock: ThinkingBlock | undefined;
+        const toolCalls: ToolCall[] = [];
+
+        if (Array.isArray(msg.content)) {
+          for (const block of msg.content) {
+            if (!block || typeof block !== 'object') continue;
+            if (block.type === 'text' && typeof (block as any).text === 'string') {
+              textParts.push((block as any).text);
+            } else if (block.type === 'thinking' || (block as any).thought) {
+              const thought =
+                typeof (block as any).text === 'string'
+                  ? (block as any).text
+                  : String((block as any).thought || '');
+              thinkingBlock = {
+                id: `think-${timestamp}-${i}`,
+                thought,
+                timestamp,
+                completed: true,
+              };
+            } else if (block.type === 'toolCall') {
+              const tcBlock = block as any;
+              const tcId = String(tcBlock.id || `tc-${timestamp}-${toolCalls.length}`);
+              const tc: ToolCall = {
+                id: tcId,
+                name: String(tcBlock.name || 'tool'),
+                params: (tcBlock.arguments as Record<string, any>) || {},
+                status: 'running',
+                startTime: timestamp,
+              };
+              toolCalls.push(tc);
+              toolCallsMap.set(tcId, tc);
+            }
+          }
+        } else if (typeof (msg as any).text === 'string') {
+          textParts.push((msg as any).text);
+        }
+
+        result.push({
+          id: `msg-assistant-${timestamp}-${i}`,
+          role: 'assistant',
+          content: textParts.join('\n'),
+          timestamp,
+          ...(thinkingBlock ? { thinking: thinkingBlock } : {}),
+          ...(toolCalls.length > 0 ? { toolCalls } : {}),
+        });
+      } else if (role === 'toolResult') {
+        const toolCallId = (msg.toolCallId || (msg as any).id) as string;
+        if (toolCallId && toolCallsMap.has(toolCallId)) {
+          const tc = toolCallsMap.get(toolCallId)!;
+          tc.status = msg.isError ? 'failed' : 'completed';
+          tc.endTime = timestamp;
+
+          let resultText = '';
+          if (
+            Array.isArray(msg.content) &&
+            msg.content[0] &&
+            typeof (msg.content[0] as any).text === 'string'
+          ) {
+            resultText = (msg.content[0] as any).text;
+          }
+          tc.result = resultText || msg.details || msg.content;
+          if (msg.isError) {
+            tc.error =
+              resultText ||
+              (typeof msg.details === 'string' ? msg.details : 'Tool execution failed');
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  public async getBranchEntries(
+    customSessionFile?: string
+  ): Promise<{ success: boolean; entries?: OmpBranchEntry[]; error?: string }> {
+    try {
+      const targetFile = customSessionFile || this.currentSessionFile;
+      if (!targetFile || !fs.existsSync(targetFile)) {
+        return { success: true, entries: [] };
+      }
+
+      const content = fs.readFileSync(targetFile, 'utf-8');
+      const lines = content.split('\n');
+      const entries: OmpBranchEntry[] = [];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed.type === 'message' && parsed.id && parsed.message) {
+            entries.push({
+              entryId: String(parsed.id),
+              role: String(parsed.message.role || ''),
+              timestamp:
+                typeof parsed.message.timestamp === 'number'
+                  ? parsed.message.timestamp
+                  : undefined,
+            });
+          }
+        } catch {
+          // Skip malformed lines
+        }
+      }
+
+      return { success: true, entries };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to get branch entries' };
+    }
+  }
+
+  private resetSessionAccumulators() {
+    this.thinkingAccumulator.reset();
+    this.activeToolCalls.clear();
+    this.writeSnapshots.clear();
+    for (const id of this.pendingUiRequests.keys()) {
+      if (this.window && !this.window.isDestroyed()) {
+        this.window.webContents.send('omp:ui-request-cancel', id);
+      }
+    }
+    this.pendingUiRequests.clear();
   }
 
   private handleStdoutData(data: string) {
@@ -678,6 +1212,13 @@ export class OmpBridge {
             this.lifecycleState = 'ready';
             this.setStatus('idle');
             this.handshakePromise?.resolve({ success: true, pid: this.process?.pid });
+            this.getState().catch(() => {});
+            this.setSubagentSubscription('progress').catch((err) => {
+              console.warn('[OmpBridge] set_subagent_subscription unavailable:', err.message);
+            });
+            this.refreshSubagentsOnDemand().catch((err) => {
+              console.warn('[OmpBridge] get_subagents sync unavailable:', err.message);
+            });
           } else {
             console.error('[OmpBridge] Protocol negotiation failed:', res.error);
             this.cleanupProcess();
@@ -1003,6 +1544,81 @@ export class OmpBridge {
         }
         this.pendingUiRequests.clear();
         break;
+
+      case 'subagent_lifecycle': {
+        const lifecycleFrame = frame as SubagentLifecycleEvent;
+        const payload = (lifecycleFrame.payload || lifecycleFrame) as any;
+        const subagentId = payload.id || lifecycleFrame.subagentId || payload.subagentId;
+        if (!subagentId) break;
+
+        const status = String(payload.status || payload.state || '').toLowerCase();
+        const isTerminal = status !== 'started' && status !== 'running';
+
+        if (isTerminal) {
+          if (this.activeSubagents.has(subagentId)) {
+            this.activeSubagents.delete(subagentId);
+            this.emitSubagentUpdate();
+          }
+        } else {
+          const existing = this.activeSubagents.get(subagentId);
+          const entry: OmpSubagentInfo = {
+            id: subagentId,
+            index: typeof payload.index === 'number' ? payload.index : existing?.index,
+            agent: payload.agent || existing?.agent || 'task',
+            description: payload.description || existing?.description,
+            status: payload.status || 'started',
+            task: payload.task || existing?.task,
+            sessionFile: payload.sessionFile || existing?.sessionFile,
+            progressText: existing?.progressText,
+            lastUpdate: Date.now(),
+          };
+          this.activeSubagents.set(subagentId, entry);
+          this.emitSubagentUpdate();
+        }
+        break;
+      }
+
+      case 'subagent_progress': {
+        const progressFrame = frame as SubagentProgressEvent;
+        const payload = (progressFrame.payload || progressFrame) as any;
+        const progressObj = payload.progress || {};
+        const subagentId = progressObj.id || payload.id || progressFrame.subagentId || payload.subagentId;
+        if (!subagentId) break;
+
+        const status = String(progressObj.status || payload.status || payload.state || 'running').toLowerCase();
+        const isTerminal = status !== 'started' && status !== 'running';
+
+        if (isTerminal) {
+          if (this.activeSubagents.has(subagentId)) {
+            this.activeSubagents.delete(subagentId);
+            this.emitSubagentUpdate();
+          }
+        } else {
+          const existing = this.activeSubagents.get(subagentId);
+          const progressText =
+            progressObj.description ||
+            progressObj.lastIntent ||
+            progressObj.status ||
+            payload.task ||
+            existing?.progressText ||
+            'running';
+
+          const entry: OmpSubagentInfo = {
+            id: subagentId,
+            index: typeof progressObj.index === 'number' ? progressObj.index : (typeof payload.index === 'number' ? payload.index : existing?.index),
+            agent: progressObj.agent || payload.agent || existing?.agent || 'task',
+            description: progressObj.description || payload.task || existing?.description,
+            status: progressObj.status || payload.status || existing?.status || 'running',
+            task: progressObj.task || payload.task || existing?.task,
+            sessionFile: payload.sessionFile || progressObj.sessionFile || existing?.sessionFile,
+            progressText,
+            lastUpdate: Date.now(),
+          };
+          this.activeSubagents.set(subagentId, entry);
+          this.emitSubagentUpdate();
+        }
+        break;
+      }
     }
   }
 
@@ -1217,6 +1833,10 @@ export class OmpBridge {
       }
     }
     this.pendingUiRequests.clear();
+    this.activeSubagents.clear();
+    this.emitSubagentUpdate();
+    this.currentSessionFile = null;
+    this.currentSessionId = null;
     this.workspacePath = null;
     this.currentTurnId = null;
     this.framer.reset();

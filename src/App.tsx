@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeaderBar } from './components/HeaderBar';
 import { ProjectTree } from './components/Sidebar/ProjectTree';
 import { ThreadList } from './components/Sidebar/ThreadList';
+import { SubagentHub } from './components/Sidebar/SubagentHub';
 import { CanvasContainer } from './components/Canvas/CanvasContainer';
 import { AgentPanel } from './components/AgentPanel/AgentPanel';
 import { OmnibarModal } from './components/Modals/OmnibarModal';
@@ -67,6 +68,13 @@ export function App() {
     changeThinkingLevel,
     refreshModels,
     refreshEngineState,
+    sessions,
+    activeSessionPath,
+    refreshSessions,
+    switchSession,
+    newSession,
+    branchFromMessage,
+    subagents,
     sendMessage,
     acceptDiff,
     rejectDiff,
@@ -84,7 +92,8 @@ export function App() {
   const handleProcessStarted = useCallback(() => {
     refreshEngineState();
     refreshModels();
-  }, [refreshEngineState, refreshModels]);
+    refreshSessions();
+  }, [refreshEngineState, refreshModels, refreshSessions]);
 
   const {
     workspaceName,
@@ -199,7 +208,14 @@ export function App() {
               onSelectFile={selectFile}
               onCollapseSidebar={() => setIsLeftSidebarOpen(false)}
             />
-            <ThreadList onNewThread={() => {}} />
+            <ThreadList
+              sessions={sessions}
+              activeSessionPath={activeSessionPath}
+              status={status}
+              onSelectSession={switchSession}
+              onNewThread={newSession}
+            />
+            <SubagentHub subagents={subagents} />
           </div>
         </div>
 
@@ -229,6 +245,7 @@ export function App() {
               currentStreamText={currentStreamText}
               status={status}
               onSendMessage={sendMessage}
+              onBranchSession={branchFromMessage}
               onCollapsePanel={() => setIsRightSidebarOpen(false)}
             />
           </div>
