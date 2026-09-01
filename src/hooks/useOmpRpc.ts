@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   OmpAgentStatus,
   ChatMessage,
@@ -7,20 +7,42 @@ import {
   FileDiffItem,
   PermissionRequest,
   OmpInstallStatus,
+  OmpModelInfo,
+  OmpThinkingLevel,
+  OmpEngineState,
 } from '../types';
 import { DEMO_MESSAGES, DEMO_INITIAL_DIFF } from '../mock/demoData';
 
 export function useOmpRpc() {
+  const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI);
   const [status, setStatus] = useState<OmpAgentStatus>('idle');
   const [installStatus, setInstallStatus] = useState<OmpInstallStatus | null>(null);
   const [isCheckingInstall, setIsCheckingInstall] = useState<boolean>(false);
-  const [messages, setMessages] = useState<ChatMessage[]>(DEMO_MESSAGES);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => (isElectron ? [] : DEMO_MESSAGES));
   const [currentThinking, setCurrentThinking] = useState<ThinkingBlock | null>(null);
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCall[]>([]);
   const [currentStreamText, setCurrentStreamText] = useState<string>('');
-  const [activeDiff, setActiveDiff] = useState<FileDiffItem | null>(DEMO_INITIAL_DIFF);
+  const [activeDiff, setActiveDiff] = useState<FileDiffItem | null>(() => (isElectron ? null : DEMO_INITIAL_DIFF));
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string>('Claude 3.7 Sonnet (OMP Default)');
+  
+  // Model catalog & engine state
+  const [availableModels, setAvailableModels] = useState<OmpModelInfo[]>([]);
+  const [selectedModel, setSelectedModel] = useState<OmpModelInfo | null>(null);
+  const [thinkingLevel, setThinkingLevel] = useState<OmpThinkingLevel>('off');
+  const [engineState, setEngineState] = useState<OmpEngineState | null>(null);
+
+  // rAF token batching refs
+  const tokenBufferRef = useRef<string>('');
+  const rafIdRef = useRef<number | null>(null);
+
+  const flushTokens = useCallback(() => {
+    if (tokenBufferRef.current) {
+      const chunk = tokenBufferRef.current;
+      tokenBufferRef.current = '';
+      setCurrentStreamText((prev) => prev + chunk);
+    }
+    rafIdRef.current = null;
+  }, []);
 
   const checkInstallation = useCallback(async () => {
     setIsCheckingInstall(true);
@@ -62,10 +84,103 @@ export function useOmpRpc() {
     }
   }, [setCustomPath]);
 
+  // Model & State IPC Actions
+  const refreshModels = useCallback(async (): Promise<OmpModelInfo[]> => {
+    if (!window.electronAPI) return [];
+    try {
+      const res = await window.electronAPI.getAvailableModels();
+      if (res.success && Array.isArray(res.models)) {
+        setAvailableModels(res.models);
+        return res.models;
+      }
+    } catch (err) {
+      console.warn('[useOmpRpc] Failed to fetch available models:', err);
+    }
+    return [];
+  }, []);
+
+  const refreshEngineState = useCallback(async (): Promise<OmpEngineState | null> => {
+    if (!window.electronAPI) return null;
+    try {
+      const res = await window.electronAPI.getState();
+      if (res.success && res.state) {
+        setEngineState(res.state);
+        if (res.state.model) {
+          setSelectedModel(res.state.model);
+        }
+        return res.state;
+      }
+    } catch (err) {
+      console.warn('[useOmpRpc] Failed to fetch engine state:', err);
+    }
+    return null;
+  }, []);
+
+  const changeModel = useCallback(
+    async (provider: string, modelId: string): Promise<boolean> => {
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.setModel(provider, modelId);
+          if (res.success) {
+            if (res.model) {
+              setSelectedModel(res.model);
+            } else {
+              const match = availableModels.find((m) => m.id === modelId && m.provider === provider);
+              if (match) setSelectedModel(match);
+            }
+            await refreshEngineState();
+            return true;
+          }
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to change model:', err);
+        }
+        return false;
+      } else {
+        const match = availableModels.find((m) => m.id === modelId && m.provider === provider) || {
+          id: modelId,
+          name: modelId,
+          provider,
+        };
+        setSelectedModel(match);
+        return true;
+      }
+    },
+    [availableModels, refreshEngineState]
+  );
+
+  const changeThinkingLevel = useCallback(
+    async (level: OmpThinkingLevel): Promise<boolean> => {
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.setThinkingLevel(level);
+          if (res.success) {
+            setThinkingLevel(level);
+            return true;
+          }
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to set thinking level:', err);
+        }
+        return false;
+      } else {
+        setThinkingLevel(level);
+        return true;
+      }
+    },
+    []
+  );
+
   // Check installation immediately on launch
   useEffect(() => {
     checkInstallation();
   }, [checkInstallation]);
+
+  // Load models and engine state when installed
+  useEffect(() => {
+    if (installStatus?.installed && window.electronAPI) {
+      refreshModels();
+      refreshEngineState();
+    }
+  }, [installStatus?.installed, refreshModels, refreshEngineState]);
 
   // Connect to Electron IPC listeners
   useEffect(() => {
@@ -76,10 +191,16 @@ export function useOmpRpc() {
 
     const unsubStatus = window.electronAPI.onOmpStatusChange((newStatus) => {
       setStatus(newStatus);
+      if (newStatus === 'idle') {
+        refreshEngineState();
+      }
     });
 
     const unsubToken = window.electronAPI.onOmpStreamToken((token) => {
-      setCurrentStreamText((prev) => prev + token);
+      tokenBufferRef.current += token;
+      if (rafIdRef.current === null) {
+        rafIdRef.current = requestAnimationFrame(flushTokens);
+      }
     });
 
     const unsubThinking = window.electronAPI.onOmpThinking((thinking) => {
@@ -107,6 +228,11 @@ export function useOmpRpc() {
     });
 
     const unsubComplete = window.electronAPI.onOmpMessageComplete((msg) => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      tokenBufferRef.current = '';
       setMessages((prev) => [...prev, msg]);
       setCurrentStreamText('');
       setCurrentThinking(null);
@@ -114,6 +240,11 @@ export function useOmpRpc() {
     });
 
     return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      tokenBufferRef.current = '';
       unsubStatus();
       unsubToken();
       unsubThinking();
@@ -122,11 +253,17 @@ export function useOmpRpc() {
       unsubPermission();
       unsubComplete();
     };
-  }, []);
+  }, [flushTokens, refreshEngineState]);
 
   const sendMessage = useCallback(
     async (prompt: string, contextFiles?: string[]) => {
       if (!prompt.trim()) return;
+
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      tokenBufferRef.current = '';
 
       const userMsg: ChatMessage = {
         id: 'msg-' + Date.now(),
@@ -141,7 +278,12 @@ export function useOmpRpc() {
       setActiveToolCalls([]);
 
       if (window.electronAPI) {
-        await window.electronAPI.sendOmpMessage(prompt, { files: contextFiles });
+        try {
+          await window.electronAPI.sendOmpMessage(prompt, { files: contextFiles });
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to send message via Electron IPC:', err);
+          setStatus('idle');
+        }
       } else {
         // Fallback simulation in browser
         setStatus('thinking');
@@ -235,8 +377,16 @@ export function useOmpRpc() {
     currentStreamText,
     activeDiff,
     pendingPermission,
+    availableModels,
     selectedModel,
     setSelectedModel,
+    thinkingLevel,
+    setThinkingLevel,
+    engineState,
+    changeModel,
+    changeThinkingLevel,
+    refreshModels,
+    refreshEngineState,
     sendMessage,
     respondPermission,
     acceptDiff,

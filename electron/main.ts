@@ -2,8 +2,8 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
-import { OmpBridge } from './omp-bridge';
-import { WorkspaceFile } from './types';
+import { OmpBridge } from './omp-bridge.ts';
+import type { WorkspaceFile, OmpThinkingLevel } from './types.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -89,6 +89,27 @@ ipcMain.handle('omp:send-message', async (_, prompt: string, context?: { files?:
 ipcMain.handle('omp:respond-permission', async (_, requestId: string, approved: boolean) => {
   if (!ompBridge) return;
   ompBridge.respondPermission(requestId, approved);
+});
+
+// IPC Handlers: Model Catalog & Engine State (Phase 2 Additions)
+ipcMain.handle('omp:get-models', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.getAvailableModels();
+});
+
+ipcMain.handle('omp:set-model', async (_, provider: string, modelId: string) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.setModel(provider, modelId);
+});
+
+ipcMain.handle('omp:set-thinking-level', async (_, level: OmpThinkingLevel) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.setThinkingLevel(level);
+});
+
+ipcMain.handle('omp:get-state', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.getState();
 });
 
 // IPC Handlers: File System & Workspace

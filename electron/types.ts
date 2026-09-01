@@ -88,6 +88,63 @@ export interface OmpInstallStatus {
   error?: string;
 }
 
+export type OmpThinkingLevel =
+  | 'off'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max'
+  | 'auto';
+
+export interface OmpModelCost {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  total?: number;
+  [key: string]: unknown;
+}
+
+export interface OmpModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+  reasoning?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
+  cost?: OmpModelCost;
+  api?: string;
+  baseUrl?: string;
+  [key: string]: unknown;
+}
+
+export interface OmpEngineState {
+  model?: OmpModelInfo;
+  isStreaming?: boolean;
+  isCompacting?: boolean;
+  steeringMode?: string;
+  followUpMode?: string;
+  interruptMode?: string;
+  sessionId?: string;
+  autoCompactionEnabled?: boolean;
+  queuedMessageCount?: number;
+  fastModeEnabled?: boolean;
+  tokensPerSecond?: number | null;
+  fastModeActive?: boolean;
+  messageCount?: number;
+  contextUsage?: {
+    tokens?: number;
+    contextWindow?: number;
+    percent?: number;
+    [key: string]: unknown;
+  };
+  tools?: unknown[];
+  commands?: unknown[];
+  [key: string]: unknown;
+}
+
 export interface ElectronAPI {
   // OMP Process Management & Discovery
   checkOmpInstallation: () => Promise<OmpInstallStatus>;
@@ -97,6 +154,13 @@ export interface ElectronAPI {
   stopOmpProcess: () => Promise<{ success: boolean }>;
   sendOmpMessage: (prompt: string, context?: { files?: string[] }) => Promise<{ success: boolean }>;
   respondToPermission: (requestId: string, approved: boolean) => Promise<void>;
+
+  // Model Catalog & Engine State (Phase 2 Additions)
+  getAvailableModels: () => Promise<{ success: boolean; models?: OmpModelInfo[]; error?: string }>;
+  setModel: (provider: string, modelId: string) => Promise<{ success: boolean; model?: OmpModelInfo; error?: string }>;
+  setThinkingLevel: (level: OmpThinkingLevel) => Promise<{ success: boolean; error?: string }>;
+  getEngineState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
+  getState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
   
   // Workspace / Filesystem
   selectFolder: () => Promise<string | null>;

@@ -176,6 +176,69 @@ export type OmpCommandFrame =
   | NewSessionCommand;
 
 // ==========================================
+// Message Content & Envelope Definitions
+// ==========================================
+
+export interface TextContentBlock {
+  type: 'text';
+  text: string;
+  [key: string]: unknown;
+}
+
+export interface ToolCallContentBlock {
+  type: 'toolCall' | string;
+  id: string;
+  name: string;
+  arguments?: Record<string, unknown>;
+  partialArgs?: string;
+  intent?: string;
+  [key: string]: unknown;
+}
+
+export type AgentContentBlock =
+  | TextContentBlock
+  | ToolCallContentBlock
+  | { type: string; [key: string]: unknown };
+
+export interface AgentMessageUsage {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  totalTokens?: number;
+  cost?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+    total?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface AgentMessage {
+  role?: 'user' | 'assistant' | 'system' | 'toolResult' | string;
+  content?: AgentContentBlock[];
+  api?: string;
+  provider?: string;
+  model?: string;
+  usage?: AgentMessageUsage;
+  stopReason?: string | null;
+  timestamp?: number;
+  responseId?: string;
+  duration?: number;
+  ttft?: number;
+  completedAt?: number;
+  attribution?: string;
+  toolCallId?: string;
+  toolName?: string;
+  details?: unknown;
+  isError?: boolean;
+  [key: string]: unknown;
+}
+
+// ==========================================
 // Engine -> Host Event Frames
 // ==========================================
 
@@ -188,7 +251,7 @@ export interface AgentStartEvent {
 export interface AgentEndEvent {
   type: 'agent_end';
   id?: string;
-  messages?: unknown[];
+  messages?: AgentMessage[];
   isTerminal?: boolean;
   [key: string]: unknown;
 }
@@ -204,7 +267,7 @@ export interface TurnEndEvent {
   type: 'turn_end';
   id?: string;
   turnId?: string;
-  message?: unknown;
+  message?: AgentMessage;
   toolResults?: unknown[];
   [key: string]: unknown;
 }
@@ -214,7 +277,7 @@ export interface MessageStartEvent {
   id?: string;
   messageId?: string;
   role?: string;
-  message?: unknown;
+  message?: AgentMessage;
   [key: string]: unknown;
 }
 
@@ -246,7 +309,7 @@ export interface AssistantMessageEvent {
   delta?: string;
   content?: string;
   toolCall?: AssistantMessageToolCall;
-  partial?: unknown;
+  partial?: AgentMessage;
   [key: string]: unknown;
 }
 
@@ -256,7 +319,7 @@ export interface MessageUpdateEvent {
   messageId?: string;
   delta?: string;
   assistantMessageEvent?: AssistantMessageEvent;
-  message?: unknown;
+  message?: AgentMessage;
   [key: string]: unknown;
 }
 
@@ -264,7 +327,7 @@ export interface MessageEndEvent {
   type: 'message_end';
   id?: string;
   messageId?: string;
-  message?: unknown;
+  message?: AgentMessage;
   [key: string]: unknown;
 }
 
@@ -402,3 +465,60 @@ export type OmpInboundFrame =
 export type OmpOutboundFrame = OmpCommandFrame;
 
 export type OmpFrame = OmpInboundFrame | OmpOutboundFrame;
+
+// ==========================================
+// Model Catalog & Engine State Payloads
+// ==========================================
+
+export interface OmpModelCost {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  total?: number;
+  [key: string]: unknown;
+}
+
+export interface OmpModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+  reasoning?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
+  cost?: OmpModelCost;
+  api?: string;
+  baseUrl?: string;
+  [key: string]: unknown;
+}
+
+export interface GetAvailableModelsResponseData {
+  models: OmpModelInfo[];
+  [key: string]: unknown;
+}
+
+export interface OmpEngineState {
+  model?: OmpModelInfo;
+  isStreaming?: boolean;
+  isCompacting?: boolean;
+  steeringMode?: string;
+  followUpMode?: string;
+  interruptMode?: string;
+  sessionId?: string;
+  autoCompactionEnabled?: boolean;
+  queuedMessageCount?: number;
+  fastModeEnabled?: boolean;
+  tokensPerSecond?: number | null;
+  fastModeActive?: boolean;
+  messageCount?: number;
+  contextUsage?: {
+    tokens?: number;
+    contextWindow?: number;
+    percent?: number;
+    [key: string]: unknown;
+  };
+  tools?: unknown[];
+  commands?: unknown[];
+  [key: string]: unknown;
+}
+

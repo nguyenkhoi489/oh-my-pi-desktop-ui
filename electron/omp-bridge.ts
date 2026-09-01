@@ -1,9 +1,9 @@
-import { spawn, execSync, ChildProcess } from 'child_process';
-import { BrowserWindow } from 'electron';
+import { spawn, execSync, type ChildProcess } from 'child_process';
+import type { BrowserWindow } from 'electron';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import {
+import type {
   OmpAgentStatus,
   ToolCall,
   ThinkingBlock,
@@ -11,9 +11,9 @@ import {
   FileDiffItem,
   PermissionRequest,
   OmpInstallStatus,
-} from './types';
-import { NdjsonFramer } from './ndjson-framer';
-import { RpcFrameLogger } from './rpc-frame-logger';
+} from './types.ts';
+import { NdjsonFramer } from './ndjson-framer.ts';
+import { RpcFrameLogger } from './rpc-frame-logger.ts';
 import type {
   OmpFrame,
   OmpInboundFrame,
@@ -23,7 +23,21 @@ import type {
   NegotiateProtocolCommand,
   PromptCommand,
   ExtensionUiResponseCommand,
-} from './omp-rpc-types';
+  GetAvailableModelsCommand,
+  SetModelCommand,
+  SetThinkingLevelCommand,
+  GetStateCommand,
+  OmpThinkingLevel,
+  OmpModelInfo,
+  OmpEngineState,
+  GetAvailableModelsResponseData,
+  MessageUpdateEvent,
+  MessageEndEvent,
+  AssistantMessageEvent,
+  AgentMessage,
+  AgentEndEvent,
+  TurnStartEvent,
+} from './omp-rpc-types.ts';
 
 export type BridgeLifecycleState =
   | 'idle'
@@ -39,6 +53,77 @@ interface PendingCommand {
   command: string;
 }
 
+export class ThinkingAccumulator {
+  private activeBlocks: Map<number, ThinkingBlock> = new Map();
+
+  public handleEvent(
+    event: AssistantMessageEvent,
+    turnKey: string = ''
+  ): { block: ThinkingBlock; isNew: boolean } | null {
+    const idx = event.contentIndex ?? 0;
+    const now = Date.now();
+
+    if (event.type === 'thinking_start') {
+      const block: ThinkingBlock = {
+        id: `think-${turnKey}-${idx}-${now}`,
+        thought: '',
+        timestamp: now,
+        completed: false,
+      };
+      this.activeBlocks.set(idx, block);
+      return { block, isNew: true };
+    }
+
+    if (event.type === 'thinking_delta') {
+      let block = this.activeBlocks.get(idx);
+      const isNew = !block;
+      if (!block) {
+        block = {
+          id: `think-${turnKey}-${idx}-${now}`,
+          thought: '',
+          timestamp: now,
+          completed: false,
+        };
+        this.activeBlocks.set(idx, block);
+      }
+      if (typeof event.delta === 'string') {
+        block.thought += event.delta;
+      }
+      return { block, isNew };
+    }
+
+    if (event.type === 'thinking_end') {
+      let block = this.activeBlocks.get(idx);
+      const isNew = !block;
+      if (!block) {
+        block = {
+          id: `think-${turnKey}-${idx}-${now}`,
+          thought: '',
+          timestamp: now,
+          completed: true,
+        };
+      } else {
+        block.completed = true;
+      }
+      if (typeof event.content === 'string') {
+        block.thought = event.content;
+      }
+      this.activeBlocks.delete(idx);
+      return { block, isNew };
+    }
+
+    return null;
+  }
+
+  public getActiveBlock(idx: number): ThinkingBlock | undefined {
+    return this.activeBlocks.get(idx);
+  }
+
+  public reset() {
+    this.activeBlocks.clear();
+  }
+}
+
 export class OmpBridge {
   private process: ChildProcess | null = null;
   private window: BrowserWindow;
@@ -47,6 +132,8 @@ export class OmpBridge {
 
   private framer: NdjsonFramer;
   private frameLogger: RpcFrameLogger;
+  private thinkingAccumulator: ThinkingAccumulator = new ThinkingAccumulator();
+  private currentTurnId: string | null = null;
   private pendingCommands: Map<string, PendingCommand> = new Map();
   private pendingPermissions: Map<string, (approved: boolean) => void> = new Map();
   
@@ -214,7 +301,11 @@ export class OmpBridge {
     }
   }
 
-  public async startProcess(workspacePath: string, model?: string): Promise<{ success: boolean; pid?: number }> {
+  public async startProcess(
+    workspacePath: string,
+    model?: string,
+    options?: { provider?: string; extraArgs?: string[] }
+  ): Promise<{ success: boolean; pid?: number }> {
     if (this.process) {
       this.stopProcess();
     }
@@ -222,6 +313,8 @@ export class OmpBridge {
     this.rejectAllPending('Khởi động tiến trình OMP mới');
     this.frameLogger.truncate();
     this.framer.reset();
+    this.thinkingAccumulator.reset();
+    this.currentTurnId = null;
 
     const binaryPath = this.detectBinaryPath();
     if (!binaryPath || !fs.existsSync(binaryPath)) {
@@ -232,8 +325,14 @@ export class OmpBridge {
     }
 
     const args = ['--mode', 'rpc', '--cwd', workspacePath];
+    if (options?.provider) {
+      args.push('--provider', options.provider);
+    }
     if (model) {
       args.push('--model', model);
+    }
+    if (options?.extraArgs && Array.isArray(options.extraArgs)) {
+      args.push(...options.extraArgs);
     }
 
     const homedir = os.homedir();
@@ -418,6 +517,86 @@ export class OmpBridge {
     }
   }
 
+  public async getAvailableModels(): Promise<{ success: boolean; models?: OmpModelInfo[]; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const res = await this.sendCommand<GetAvailableModelsResponseData>({
+        type: 'get_available_models',
+        id: this.generateId(),
+      });
+      if (res.success && res.data && Array.isArray(res.data.models)) {
+        return { success: true, models: res.data.models };
+      }
+      return { success: false, error: res.error || 'Failed to fetch available models' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error executing get_available_models' };
+    }
+  }
+
+  public async setModel(
+    provider: string,
+    modelId: string
+  ): Promise<{ success: boolean; model?: OmpModelInfo; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const res = await this.sendCommand<OmpModelInfo>({
+        type: 'set_model',
+        id: this.generateId(),
+        provider,
+        modelId,
+      });
+      if (res.success) {
+        return { success: true, model: res.data };
+      }
+      return { success: false, error: res.error || 'Failed to set model' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error executing set_model' };
+    }
+  }
+
+  public async setThinkingLevel(
+    level: OmpThinkingLevel
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const res = await this.sendCommand({
+        type: 'set_thinking_level',
+        id: this.generateId(),
+        level,
+      });
+      if (res.success) {
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Failed to set thinking level' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error executing set_thinking_level' };
+    }
+  }
+
+  public async getState(): Promise<{ success: boolean; state?: OmpEngineState; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const res = await this.sendCommand<OmpEngineState>({
+        type: 'get_state',
+        id: this.generateId(),
+      });
+      if (res.success && res.data) {
+        return { success: true, state: res.data };
+      }
+      return { success: false, error: res.error || 'Failed to get state' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error executing get_state' };
+    }
+  }
+
   private handleStdoutData(data: string) {
     const frames = this.framer.push(data);
     for (const frame of frames) {
@@ -505,33 +684,100 @@ export class OmpBridge {
       return;
     }
 
-    // 5. Status mapping events (maintaining stable contract with Renderer)
+    // 5. Status mapping & Stream Translation events (maintaining stable contract with Renderer)
     switch (frame.type) {
+      case 'agent_start':
+        this.thinkingAccumulator.reset();
+        break;
+
       case 'turn_start':
+        this.currentTurnId = (frame as TurnStartEvent).turnId || String(Date.now());
         this.setStatus('thinking');
         break;
 
       case 'message_start':
-        this.setStatus('streaming');
-        break;
-
-      case 'message_update':
-        if (this.status !== 'streaming') {
+        if ((frame as any).role === 'assistant' || (frame as any).message?.role === 'assistant') {
           this.setStatus('streaming');
         }
-        if (frame.delta && typeof frame.delta === 'string') {
-          if (this.window && !this.window.isDestroyed()) {
-            this.window.webContents.send('omp:stream-token', frame.delta);
+        break;
+
+      case 'message_update': {
+        const updateFrame = frame as MessageUpdateEvent;
+        const ame = updateFrame.assistantMessageEvent;
+        if (ame) {
+          if (ame.type === 'text_start' || ame.type === 'text_delta' || ame.type === 'text_end') {
+            if (this.status !== 'streaming') {
+              this.setStatus('streaming');
+            }
+            if (ame.type === 'text_delta' && typeof ame.delta === 'string') {
+              if (this.window && !this.window.isDestroyed()) {
+                this.window.webContents.send('omp:stream-token', ame.delta);
+              }
+            }
+          } else if (
+            ame.type === 'thinking_start' ||
+            ame.type === 'thinking_delta' ||
+            ame.type === 'thinking_end'
+          ) {
+            if (this.status !== 'thinking') {
+              this.setStatus('thinking');
+            }
+            const res = this.thinkingAccumulator.handleEvent(
+              ame,
+              this.currentTurnId || String(Date.now())
+            );
+            if (res && this.window && !this.window.isDestroyed()) {
+              this.window.webContents.send('omp:thinking', res.block);
+            }
           }
         }
         break;
+      }
+
+      case 'message_end': {
+        const endFrame = frame as MessageEndEvent;
+        const msg = endFrame.message as AgentMessage | undefined;
+        if (msg && msg.role === 'assistant' && Array.isArray(msg.content)) {
+          const textParts: string[] = [];
+          for (const block of msg.content) {
+            if (block && block.type === 'text' && typeof (block as any).text === 'string') {
+              const textContent = (block as any).text;
+              if (textContent.length > 0) {
+                textParts.push(textContent);
+              }
+            }
+          }
+
+          if (textParts.length > 0) {
+            const fullText = textParts.join('\n');
+            const chatMessage: ChatMessage = {
+              id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              role: 'assistant',
+              content: fullText,
+              timestamp: typeof msg.completedAt === 'number'
+                ? msg.completedAt
+                : (typeof msg.timestamp === 'number' ? msg.timestamp : Date.now()),
+            };
+            if (this.window && !this.window.isDestroyed()) {
+              this.window.webContents.send('omp:message-complete', chatMessage);
+            }
+          }
+        }
+        break;
+      }
 
       case 'turn_end':
         this.setStatus('idle');
         break;
 
+      case 'agent_end':
+        this.setStatus('idle');
+        this.thinkingAccumulator.reset();
+        break;
+
       case 'abort':
         this.setStatus('idle');
+        this.thinkingAccumulator.reset();
         break;
     }
   }
@@ -565,6 +811,8 @@ export class OmpBridge {
     this.lifecycleState = 'idle';
     this.setStatus('idle');
     this.rejectAllPending('OMP process terminated');
+    this.thinkingAccumulator.reset();
+    this.currentTurnId = null;
     this.framer.reset();
   }
 

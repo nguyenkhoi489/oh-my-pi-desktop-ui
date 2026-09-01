@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { HeaderBar } from './components/HeaderBar';
 import { ProjectTree } from './components/Sidebar/ProjectTree';
 import { ThreadList } from './components/Sidebar/ThreadList';
@@ -55,8 +55,13 @@ export function App() {
     currentStreamText,
     activeDiff,
     pendingPermission,
+    availableModels,
     selectedModel,
-    setSelectedModel,
+    thinkingLevel,
+    changeModel,
+    changeThinkingLevel,
+    refreshModels,
+    refreshEngineState,
     sendMessage,
     respondPermission,
     acceptDiff,
@@ -72,6 +77,11 @@ export function App() {
     }
   }, [installStatus]);
 
+  const handleProcessStarted = useCallback(() => {
+    refreshEngineState();
+    refreshModels();
+  }, [refreshEngineState, refreshModels]);
+
   const {
     workspaceName,
     files,
@@ -81,7 +91,9 @@ export function App() {
     setActiveTab,
     openFolderDialog,
     selectFile,
-  } = useWorkspace();
+  } = useWorkspace({
+    onProcessStarted: handleProcessStarted,
+  });
 
   // Keyboard shortcut listener: ⌘+K (Omnibar), ⌘+B (Left Sidebar), ⌘+J (Right Sidebar), ⌘+Enter (Accept Diff)
   useEffect(() => {
@@ -122,7 +134,10 @@ export function App() {
         installStatus={installStatus}
         onOpenInstallModal={() => setIsOmpModalOpen(true)}
         selectedModel={selectedModel}
-        onSelectModel={setSelectedModel}
+        availableModels={availableModels}
+        thinkingLevel={thinkingLevel}
+        onSelectModel={changeModel}
+        onSelectThinkingLevel={changeThinkingLevel}
         onOpenOmnibar={() => setIsOmnibarOpen(true)}
         theme={theme}
         onToggleTheme={toggleTheme}

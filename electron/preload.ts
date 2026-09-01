@@ -7,6 +7,7 @@ import type {
   PermissionRequest,
   ChatMessage,
   WorkspaceFile,
+  OmpThinkingLevel,
 } from './types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -31,6 +32,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   respondToPermission: (requestId: string, approved: boolean) =>
     ipcRenderer.invoke('omp:respond-permission', requestId, approved),
+
+  // Model Catalog & Engine State (Phase 2 Additions)
+  getAvailableModels: () =>
+    ipcRenderer.invoke('omp:get-models'),
+
+  setModel: (provider: string, modelId: string) =>
+    ipcRenderer.invoke('omp:set-model', provider, modelId),
+
+  setThinkingLevel: (level: OmpThinkingLevel) =>
+    ipcRenderer.invoke('omp:set-thinking-level', level),
+
+  getEngineState: () =>
+    ipcRenderer.invoke('omp:get-state'),
+
+  getState: () =>
+    ipcRenderer.invoke('omp:get-state'),
 
   // File System & Dialogs
   selectFolder: () =>

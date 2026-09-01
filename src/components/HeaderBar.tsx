@@ -14,8 +14,15 @@ import {
   PanelLeftClose,
   PanelRight,
   PanelRightClose,
+  Brain,
 } from 'lucide-react';
-import { OmpAgentStatus, OmpInstallStatus, ThemeMode } from '../types';
+import {
+  OmpAgentStatus,
+  OmpInstallStatus,
+  ThemeMode,
+  OmpModelInfo,
+  OmpThinkingLevel,
+} from '../types';
 
 interface HeaderBarProps {
   workspaceName: string;
@@ -23,8 +30,11 @@ interface HeaderBarProps {
   status: OmpAgentStatus;
   installStatus?: OmpInstallStatus | null;
   onOpenInstallModal?: () => void;
-  selectedModel: string;
-  onSelectModel: (model: string) => void;
+  selectedModel?: OmpModelInfo | string | null;
+  availableModels?: OmpModelInfo[];
+  thinkingLevel?: OmpThinkingLevel;
+  onSelectModel?: (provider: string, modelId: string) => void;
+  onSelectThinkingLevel?: (level: OmpThinkingLevel) => void;
   onOpenOmnibar: () => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
@@ -34,11 +44,22 @@ interface HeaderBarProps {
   onToggleRightSidebar: () => void;
 }
 
-const AVAILABLE_MODELS = [
-  'claude-3-7-sonnet',
-  'gpt-4o',
-  'pi-deepseek-r1',
-  'qwen-2.5-coder-32b',
+const FALLBACK_MODELS: OmpModelInfo[] = [
+  { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', provider: 'anthropic', reasoning: true },
+  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', reasoning: false },
+  { id: 'pi-deepseek-r1', name: 'DeepSeek R1', provider: 'deepseek', reasoning: true },
+  { id: 'qwen-2.5-coder-32b', name: 'Qwen 2.5 Coder 32B', provider: 'lmstudio', reasoning: false },
+];
+
+const THINKING_LEVELS: OmpThinkingLevel[] = [
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+  'auto',
 ];
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
@@ -48,7 +69,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   installStatus,
   onOpenInstallModal,
   selectedModel,
+  availableModels = [],
+  thinkingLevel = 'off',
   onSelectModel,
+  onSelectThinkingLevel,
   onOpenOmnibar,
   theme,
   onToggleTheme,
@@ -59,6 +83,21 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 }) => {
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const isBusy = status !== 'idle';
+  const modelList = availableModels.length > 0 ? availableModels : FALLBACK_MODELS;
+
+  const activeModelId = typeof selectedModel === 'string'
+    ? selectedModel
+    : (selectedModel?.id || modelList[0]?.id);
+
+  const activeModelName = typeof selectedModel === 'string'
+    ? selectedModel
+    : (selectedModel?.name || selectedModel?.id || modelList[0]?.name || 'Select Model');
+
+  const activeProvider = typeof selectedModel === 'object' && selectedModel
+    ? selectedModel.provider
+    : modelList.find((m) => m.id === activeModelId)?.provider;
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -174,36 +213,114 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       <div className="flex items-center gap-2.5 app-no-drag">
         <div className="relative" ref={dropdownRef}>
           <button
-            onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-surface hover:bg-surface-highlight border border-border text-slate-800 dark:text-zinc-200 transition-colors font-medium cursor-pointer"
+            onClick={() => {
+              if (!isBusy) {
+                setIsModelDropdownOpen(!isModelDropdownOpen);
+              }
+            }}
+            disabled={isBusy}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border border-border transition-colors font-medium ${
+              isBusy
+                ? 'bg-surface opacity-70 cursor-not-allowed text-slate-500 dark:text-zinc-400'
+                : 'bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 cursor-pointer'
+            }`}
+            title={isBusy ? 'Không thể đổi model khi agent đang hoạt động' : 'Chọn Model & Thinking Level'}
           >
             <Cpu className="w-3.5 h-3.5 text-codex-accent shrink-0" />
-            <span className="font-mono text-[12px]">{selectedModel}</span>
+            <span className="font-mono text-[12px] max-w-[180px] truncate">{activeModelName}</span>
+            {thinkingLevel !== 'off' && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-codex-accent/15 text-codex-accent font-semibold uppercase">
+                {thinkingLevel}
+              </span>
+            )}
             <ChevronDown className="w-3 h-3 text-slate-400 dark:text-zinc-500 shrink-0" />
           </button>
 
           {isModelDropdownOpen && (
-            <div className="absolute top-full mt-1.5 left-0 w-52 bg-panel border border-border rounded-xl shadow-xl py-1.5 z-50 animate-fade-in">
-              <div className="px-3 py-1 text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
-                Select Model
+            <div className="absolute top-full mt-1.5 left-0 w-72 bg-panel border border-border rounded-xl shadow-xl py-2 z-50 animate-fade-in divide-y divide-border">
+              {/* Section 1: Model Selection */}
+              <div className="pb-2">
+                <div className="flex items-center justify-between px-3 py-1 text-[10.5px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                  <span>Available Models</span>
+                  {availableModels.length > 0 && (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">Live</span>
+                  )}
+                </div>
+                <div className="max-h-56 overflow-y-auto mt-1 space-y-0.5 px-1">
+                  {modelList.map((model) => {
+                    const isSelected =
+                      model.id === activeModelId &&
+                      (!activeProvider || model.provider === activeProvider);
+
+                    return (
+                      <button
+                        key={`${model.provider}/${model.id}`}
+                        onClick={() => {
+                          onSelectModel?.(model.provider, model.id);
+                          setIsModelDropdownOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-left transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-codex-accent/10 text-codex-accent font-semibold'
+                            : 'text-slate-700 dark:text-zinc-300 hover:bg-surface-highlight'
+                        }`}
+                      >
+                        <div className="flex flex-col min-w-0 pr-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-[11.5px] truncate">
+                              {model.name || model.id}
+                            </span>
+                            {model.reasoning && (
+                              <span title="Reasoning model">
+                                <Brain className="w-3 h-3 text-amber-500 shrink-0" />
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 dark:text-zinc-500 truncate">
+                            {model.provider}
+                          </span>
+                        </div>
+                        {isSelected && (
+                          <Check className="w-3.5 h-3.5 text-codex-accent shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              {AVAILABLE_MODELS.map((model) => (
-                <button
-                  key={model}
-                  onClick={() => {
-                    onSelectModel(model);
-                    setIsModelDropdownOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition-colors cursor-pointer ${
-                    selectedModel === model
-                      ? 'bg-codex-accent/10 text-codex-accent font-semibold'
-                      : 'text-slate-700 dark:text-zinc-300 hover:bg-surface-highlight'
-                  }`}
-                >
-                  <span className="font-mono">{model}</span>
-                  {selectedModel === model && <Check className="w-3.5 h-3.5 text-codex-accent" />}
-                </button>
-              ))}
+
+              {/* Section 2: Thinking Level Selection */}
+              <div className="pt-2 px-3">
+                <div className="flex items-center justify-between py-1 text-[10.5px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                  <span className="flex items-center gap-1.5">
+                    <Brain className="w-3 h-3 text-codex-accent" />
+                    Thinking Level
+                  </span>
+                  <span className="text-[10px] text-codex-accent font-mono capitalize">
+                    {thinkingLevel}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-1 mt-1.5">
+                  {THINKING_LEVELS.map((level) => {
+                    const isSelected = thinkingLevel === level;
+                    return (
+                      <button
+                        key={level}
+                        onClick={() => {
+                          onSelectThinkingLevel?.(level);
+                        }}
+                        className={`px-2 py-1 rounded-md text-[11px] font-mono text-center transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-codex-accent text-white font-semibold shadow-xs'
+                            : 'bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300 border border-border/50'
+                        }`}
+                      >
+                        {level}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -255,3 +372,4 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     </header>
   );
 };
+

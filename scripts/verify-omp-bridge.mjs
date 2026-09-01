@@ -15,6 +15,7 @@ import path from 'path';
 import os from 'os';
 import { RpcFrameLogger } from '../electron/rpc-frame-logger.ts';
 import { NdjsonFramer } from '../electron/ndjson-framer.ts';
+import { ThinkingAccumulator, OmpBridge } from '../electron/omp-bridge.ts';
 
 let passed = 0;
 let failed = 0;
@@ -172,7 +173,7 @@ console.log('[Test 3] Auto-ack for Unsupported Extension UI Requests');
 console.log();
 
 // ----------------------------------------------------
-// Fixture 4: Minimal Status Event Mapping
+// Fixture 4: Status Event Mapping Lifecycle
 // ----------------------------------------------------
 console.log('[Test 4] Status Event Mapping Lifecycle');
 {
@@ -200,6 +201,9 @@ console.log('[Test 4] Status Event Mapping Lifecycle');
       case 'turn_end':
         setStatus('idle');
         break;
+      case 'agent_end':
+        setStatus('idle');
+        break;
       case 'abort':
         setStatus('idle');
         break;
@@ -212,16 +216,258 @@ console.log('[Test 4] Status Event Mapping Lifecycle');
   dispatchFrame({ type: 'message_start', messageId: 'm-1' });
   assert(currentStatus === 'streaming', 'message_start maps status to "streaming"');
 
-  dispatchFrame({ type: 'message_update', delta: 'Hello' });
+  dispatchFrame({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Hello' } });
   assert(currentStatus === 'streaming', 'message_update keeps status "streaming"');
 
   dispatchFrame({ type: 'turn_end', turnId: 't-1' });
   assert(currentStatus === 'idle', 'turn_end returns status to "idle"');
 
+  dispatchFrame({ type: 'agent_end' });
+  assert(currentStatus === 'idle', 'agent_end returns status to "idle"');
+
   assert(
-    JSON.stringify(statusHistory) === JSON.stringify(['thinking', 'streaming', 'idle']),
-    'Status progression sequence is exact: thinking -> streaming -> idle'
+    JSON.stringify(statusHistory) === JSON.stringify(['thinking', 'streaming', 'idle', 'idle']),
+    'Status progression sequence is exact: thinking -> streaming -> idle -> idle'
   );
+}
+console.log();
+
+// ----------------------------------------------------
+// Fixture 5: ThinkingAccumulator Lifecycle
+// ----------------------------------------------------
+console.log('[Test 5] ThinkingAccumulator Lifecycle');
+{
+  const accumulator = new ThinkingAccumulator();
+
+  // 1. thinking_start
+  const startRes = accumulator.handleEvent({
+    type: 'thinking_start',
+    contentIndex: 0,
+  }, 'turn-1');
+
+  assert(Boolean(startRes), 'thinking_start returns block');
+  assert(startRes.isNew === true, 'thinking_start creates new block');
+  assert(startRes.block.thought === '', 'Initial thought is empty string');
+  assert(startRes.block.completed === false, 'Initial completed flag is false');
+  assert(startRes.block.id.startsWith('think-turn-1-0-'), 'Block ID contains turnKey and contentIndex');
+
+  // 2. thinking_delta
+  const deltaRes1 = accumulator.handleEvent({
+    type: 'thinking_delta',
+    contentIndex: 0,
+    delta: 'Phân tích ',
+  }, 'turn-1');
+
+  assert(deltaRes1.block.thought === 'Phân tích ', 'First delta appended');
+  assert(deltaRes1.block.completed === false, 'Still not completed');
+
+  const deltaRes2 = accumulator.handleEvent({
+    type: 'thinking_delta',
+    contentIndex: 0,
+    delta: 'yêu cầu...',
+  }, 'turn-1');
+
+  assert(deltaRes2.block.thought === 'Phân tích yêu cầu...', 'Second delta accumulated');
+
+  // 3. thinking_end
+  const endRes = accumulator.handleEvent({
+    type: 'thinking_end',
+    contentIndex: 0,
+    content: 'Phân tích yêu cầu hoàn tất.',
+  }, 'turn-1');
+
+  assert(endRes.block.completed === true, 'thinking_end marks completed true');
+  assert(endRes.block.thought === 'Phân tích yêu cầu hoàn tất.', 'thinking_end overrides final content if provided');
+  assert(accumulator.getActiveBlock(0) === undefined, 'Active block removed after thinking_end');
+
+  // 4. reset
+  accumulator.handleEvent({ type: 'thinking_start', contentIndex: 1 }, 'turn-2');
+  assert(accumulator.getActiveBlock(1) !== undefined, 'New block stored');
+  accumulator.reset();
+  assert(accumulator.getActiveBlock(1) === undefined, 'reset() clears all active blocks');
+}
+console.log();
+
+// ----------------------------------------------------
+// Fixture 6: Stream & Message-End Translation Dispatch
+// ----------------------------------------------------
+console.log('[Test 6] Stream & Message-End Translation Dispatch');
+{
+  const emittedEvents = [];
+  let bridgeStatus = 'idle';
+
+  function setStatus(s) {
+    bridgeStatus = s;
+  }
+
+  function mockSend(channel, payload) {
+    emittedEvents.push({ channel, payload });
+  }
+
+  const thinkingAcc = new ThinkingAccumulator();
+  let currentTurnId = 'turn-test-1';
+
+  function dispatchFrame(frame) {
+    switch (frame.type) {
+      case 'turn_start':
+        currentTurnId = frame.turnId || String(Date.now());
+        setStatus('thinking');
+        break;
+
+      case 'message_start':
+        if (frame.role === 'assistant' || frame.message?.role === 'assistant') {
+          setStatus('streaming');
+        }
+        break;
+
+      case 'message_update': {
+        const ame = frame.assistantMessageEvent;
+        if (ame) {
+          if (ame.type === 'text_start' || ame.type === 'text_delta' || ame.type === 'text_end') {
+            if (bridgeStatus !== 'streaming') {
+              setStatus('streaming');
+            }
+            if (ame.type === 'text_delta' && typeof ame.delta === 'string') {
+              mockSend('omp:stream-token', ame.delta);
+            }
+          } else if (
+            ame.type === 'thinking_start' ||
+            ame.type === 'thinking_delta' ||
+            ame.type === 'thinking_end'
+          ) {
+            if (bridgeStatus !== 'thinking') {
+              setStatus('thinking');
+            }
+            const res = thinkingAcc.handleEvent(ame, currentTurnId);
+            if (res) {
+              mockSend('omp:thinking', res.block);
+            }
+          }
+        }
+        break;
+      }
+
+      case 'message_end': {
+        const msg = frame.message;
+        if (msg && msg.role === 'assistant' && Array.isArray(msg.content)) {
+          const textParts = [];
+          for (const block of msg.content) {
+            if (block && block.type === 'text' && typeof block.text === 'string' && block.text.length > 0) {
+              textParts.push(block.text);
+            }
+          }
+
+          if (textParts.length > 0) {
+            const chatMessage = {
+              id: `msg-${Date.now()}`,
+              role: 'assistant',
+              content: textParts.join('\n'),
+              timestamp: typeof msg.completedAt === 'number' ? msg.completedAt : Date.now(),
+            };
+            mockSend('omp:message-complete', chatMessage);
+          }
+        }
+        break;
+      }
+
+      case 'agent_end':
+        setStatus('idle');
+        thinkingAcc.reset();
+        break;
+    }
+  }
+
+  // 1. Text streaming simulation
+  dispatchFrame({ type: 'turn_start', turnId: 'turn-1' });
+  dispatchFrame({ type: 'message_start', message: { role: 'assistant' } });
+  dispatchFrame({
+    type: 'message_update',
+    assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'Xin ' },
+  });
+  dispatchFrame({
+    type: 'message_update',
+    assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'chào!' },
+  });
+
+  const streamTokens = emittedEvents.filter((e) => e.channel === 'omp:stream-token');
+  assert(streamTokens.length === 2, 'Received exactly 2 stream tokens');
+  assert(streamTokens[0].payload === 'Xin ' && streamTokens[1].payload === 'chào!', 'Tokens match deltas');
+
+  // 2. Assistant message_end with text
+  dispatchFrame({
+    type: 'message_end',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Xin chào!' }],
+      completedAt: 1788246000000,
+    },
+  });
+
+  const completeMessages = emittedEvents.filter((e) => e.channel === 'omp:message-complete');
+  assert(completeMessages.length === 1, 'Received exactly 1 message-complete');
+  assert(completeMessages[0].payload.content === 'Xin chào!', 'ChatMessage content matches combined text');
+  assert(completeMessages[0].payload.role === 'assistant', 'ChatMessage role is assistant');
+  assert(completeMessages[0].payload.timestamp === 1788246000000, 'ChatMessage timestamp extracted correctly');
+
+  // 3. toolResult message_end should NOT emit message-complete
+  dispatchFrame({
+    type: 'message_end',
+    message: {
+      role: 'toolResult',
+      content: [{ type: 'text', text: 'File read content' }],
+    },
+  });
+  assert(
+    emittedEvents.filter((e) => e.channel === 'omp:message-complete').length === 1,
+    'toolResult does NOT emit message-complete'
+  );
+
+  // 4. assistant with only toolCall should NOT emit message-complete
+  dispatchFrame({
+    type: 'message_end',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'toolCall', id: 'c-1', name: 'read' }],
+    },
+  });
+  assert(
+    emittedEvents.filter((e) => e.channel === 'omp:message-complete').length === 1,
+    'assistant with only toolCall does NOT emit message-complete'
+  );
+
+  // 5. agent_end terminates with idle
+  dispatchFrame({ type: 'agent_end' });
+  assert(bridgeStatus === 'idle', 'agent_end sets status to idle');
+}
+console.log();
+
+// ----------------------------------------------------
+// Fixture 7: Model & State IPC Bridge Methods (Offline Guard)
+// ----------------------------------------------------
+console.log('[Test 7] Model & State IPC Bridge Methods (Offline Guard)');
+{
+  const mockWin = {
+    isDestroyed: () => false,
+    webContents: { send: () => {} },
+  };
+  const bridge = new OmpBridge(mockWin);
+
+  // When bridge is idle/unready, all 4 methods should return structured error
+  const modelsRes = await bridge.getAvailableModels();
+  assert(modelsRes.success === false, 'getAvailableModels returns success: false when unready');
+  assert(typeof modelsRes.error === 'string', 'getAvailableModels provides error message');
+
+  const setModelRes = await bridge.setModel('provider', 'model');
+  assert(setModelRes.success === false, 'setModel returns success: false when unready');
+  assert(typeof setModelRes.error === 'string', 'setModel provides error message');
+
+  const thinkRes = await bridge.setThinkingLevel('low');
+  assert(thinkRes.success === false, 'setThinkingLevel returns success: false when unready');
+  assert(typeof thinkRes.error === 'string', 'setThinkingLevel provides error message');
+
+  const stateRes = await bridge.getState();
+  assert(stateRes.success === false, 'getState returns success: false when unready');
+  assert(typeof stateRes.error === 'string', 'getState provides error message');
 }
 console.log();
 
