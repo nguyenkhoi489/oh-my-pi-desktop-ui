@@ -1,4 +1,4 @@
-import { spawn, execSync, type ChildProcess } from 'child_process';
+import { spawn, execSync, execFileSync, type ChildProcess } from 'child_process';
 import type { BrowserWindow } from 'electron';
 import fs from 'fs';
 import os from 'os';
@@ -11,11 +11,20 @@ import type {
   FileDiffItem,
   PermissionRequest,
   OmpUiRequest,
+  OmpNotification,
+  OmpEngineStatusEntry,
+  OmpWidgetEntry,
   OmpInstallStatus,
   OmpSessionInfo,
   OmpBranchEntry,
   OmpSubagentInfo,
+  OmpContextUsage,
+  OmpSessionStats,
+  OmpContextUsageUpdate,
+  OmpApprovalMode,
+  OmpCommandInfo,
 } from './types.ts';
+import type { SettingsStore } from './settings-store.ts';
 import { NdjsonFramer } from './ndjson-framer.ts';
 import { RpcFrameLogger } from './rpc-frame-logger.ts';
 import type {
@@ -41,7 +50,11 @@ import type {
   SetModelCommand,
   SetThinkingLevelCommand,
   GetStateCommand,
+  GetSessionStatsCommand,
+  CompactCommand,
+  SetAutoCompactionCommand,
   OmpThinkingLevel,
+  OmpApprovalMode as OmpRpcApprovalMode,
   OmpModelInfo,
   OmpEngineState,
   GetAvailableModelsResponseData,
@@ -57,6 +70,17 @@ import type {
   EditToolResultDetails,
   SubagentLifecycleEvent,
   SubagentProgressEvent,
+  SetSessionNameCommand,
+  ExportHtmlCommand,
+  GetBranchMessagesCommand,
+  GetBranchMessagesResponseData,
+  ExportHtmlResponseData,
+  GetAvailableCommandsCommand,
+  GetAvailableCommandsResponseData,
+  AvailableCommandsUpdateEvent,
+  CommandOutputEvent,
+  SessionInfoUpdateEvent,
+  ConfigUpdateEvent,
 } from './omp-rpc-types.ts';
 
 export type BridgeLifecycleState =
@@ -163,7 +187,15 @@ export class OmpBridge {
   private activeSubagents: Map<string, OmpSubagentInfo> = new Map();
   private currentSessionFile: string | null = null;
   private currentSessionId: string | null = null;
-  
+  private engineStatuses: Map<string, string> = new Map();
+  private engineWidgets: Map<string, { lines: string[]; placement?: string }> = new Map();
+  private currentApprovalMode: OmpApprovalMode | undefined = undefined;
+  private availableCommands: OmpCommandInfo[] = [];
+  private sessionName: string | undefined = undefined;
+  private lastContextUsage: OmpContextUsage | null = null;
+  private lastTokensPerSecond: number | null = null;
+  private currentModel: string | undefined = undefined;
+  private currentProvider: string | undefined = undefined;
   private handshakePromise: {
     resolve: (val: { success: boolean; pid?: number }) => void;
     reject: (err: any) => void;
@@ -173,9 +205,12 @@ export class OmpBridge {
   private detectedPath: string | null = null;
   private customPath: string | null = null;
   private commandCounter: number = 0;
+  private settingsStore?: SettingsStore;
 
-  constructor(window: BrowserWindow) {
+
+  constructor(window: BrowserWindow, settingsStore?: SettingsStore) {
     this.window = window;
+    this.settingsStore = settingsStore;
     this.frameLogger = new RpcFrameLogger();
     this.framer = new NdjsonFramer({
       onRawLine: (line) => {
@@ -185,6 +220,10 @@ export class OmpBridge {
         console.warn('[OMP FRAMER ERROR]:', err.message, raw.slice(0, 100));
       },
     });
+  }
+
+  public setSettingsStore(settingsStore: SettingsStore) {
+    this.settingsStore = settingsStore;
   }
 
   public getWorkspacePath(): string | null {
@@ -218,6 +257,18 @@ export class OmpBridge {
   public getSubagents(): OmpSubagentInfo[] {
     return Array.from(this.activeSubagents.values());
   }
+  public getEngineStatuses(): OmpEngineStatusEntry[] {
+    return Array.from(this.engineStatuses.entries()).map(([key, text]) => ({ key, text }));
+  }
+
+  public getEngineWidgets(): OmpWidgetEntry[] {
+    return Array.from(this.engineWidgets.entries()).map(([key, item]) => ({
+      key,
+      lines: item.lines,
+      placement: item.placement,
+    }));
+  }
+
 
   public async setSubagentSubscription(
     level: 'off' | 'progress' | 'events' = 'progress'
@@ -291,16 +342,35 @@ export class OmpBridge {
     }
   }
 
-  public setCustomBinaryPath(rawPath: string) {
+  public setCustomBinaryPath(rawPath?: string | null) {
+    if (!rawPath || typeof rawPath !== 'string' || !rawPath.trim()) {
+      this.customPath = null;
+      this.detectedPath = null;
+      if (this.settingsStore) {
+        this.settingsStore.set({ customBinaryPath: undefined });
+      }
+      return;
+    }
     let resolved = rawPath.trim();
     if (resolved.startsWith('~')) {
       resolved = path.join(os.homedir(), resolved.slice(1));
     }
     this.customPath = resolved;
     this.detectedPath = resolved;
+    if (this.settingsStore) {
+      this.settingsStore.set({ customBinaryPath: rawPath });
+    }
   }
 
   public detectBinaryPath(): string | null {
+    if (!this.customPath && this.settingsStore?.get()?.customBinaryPath) {
+      let custom = this.settingsStore.get().customBinaryPath!.trim();
+      if (custom.startsWith('~')) {
+        custom = path.join(os.homedir(), custom.slice(1));
+      }
+      this.customPath = custom;
+      this.detectedPath = custom;
+    }
     // 1. If user set a custom path
     if (this.customPath) {
       let resolved = this.customPath.trim();
@@ -407,12 +477,20 @@ export class OmpBridge {
 
     let versionOutput = '';
     try {
-      versionOutput = execSync(`"${binaryPath}" --version 2>/dev/null || "${binaryPath}" -v 2>/dev/null`, {
+      versionOutput = execFileSync(binaryPath, ['--version'], {
         env: { ...process.env, PATH: extendedPath },
         encoding: 'utf-8',
         timeout: 3000,
       }).trim();
-    } catch {}
+    } catch {
+      try {
+        versionOutput = execFileSync(binaryPath, ['-v'], {
+          env: { ...process.env, PATH: extendedPath },
+          encoding: 'utf-8',
+          timeout: 3000,
+        }).trim();
+      } catch {}
+    }
 
     return {
       installed: true,
@@ -431,7 +509,7 @@ export class OmpBridge {
   public async startProcess(
     workspacePath: string,
     model?: string,
-    options?: { provider?: string; extraArgs?: string[] }
+    options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode }
   ): Promise<{ success: boolean; pid?: number }> {
     if (this.process) {
       this.stopProcess();
@@ -450,6 +528,16 @@ export class OmpBridge {
     this.currentTurnId = null;
     this.workspacePath = workspacePath;
 
+    const settings = this.settingsStore?.get();
+    const effectiveProvider = options?.provider ?? settings?.defaultProvider;
+    const effectiveModel = model ?? settings?.defaultModel;
+    const effectiveApprovalMode = options?.approvalMode ?? settings?.approvalMode ?? this.currentApprovalMode;
+
+    this.currentModel = effectiveModel;
+    this.currentProvider = effectiveProvider;
+    if (effectiveApprovalMode) {
+      this.currentApprovalMode = effectiveApprovalMode;
+    }
     const binaryPath = this.detectBinaryPath();
     if (!binaryPath || !fs.existsSync(binaryPath)) {
       console.warn('[OmpBridge] Binary not found. Live process start aborted; fallback mode available.');
@@ -459,11 +547,14 @@ export class OmpBridge {
     }
 
     const args = ['--mode', 'rpc', '--cwd', workspacePath];
-    if (options?.provider) {
-      args.push('--provider', options.provider);
+    if (effectiveProvider) {
+      args.push('--provider', effectiveProvider);
     }
-    if (model) {
-      args.push('--model', model);
+    if (effectiveModel) {
+      args.push('--model', effectiveModel);
+    }
+    if (effectiveApprovalMode) {
+      args.push('--approval-mode', effectiveApprovalMode);
     }
     if (options?.extraArgs && Array.isArray(options.extraArgs)) {
       args.push(...options.extraArgs);
@@ -492,7 +583,7 @@ export class OmpBridge {
       this.lifecycleState = 'spawning';
 
       return new Promise<{ success: boolean; pid?: number }>((resolve) => {
-        const handshakeTimeoutMs = 10000;
+        const handshakeTimeoutMs = 15000;
         const handshakeTimer = setTimeout(() => {
           console.warn(`[OmpBridge] Handshake timed out after ${handshakeTimeoutMs}ms`);
           this.cleanupProcess();
@@ -700,6 +791,37 @@ export class OmpBridge {
       return { success: false, error: err.message || 'Error executing get_available_models' };
     }
   }
+  public async getAvailableCommands(): Promise<{ success: boolean; commands?: OmpCommandInfo[]; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline', commands: this.availableCommands };
+    }
+    try {
+      const res = await this.sendCommand<GetAvailableCommandsResponseData>({
+        type: 'get_available_commands',
+        id: this.generateId(),
+      });
+      if (res.success && res.data && Array.isArray(res.data.commands)) {
+        this.availableCommands = res.data.commands;
+        this.emitCommandsUpdate();
+        return { success: true, commands: this.availableCommands };
+      } else if (res.success && Array.isArray((res as any).commands)) {
+        this.availableCommands = (res as any).commands;
+        this.emitCommandsUpdate();
+        return { success: true, commands: this.availableCommands };
+      }
+      return { success: false, error: res.error || 'Failed to fetch available commands', commands: this.availableCommands };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing get_available_commands', commands: this.availableCommands };
+    }
+  }
+
+  private emitCommandsUpdate() {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('omp:commands-update', [...this.availableCommands]);
+    }
+  }
+
 
   public async setModel(
     provider: string,
@@ -716,6 +838,9 @@ export class OmpBridge {
         modelId,
       });
       if (res.success) {
+        if (this.settingsStore) {
+          this.settingsStore.set({ defaultProvider: provider, defaultModel: modelId });
+        }
         return { success: true, model: res.data };
       }
       return { success: false, error: res.error || 'Failed to set model' };
@@ -737,6 +862,9 @@ export class OmpBridge {
         level,
       });
       if (res.success) {
+        if (this.settingsStore) {
+          this.settingsStore.set({ defaultThinkingLevel: level });
+        }
         return { success: true };
       }
       return { success: false, error: res.error || 'Failed to set thinking level' };
@@ -761,13 +889,158 @@ export class OmpBridge {
         if (res.data.sessionId) {
           this.currentSessionId = res.data.sessionId;
         }
+        this.lastContextUsage = res.data.contextUsage ?? null;
+        this.lastTokensPerSecond = res.data.tokensPerSecond ?? null;
+        if (res.data.sessionName) {
+          this.sessionName = res.data.sessionName;
+        }
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:context-usage', {
+            contextUsage: res.data.contextUsage ?? null,
+            tokensPerSecond: res.data.tokensPerSecond ?? null,
+            sessionName: res.data.sessionName,
+          });
+        }
+        res.data.approvalMode = this.currentApprovalMode;
         return { success: true, state: res.data };
       }
       return { success: false, error: res.error || 'Failed to get state' };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Error executing get_state' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing get_state' };
     }
   }
+  public async getSessionStats(): Promise<{ success: boolean; stats?: OmpSessionStats; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    if (this.status !== 'idle') {
+      return { success: false, error: 'Engine is busy processing another request' };
+    }
+    try {
+      const res = await this.sendCommand<OmpSessionStats>({
+        type: 'get_session_stats',
+        id: this.generateId(),
+      });
+      if (res.success && res.data) {
+        return { success: true, stats: res.data };
+      }
+      return { success: false, error: res.error || 'Failed to get session stats' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing get_session_stats' };
+    }
+  }
+  public getApprovalMode(): { success: boolean; mode?: OmpApprovalMode; error?: string } {
+    return { success: true, mode: this.currentApprovalMode };
+  }
+
+  public async setApprovalMode(
+    mode: OmpApprovalMode
+  ): Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }> {
+    const oldMode = this.currentApprovalMode;
+    if (this.process && this.lifecycleState !== 'idle') {
+      const oldWs = this.workspacePath;
+      const oldModel = this.currentModel;
+      const oldProvider = this.currentProvider;
+      const oldSessionFile = this.currentSessionFile;
+
+      this.stopProcess();
+
+      if (oldWs) {
+        const startResult = await this.startProcess(oldWs, oldModel, {
+          provider: oldProvider,
+          approvalMode: mode,
+        });
+
+        if (startResult.success) {
+          this.currentApprovalMode = mode;
+          if (this.settingsStore) {
+            this.settingsStore.set({ approvalMode: mode });
+          }
+          if (oldSessionFile) {
+            try {
+              await this.switchSession(oldSessionFile);
+            } catch (err) {
+              console.warn('[OmpBridge] Failed to switch back to session after approval mode restart:', err);
+            }
+          }
+          await this.getState().catch(() => {});
+          return { success: true, mode };
+        } else {
+          this.currentApprovalMode = oldMode;
+          return {
+            success: false,
+            mode: oldMode,
+            error: 'Khởi động lại engine thất bại khi chuyển approval mode',
+          };
+        }
+      }
+    }
+
+    this.currentApprovalMode = mode;
+    if (this.settingsStore) {
+      this.settingsStore.set({ approvalMode: mode });
+    }
+    return { success: true, mode };
+  }
+
+  public async compact(
+    customInstructions?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    if (this.status === 'streaming' || this.status === 'thinking' || this.status === 'executing_tool') {
+      return { success: false, error: 'Engine is busy processing another request' };
+    }
+    try {
+      const cmd: CompactCommand = {
+        type: 'compact',
+        id: this.generateId(),
+      };
+      if (customInstructions) {
+        cmd.customInstructions = customInstructions;
+      }
+      const res = await this.sendCommand(cmd);
+      if (res.success) {
+        await this.getState().catch(() => {});
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Failed to compact session context' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing compact command' };
+    }
+  }
+
+  public async setAutoCompaction(
+    enabled: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const cmd: SetAutoCompactionCommand = {
+        type: 'set_auto_compaction',
+        id: this.generateId(),
+        enabled,
+      };
+      const res = await this.sendCommand(cmd);
+      if (res.success) {
+        if (this.settingsStore) {
+          this.settingsStore.set({ autoCompaction: enabled });
+        }
+        await this.getState().catch(() => {});
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Failed to set auto-compaction' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing set_auto_compaction' };
+    }
+  }
+
 
   public async listSessions(
     customSessionDir?: string
@@ -962,7 +1235,130 @@ export class OmpBridge {
       return { success: false, error: err.message || 'Error executing branch' };
     }
   }
+  public async renameSession(
+    name: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    if (this.status === 'thinking' || this.status === 'streaming' || this.status === 'executing_tool') {
+      return { success: false, error: 'session_busy' };
+    }
+    const trimmed = (name || '').trim();
+    if (!trimmed) {
+      return { success: false, error: 'Session name cannot be empty' };
+    }
+    try {
+      const cmd: SetSessionNameCommand = {
+        type: 'set_session_name',
+        id: this.generateId(),
+        name: trimmed,
+      };
+      const res = await this.sendCommand(cmd);
+      if (res.success) {
+        await this.getState().catch(() => {});
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Failed to rename session' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing set_session_name' };
+    }
+  }
 
+  public async deleteSession(
+    targetPath: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const sessionDir = this.currentSessionFile ? path.dirname(this.currentSessionFile) : null;
+      if (!sessionDir) {
+        return { success: false, error: 'No active session directory' };
+      }
+
+      // Guard 1: Must be inside session directory (no traversal ../, not absolute outside, no nested directories)
+      const rel = path.relative(sessionDir, targetPath);
+      if (rel.startsWith('..') || path.isAbsolute(rel) || rel === '' || rel.includes(path.sep)) {
+        return { success: false, error: 'Target session path is outside the current session directory' };
+      }
+
+      // Guard 2: Must be a .jsonl file
+      if (!targetPath.endsWith('.jsonl')) {
+        return { success: false, error: 'Target file must be a .jsonl session file' };
+      }
+
+      // Guard 3: Must NOT be the currently active session file
+      if (this.currentSessionFile && path.resolve(targetPath) === path.resolve(this.currentSessionFile)) {
+        return { success: false, error: 'Cannot delete the currently active session' };
+      }
+
+      if (!fs.existsSync(targetPath)) {
+        return { success: false, error: 'Session file not found' };
+      }
+
+      // Delete target .jsonl file
+      fs.unlinkSync(targetPath);
+
+      // Delete associated subagent directory if exists
+      const baseName = path.basename(targetPath, '.jsonl');
+      const subDir1 = path.join(sessionDir, baseName);
+      if (fs.existsSync(subDir1) && fs.statSync(subDir1).isDirectory()) {
+        fs.rmSync(subDir1, { recursive: true, force: true });
+      }
+      if (baseName.includes('_')) {
+        const parts = baseName.split('_');
+        const possibleUuid = parts.slice(1).join('_');
+        if (possibleUuid) {
+          const subDir2 = path.join(sessionDir, possibleUuid);
+          if (fs.existsSync(subDir2) && fs.statSync(subDir2).isDirectory()) {
+            fs.rmSync(subDir2, { recursive: true, force: true });
+          }
+        }
+      }
+
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Failed to delete session' };
+    }
+  }
+
+  public async exportHtml(
+    outputPath: string
+  ): Promise<{ success: boolean; path?: string; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    if (this.status === 'thinking' || this.status === 'streaming' || this.status === 'executing_tool') {
+      return { success: false, error: 'session_busy' };
+    }
+    try {
+      const cmd: ExportHtmlCommand = {
+        type: 'export_html',
+        id: this.generateId(),
+        outputPath,
+      };
+      const res = await this.sendCommand<ExportHtmlResponseData>(cmd);
+      if (res.success) {
+        return { success: true, path: res.data?.path || outputPath };
+      }
+      return { success: false, error: res.error || 'Failed to export session to HTML' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing export_html' };
+    }
+  }
+
+  public emitNotification(message: string, notifyType: string = 'info') {
+    const notif: OmpNotification = {
+      id: this.generateId(),
+      message,
+      notifyType,
+      timestamp: Date.now(),
+    };
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('omp:notification', notif);
+    }
+  }
   public async loadHistory(): Promise<{
     success: boolean;
     messages?: ChatMessage[];
@@ -1102,6 +1498,31 @@ export class OmpBridge {
           ...(thinkingBlock ? { thinking: thinkingBlock } : {}),
           ...(toolCalls.length > 0 ? { toolCalls } : {}),
         });
+      } else if (role === 'fileMention') {
+        const rawFiles = Array.isArray((msg as any).files) ? (msg as any).files : [];
+        const files = rawFiles.map((f: any) => {
+          const filePath = String(f.path || f.relativePath || '');
+          const fileName = f.name || (filePath ? filePath.split('/').pop() : '');
+          const lineCount =
+            typeof f.lineCount === 'number'
+              ? f.lineCount
+              : typeof f.content === 'string'
+              ? f.content.split('\n').length
+              : undefined;
+          return {
+            path: filePath,
+            name: fileName,
+            lineCount,
+          };
+        });
+
+        result.push({
+          id: `msg-fileMention-${timestamp}-${i}`,
+          role: 'fileMention',
+          content: '',
+          files,
+          timestamp,
+        });
       } else if (role === 'toolResult') {
         const toolCallId = (msg.toolCallId || (msg as any).id) as string;
         if (toolCallId && toolCallsMap.has(toolCallId)) {
@@ -1133,6 +1554,30 @@ export class OmpBridge {
   public async getBranchEntries(
     customSessionFile?: string
   ): Promise<{ success: boolean; entries?: OmpBranchEntry[]; error?: string }> {
+    // If bridge is ready and process is online, use live get_branch_messages RPC command
+    if (this.lifecycleState === 'ready' && this.process && this.process.stdin?.writable) {
+      try {
+        const cmd: GetBranchMessagesCommand = {
+          type: 'get_branch_messages',
+          id: this.generateId(),
+        };
+        const res = await this.sendCommand<GetBranchMessagesResponseData>(cmd);
+        if (res.success && res.data && Array.isArray(res.data.messages)) {
+          const entries: OmpBranchEntry[] = res.data.messages.map((m) => ({
+            entryId: m.entryId,
+            text: m.text,
+            role: 'user',
+          }));
+          return { success: true, entries };
+        }
+        return { success: false, error: res.error || 'Failed to get branch messages' };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg || 'Error executing get_branch_messages' };
+      }
+    }
+
+    // Fallback when unready/offline with optional custom file
     try {
       const targetFile = customSessionFile || this.currentSessionFile;
       if (!targetFile || !fs.existsSync(targetFile)) {
@@ -1179,6 +1624,16 @@ export class OmpBridge {
       }
     }
     this.pendingUiRequests.clear();
+    this.clearEngineStatusesAndWidgets();
+  }
+
+  private clearEngineStatusesAndWidgets() {
+    this.engineStatuses.clear();
+    this.engineWidgets.clear();
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('omp:engine-status', []);
+      this.window.webContents.send('omp:widget-update', []);
+    }
   }
 
   private handleStdoutData(data: string) {
@@ -1213,12 +1668,24 @@ export class OmpBridge {
             this.setStatus('idle');
             this.handshakePromise?.resolve({ success: true, pid: this.process?.pid });
             this.getState().catch(() => {});
+            this.getAvailableCommands().catch((err) => {
+              console.warn('[OmpBridge] get_available_commands unavailable:', err.message);
+            });
             this.setSubagentSubscription('progress').catch((err) => {
               console.warn('[OmpBridge] set_subagent_subscription unavailable:', err.message);
             });
             this.refreshSubagentsOnDemand().catch((err) => {
               console.warn('[OmpBridge] get_subagents sync unavailable:', err.message);
             });
+            if (this.settingsStore) {
+              const s = this.settingsStore.get();
+              if (s.defaultThinkingLevel && s.defaultThinkingLevel !== 'off') {
+                this.setThinkingLevel(s.defaultThinkingLevel).catch(() => {});
+              }
+              if (s.autoCompaction !== undefined && s.autoCompaction === true) {
+                this.setAutoCompaction(s.autoCompaction).catch(() => {});
+              }
+            }
           } else {
             console.error('[OmpBridge] Protocol negotiation failed:', res.error);
             this.cleanupProcess();
@@ -1312,8 +1779,97 @@ export class OmpBridge {
         return;
       }
 
-      // D. Fire-and-forget (notify, setStatus, setWidget, setTitle, set_editor_text, and unknown methods):
-      // NO reply is sent (Decision E2), already logged to frameLogger.
+      // D. Fire-and-forget forwarding (notify, setStatus, setWidget, setTitle, set_editor_text, etc.)
+      // NO reply is sent to stdin (Decision E2), already logged to frameLogger.
+      const raw = reqEvent as Record<string, unknown>;
+      if (method === 'notify') {
+        const notif: OmpNotification = {
+          id: reqId || this.generateId(),
+          message: typeof raw.message === 'string' ? raw.message : typeof raw.text === 'string' ? raw.text : '',
+          notifyType: typeof raw.notifyType === 'string' ? raw.notifyType : typeof raw.level === 'string' ? raw.level : 'info',
+          timestamp: Date.now(),
+        };
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:notification', notif);
+        }
+        return;
+      }
+
+      if (method === 'setStatus') {
+        const statusKey = typeof raw.statusKey === 'string' ? raw.statusKey : typeof raw.key === 'string' ? raw.key : 'default';
+        const statusText = typeof raw.statusText === 'string' ? raw.statusText : typeof raw.text === 'string' ? raw.text : '';
+        if (!statusText || !statusText.trim()) {
+          this.engineStatuses.delete(statusKey);
+        } else {
+          this.engineStatuses.set(statusKey, statusText);
+        }
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:engine-status', this.getEngineStatuses());
+        }
+        return;
+      }
+
+      if (method === 'setWidget') {
+        const widgetKey = typeof raw.widgetKey === 'string' ? raw.widgetKey : typeof raw.key === 'string' ? raw.key : 'default';
+        const widgetLines = Array.isArray(raw.widgetLines)
+          ? (raw.widgetLines as string[])
+          : Array.isArray(raw.lines)
+            ? (raw.lines as string[])
+            : [];
+        const widgetPlacement = typeof raw.widgetPlacement === 'string' ? raw.widgetPlacement : typeof raw.placement === 'string' ? raw.placement : undefined;
+        if (!widgetLines || widgetLines.length === 0) {
+          this.engineWidgets.delete(widgetKey);
+        } else {
+          this.engineWidgets.set(widgetKey, { lines: widgetLines, placement: widgetPlacement });
+        }
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:widget-update', this.getEngineWidgets());
+        }
+        return;
+      }
+
+      if (method === 'setTitle') {
+        const title = typeof raw.title === 'string' ? raw.title : '';
+        if (title) {
+          this.getState().catch(() => {});
+        }
+        return;
+      }
+
+      return;
+    }
+    if ((frame as any).role === 'fileMention') {
+      const rawFiles = Array.isArray((frame as any).files) ? (frame as any).files : [];
+      const files = rawFiles.map((f: any) => {
+        const filePath = String(f.path || f.relativePath || '');
+        const fileName = f.name || (filePath ? filePath.split('/').pop() : '');
+        const lineCount =
+          typeof f.lineCount === 'number'
+            ? f.lineCount
+            : typeof f.content === 'string'
+            ? f.content.split('\n').length
+            : undefined;
+        return {
+          path: filePath,
+          name: fileName,
+          lineCount,
+        };
+      });
+
+      const chatMessage: ChatMessage = {
+        id: `msg-file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        role: 'fileMention',
+        content: '',
+        files,
+        timestamp:
+          typeof (frame as any).timestamp === 'number'
+            ? (frame as any).timestamp
+            : Date.now(),
+      };
+
+      if (this.window && !this.window.isDestroyed()) {
+        this.window.webContents.send('omp:message-complete', chatMessage);
+      }
       return;
     }
 
@@ -1486,6 +2042,39 @@ export class OmpBridge {
       case 'message_end': {
         const endFrame = frame as MessageEndEvent;
         const msg = endFrame.message as AgentMessage | undefined;
+        if (msg && msg.role === 'fileMention') {
+          const rawFiles = Array.isArray((msg as any).files) ? (msg as any).files : [];
+          const files = rawFiles.map((f: any) => {
+            const filePath = String(f.path || f.relativePath || '');
+            const fileName = f.name || (filePath ? filePath.split('/').pop() : '');
+            const lineCount =
+              typeof f.lineCount === 'number'
+                ? f.lineCount
+                : typeof f.content === 'string'
+                ? f.content.split('\n').length
+                : undefined;
+            return {
+              path: filePath,
+              name: fileName,
+              lineCount,
+            };
+          });
+          const chatMessage: ChatMessage = {
+            id: `msg-file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            role: 'fileMention',
+            content: '',
+            files,
+            timestamp:
+              typeof msg.completedAt === 'number'
+                ? msg.completedAt
+                : typeof msg.timestamp === 'number'
+                ? msg.timestamp
+                : Date.now(),
+          };
+          if (this.window && !this.window.isDestroyed()) {
+            this.window.webContents.send('omp:message-complete', chatMessage);
+          }
+        } else
         if (msg && msg.role === 'assistant' && Array.isArray(msg.content)) {
           const textParts: string[] = [];
           for (const block of msg.content) {
@@ -1514,6 +2103,40 @@ export class OmpBridge {
         }
         break;
       }
+      case 'fileMention': {
+        const rawFiles = Array.isArray((frame as any).files) ? (frame as any).files : [];
+        const files = rawFiles.map((f: any) => {
+          const filePath = String(f.path || f.relativePath || '');
+          const fileName = f.name || (filePath ? filePath.split('/').pop() : '');
+          const lineCount =
+            typeof f.lineCount === 'number'
+              ? f.lineCount
+              : typeof f.content === 'string'
+              ? f.content.split('\n').length
+              : undefined;
+          return {
+            path: filePath,
+            name: fileName,
+            lineCount,
+          };
+        });
+
+        const chatMessage: ChatMessage = {
+          id: `msg-file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          role: 'fileMention',
+          content: '',
+          files,
+          timestamp:
+            typeof (frame as any).timestamp === 'number'
+              ? (frame as any).timestamp
+              : Date.now(),
+        };
+
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:message-complete', chatMessage);
+        }
+        break;
+      }
 
       case 'turn_end':
         this.setStatus('idle');
@@ -1530,6 +2153,7 @@ export class OmpBridge {
           }
         }
         this.pendingUiRequests.clear();
+        this.getState().catch(() => {});
         break;
 
       case 'abort':
@@ -1617,6 +2241,51 @@ export class OmpBridge {
           this.activeSubagents.set(subagentId, entry);
           this.emitSubagentUpdate();
         }
+        break;
+      }
+
+      case 'available_commands_update': {
+        const cmdFrame = frame as AvailableCommandsUpdateEvent;
+        const rawCommands = (cmdFrame.commands || (cmdFrame as any).data?.commands) as OmpCommandInfo[];
+        if (Array.isArray(rawCommands)) {
+          this.availableCommands = rawCommands;
+          this.emitCommandsUpdate();
+        }
+        break;
+      }
+
+      case 'command_output': {
+        const outFrame = frame as CommandOutputEvent;
+        const text = typeof outFrame.text === 'string' ? outFrame.text : (typeof (outFrame as any).output === 'string' ? (outFrame as any).output : '');
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:command-output', { text });
+        }
+        break;
+      }
+
+      case 'session_info_update': {
+        const sessFrame = frame as SessionInfoUpdateEvent;
+        const title = typeof sessFrame.title === 'string' ? sessFrame.title : undefined;
+        const sessionId = typeof sessFrame.sessionId === 'string' ? sessFrame.sessionId : undefined;
+        if (title) {
+          this.sessionName = title;
+        }
+        if (sessionId) {
+          this.currentSessionId = sessionId;
+        }
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:context-usage', {
+            contextUsage: this.lastContextUsage,
+            tokensPerSecond: this.lastTokensPerSecond,
+            sessionName: this.sessionName,
+          });
+        }
+        this.getState().catch(() => {});
+        break;
+      }
+
+      case 'config_update': {
+        this.getState().catch(() => {});
         break;
       }
     }
@@ -1835,6 +2504,19 @@ export class OmpBridge {
     this.pendingUiRequests.clear();
     this.activeSubagents.clear();
     this.emitSubagentUpdate();
+    this.availableCommands = [];
+    this.emitCommandsUpdate();
+    this.sessionName = undefined;
+    this.lastContextUsage = null;
+    this.lastTokensPerSecond = null;
+    this.clearEngineStatusesAndWidgets();
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('omp:context-usage', {
+        contextUsage: null,
+        tokensPerSecond: null,
+        sessionName: undefined,
+      });
+    }
     this.currentSessionFile = null;
     this.currentSessionId = null;
     this.workspacePath = null;

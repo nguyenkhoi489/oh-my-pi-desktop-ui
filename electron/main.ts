@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { OmpBridge } from './omp-bridge.ts';
-import type { WorkspaceFile, OmpThinkingLevel } from './types.ts';
+import type { WorkspaceFile, OmpThinkingLevel, OmpApprovalMode } from './types.ts';
+import { getSettingsStore, type AppSettings } from './settings-store.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,8 +33,12 @@ function createWindow() {
     },
   });
 
-  ompBridge = new OmpBridge(mainWindow);
-
+  const settingsStore = getSettingsStore();
+  ompBridge = new OmpBridge(mainWindow, settingsStore);
+  const initialSettings = settingsStore.get();
+  if (initialSettings.customBinaryPath) {
+    ompBridge.setCustomBinaryPath(initialSettings.customBinaryPath);
+  }
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     // mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -57,6 +62,8 @@ ipcMain.handle('omp:check-installation', async () => {
 
 ipcMain.handle('omp:set-custom-path', async (_, customPath: string) => {
   if (!ompBridge) return { installed: false };
+  const settingsStore = getSettingsStore();
+  settingsStore.set({ customBinaryPath: customPath });
   ompBridge.setCustomBinaryPath(customPath);
   return ompBridge.checkInstallation();
 });
@@ -71,9 +78,9 @@ ipcMain.handle('fs:select-binary', async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle('omp:start-process', async (_, workspacePath: string, model?: string) => {
+ipcMain.handle('omp:start-process', async (_, workspacePath: string, model?: string, options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode }) => {
   if (!ompBridge) return { success: false };
-  return ompBridge.startProcess(workspacePath, model);
+  return ompBridge.startProcess(workspacePath, model, options);
 });
 
 ipcMain.handle('omp:stop-process', async () => {
@@ -96,10 +103,30 @@ ipcMain.handle('omp:ui-respond', async (_, id: string, payload: { value?: unknow
   ompBridge.respondUiRequest(id, payload);
 });
 
+// IPC Handlers: Settings & Persistence (Phase 7)
+ipcMain.handle('settings:get', async () => {
+  const store = getSettingsStore();
+  return store.get();
+});
+
+ipcMain.handle('settings:set', async (_, partial: Partial<AppSettings>) => {
+  const store = getSettingsStore();
+  const updated = store.set(partial);
+  if (ompBridge && ('customBinaryPath' in partial)) {
+    ompBridge.setCustomBinaryPath(updated.customBinaryPath);
+  }
+  return updated;
+});
+
 // IPC Handlers: Model Catalog & Engine State (Phase 2 Additions)
 ipcMain.handle('omp:get-models', async () => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
   return ompBridge.getAvailableModels();
+});
+
+ipcMain.handle('omp:get-commands', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.getAvailableCommands();
 });
 
 ipcMain.handle('omp:set-model', async (_, provider: string, modelId: string) => {
@@ -117,6 +144,30 @@ ipcMain.handle('omp:get-state', async () => {
   return ompBridge.getState();
 });
 
+ipcMain.handle('omp:session-stats', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.getSessionStats();
+});
+
+ipcMain.handle('omp:get-approval-mode', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.getApprovalMode();
+});
+
+ipcMain.handle('omp:set-approval-mode', async (_, mode: OmpApprovalMode) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.setApprovalMode(mode);
+});
+
+ipcMain.handle('omp:compact', async (_, customInstructions?: string) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.compact(customInstructions);
+});
+
+ipcMain.handle('omp:set-auto-compaction', async (_, enabled: boolean) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.setAutoCompaction(enabled);
+});
 // IPC Handlers: Sessions & Subagent Hub (Phase 1 Additions)
 ipcMain.handle('omp:list-sessions', async () => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
@@ -148,11 +199,44 @@ ipcMain.handle('omp:branch-entries', async () => {
   return ompBridge.getBranchEntries();
 });
 
+ipcMain.handle('omp:rename-session', async (_, name: string) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.renameSession(name);
+});
+
+ipcMain.handle('omp:delete-session', async (_, sessionPath: string) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.deleteSession(sessionPath);
+});
+
+ipcMain.handle('omp:export-session', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  const win = mainWindow || BrowserWindow.getFocusedWindow();
+  const state = await ompBridge.getState().catch(() => ({ success: false, state: undefined }));
+  const defaultTitle = state.state?.sessionName || 'session';
+  const cleanTitle = defaultTitle.replace(/[/\\?%*:|"<>]/g, '-').trim() || 'session';
+  const result = await dialog.showSaveDialog(win || (undefined as any), {
+    title: 'Xuất phiên làm việc ra HTML',
+    defaultPath: `${cleanTitle}.html`,
+    filters: [{ name: 'HTML Files', extensions: ['html'] }],
+  });
+  if (result.canceled || !result.filePath) {
+    return { success: false, cancelled: true };
+  }
+  const filePath = result.filePath;
+  const res = await ompBridge.exportHtml(filePath);
+  if (res.success) {
+    ompBridge.emitNotification(`Đã xuất phiên làm việc ra: ${path.basename(filePath)}`, 'info');
+    shell.showItemInFolder(filePath);
+    return { success: true, path: filePath };
+  }
+  return { success: false, error: res.error };
+});
+
 ipcMain.handle('omp:get-subagents', async () => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
   return { success: true, subagents: ompBridge.getSubagents() };
 });
-
 // IPC Handlers: File System & Workspace
 ipcMain.handle('fs:select-folder', async () => {
   if (!mainWindow) return null;

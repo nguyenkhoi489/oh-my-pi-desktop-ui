@@ -7,6 +7,9 @@ import {
   FileDiffItem,
   PermissionRequest,
   OmpUiRequest,
+  OmpNotification,
+  OmpEngineStatusEntry,
+  OmpWidgetEntry,
   OmpInstallStatus,
   OmpModelInfo,
   OmpThinkingLevel,
@@ -14,9 +17,12 @@ import {
   OmpSessionInfo,
   OmpBranchEntry,
   OmpSubagentInfo,
+  OmpContextUsage,
+  OmpSessionStats,
+  OmpApprovalMode,
+  OmpCommandInfo,
 } from '../types';
 import { DEMO_MESSAGES, DEMO_INITIAL_DIFF } from '../mock/demoData';
-
 export function useOmpRpc() {
   const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI);
   const [status, setStatus] = useState<OmpAgentStatus>('idle');
@@ -32,6 +38,14 @@ export function useOmpRpc() {
   // Subagents Hub state (Phase 3)
   const [subagents, setSubagents] = useState<OmpSubagentInfo[]>([]);
 
+  // Notifications & Status Surfacing (Phase 1)
+  const [notifications, setNotifications] = useState<OmpNotification[]>([]);
+  const [engineStatuses, setEngineStatuses] = useState<OmpEngineStatusEntry[]>([]);
+  const [engineWidgets, setEngineWidgets] = useState<OmpWidgetEntry[]>([]);
+  // Usage & Context Observability (Phase 2)
+  const [contextUsage, setContextUsage] = useState<OmpContextUsage | null>(null);
+  const [tokensPerSecond, setTokensPerSecond] = useState<number | null>(null);
+
   // Extension UI Request queue (FIFO)
   const [uiRequestQueue, setUiRequestQueue] = useState<OmpUiRequest[]>([]);
   const uiRequestQueueRef = useRef<OmpUiRequest[]>([]);
@@ -42,11 +56,12 @@ export function useOmpRpc() {
   const [selectedModel, setSelectedModel] = useState<OmpModelInfo | null>(null);
   const [thinkingLevel, setThinkingLevel] = useState<OmpThinkingLevel>('off');
   const [engineState, setEngineState] = useState<OmpEngineState | null>(null);
-
+  const [approvalMode, setApprovalMode] = useState<OmpApprovalMode | undefined>(undefined);
+  const [isCompacting, setIsCompacting] = useState<boolean>(false);
   // Sessions state (Phase 2)
   const [sessions, setSessions] = useState<OmpSessionInfo[]>([]);
   const [activeSessionPath, setActiveSessionPath] = useState<string | null>(null);
-
+  const [availableCommands, setAvailableCommands] = useState<OmpCommandInfo[]>([]);
   // rAF token batching refs
   const tokenBufferRef = useRef<string>('');
   const rafIdRef = useRef<number | null>(null);
@@ -86,19 +101,30 @@ export function useOmpRpc() {
         const result = await window.electronAPI.setCustomBinaryPath(customPath);
         setInstallStatus(result);
         return result;
+      } else {
+        try {
+          const raw = localStorage.getItem('omp_settings');
+          const obj = raw ? JSON.parse(raw) : {};
+          localStorage.setItem('omp_settings', JSON.stringify({ ...obj, customBinaryPath: customPath }));
+        } catch {}
+        const mockStatus = { installed: true, binaryPath: customPath, version: 'v0.1.0-mock' };
+        setInstallStatus(mockStatus);
+        return mockStatus;
       }
     } finally {
       setIsCheckingInstall(false);
     }
   }, []);
 
-  const browseBinaryFile = useCallback(async () => {
+  const browseBinaryFile = useCallback(async (): Promise<string | null> => {
     if (window.electronAPI) {
       const selected = await window.electronAPI.selectBinaryFile();
       if (selected) {
-        return await setCustomPath(selected);
+        await setCustomPath(selected);
+        return selected;
       }
     }
+    return null;
   }, [setCustomPath]);
 
   // Model & State IPC Actions
@@ -115,6 +141,20 @@ export function useOmpRpc() {
     }
     return [];
   }, []);
+  const refreshCommands = useCallback(async (): Promise<OmpCommandInfo[]> => {
+    if (!window.electronAPI || !window.electronAPI.getAvailableCommands) return [];
+    try {
+      const res = await window.electronAPI.getAvailableCommands();
+      if (res.success && Array.isArray(res.commands)) {
+        setAvailableCommands(res.commands);
+        return res.commands;
+      }
+    } catch (err) {
+      console.warn('[useOmpRpc] Failed to refresh commands:', err);
+    }
+    return [];
+  }, []);
+
 
   const refreshEngineState = useCallback(async (): Promise<OmpEngineState | null> => {
     if (!window.electronAPI) return null;
@@ -124,6 +164,9 @@ export function useOmpRpc() {
         setEngineState(res.state);
         if (res.state.model) {
           setSelectedModel(res.state.model);
+        }
+        if (res.state.approvalMode !== undefined) {
+          setApprovalMode(res.state.approvalMode);
         }
         return res.state;
       }
@@ -212,18 +255,28 @@ export function useOmpRpc() {
       try {
         const branchRes = await window.electronAPI.getBranchEntries();
         if (branchRes.success && Array.isArray(branchRes.entries)) {
-          const timestampCounts = new Map<number, OmpBranchEntry[]>();
+          const textToEntries = new Map<string, OmpBranchEntry[]>();
           for (const entry of branchRes.entries) {
-            if (entry.role === 'user' && typeof entry.timestamp === 'number') {
-              const list = timestampCounts.get(entry.timestamp) || [];
+            const rawText = entry.text ?? (entry as any).content;
+            if (typeof rawText === 'string') {
+              const list = textToEntries.get(rawText) || [];
               list.push(entry);
-              timestampCounts.set(entry.timestamp, list);
+              textToEntries.set(rawText, list);
             }
           }
+
+          const userTextCounts = new Map<string, number>();
+          for (const m of currentMsgs) {
+            if (m.role === 'user' && typeof m.content === 'string') {
+              userTextCounts.set(m.content, (userTextCounts.get(m.content) || 0) + 1);
+            }
+          }
+
           return currentMsgs.map((m) => {
-            if (m.role === 'user') {
-              const matches = timestampCounts.get(m.timestamp);
-              if (matches && matches.length === 1) {
+            if (m.role === 'user' && typeof m.content === 'string') {
+              const matches = textToEntries.get(m.content);
+              const userCount = userTextCounts.get(m.content) || 0;
+              if (matches && matches.length === 1 && userCount === 1) {
                 return { ...m, entryId: matches[0].entryId };
               }
               return { ...m, entryId: undefined };
@@ -264,6 +317,9 @@ export function useOmpRpc() {
               setActiveDiff(null);
               setUiRequestQueue([]);
               uiRequestQueueRef.current = [];
+              setNotifications([]);
+              setEngineStatuses([]);
+              setEngineWidgets([]);
 
               const correlated = await correlateBranchEntries(histRes.messages);
               setMessages(correlated);
@@ -311,6 +367,9 @@ export function useOmpRpc() {
             setActiveDiff(null);
             setUiRequestQueue([]);
             uiRequestQueueRef.current = [];
+            setNotifications([]);
+            setEngineStatuses([]);
+            setEngineWidgets([]);
             setActiveSessionPath(null);
             await refreshSessions();
             await refreshEngineState();
@@ -328,7 +387,73 @@ export function useOmpRpc() {
     },
     [status, refreshSessions, refreshEngineState]
   );
+  const renameSession = useCallback(
+    async (name: string): Promise<boolean> => {
+      if (status !== 'idle') {
+        console.warn('[useOmpRpc] Cannot rename session while agent is busy (status:', status, ')');
+        return false;
+      }
+      const trimmed = (name || '').trim();
+      if (!trimmed) return false;
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.renameSession(trimmed);
+          if (res.success) {
+            await refreshEngineState();
+            await refreshSessions();
+            return true;
+          }
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to rename session:', err);
+        }
+        return false;
+      }
+      return false;
+    },
+    [status, refreshEngineState, refreshSessions]
+  );
 
+  const deleteSession = useCallback(
+    async (sessionPath: string): Promise<boolean> => {
+      if (status !== 'idle') {
+        console.warn('[useOmpRpc] Cannot delete session while agent is busy (status:', status, ')');
+        return false;
+      }
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.deleteSession(sessionPath);
+          if (res.success) {
+            await refreshSessions();
+            return true;
+          }
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to delete session:', err);
+        }
+        return false;
+      }
+      return false;
+    },
+    [status, refreshSessions]
+  );
+
+  const exportSession = useCallback(
+    async (): Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }> => {
+      if (status !== 'idle') {
+        console.warn('[useOmpRpc] Cannot export session while agent is busy (status:', status, ')');
+        return { success: false, error: 'session_busy' };
+      }
+      if (window.electronAPI) {
+        try {
+          return await window.electronAPI.exportSession();
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { success: false, error: msg };
+        }
+      }
+      return { success: false, error: 'Electron API unavailable' };
+    },
+    [status]
+  );
   const branchFromMessage = useCallback(
     async (entryId: string): Promise<boolean> => {
       if (status !== 'idle') {
@@ -398,6 +523,7 @@ export function useOmpRpc() {
       if (newStatus === 'idle') {
         refreshEngineState();
         refreshSessions();
+        refreshCommands();
       }
     });
 
@@ -492,6 +618,59 @@ export function useOmpRpc() {
         })
       : () => {};
 
+    const unsubNotification = window.electronAPI.onOmpNotification
+      ? window.electronAPI.onOmpNotification((notif) => {
+          setNotifications((prev) => {
+            const next = [...prev, notif];
+            return next.length > 5 ? next.slice(next.length - 5) : next;
+          });
+          if (notif.notifyType !== 'error') {
+            setTimeout(() => {
+              setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+            }, 6000);
+          }
+        })
+      : () => {};
+
+    const unsubEngineStatus = window.electronAPI.onOmpEngineStatus
+      ? window.electronAPI.onOmpEngineStatus((statuses) => {
+          setEngineStatuses(statuses || []);
+        })
+      : () => {};
+
+    const unsubWidgetUpdate = window.electronAPI.onOmpWidgetUpdate
+      ? window.electronAPI.onOmpWidgetUpdate((widgets) => {
+          setEngineWidgets(widgets || []);
+        })
+      : () => {};
+    const unsubContextUsage = window.electronAPI.onOmpContextUsage
+      ? window.electronAPI.onOmpContextUsage((data) => {
+          setContextUsage(data.contextUsage ?? null);
+          setTokensPerSecond(data.tokensPerSecond ?? null);
+        })
+      : () => {};
+
+    const unsubCommands = window.electronAPI.onOmpCommandsUpdate
+      ? window.electronAPI.onOmpCommandsUpdate((cmds) => {
+          setAvailableCommands(cmds || []);
+        })
+      : () => {};
+
+    const unsubCommandOutput = window.electronAPI.onOmpCommandOutput
+      ? window.electronAPI.onOmpCommandOutput((data) => {
+          const text = typeof data === 'string' ? data : (data?.text || '');
+          if (!text) return;
+          const sysMsg: ChatMessage = {
+            id: `msg-cmd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            role: 'system',
+            content: text,
+            timestamp: Date.now(),
+          };
+          setMessages((prev) => [...prev, sysMsg]);
+        })
+      : () => {};
+
+    refreshCommands();
     return () => {
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
@@ -508,8 +687,14 @@ export function useOmpRpc() {
       unsubUiCancel();
       unsubComplete();
       unsubSubagents();
+      unsubNotification();
+      unsubEngineStatus();
+      unsubWidgetUpdate();
+      unsubContextUsage();
+      unsubCommands();
+      unsubCommandOutput();
     };
-  }, [flushTokens, refreshEngineState]);
+  }, [flushTokens, refreshEngineState, refreshCommands]);
 
   const sendMessage = useCallback(
     async (prompt: string, contextFiles?: string[]) => {
@@ -686,6 +871,105 @@ export function useOmpRpc() {
     }
     setActiveDiff((prev) => (prev ? { ...prev, status: 'rejected' } : null));
   }, [activeDiff]);
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  const clearNotifications = useCallback(() => {
+    setNotifications([]);
+  }, []);
+  const getSessionStats = useCallback(async (): Promise<{ success: boolean; stats?: OmpSessionStats; error?: string }> => {
+    if (!window.electronAPI?.getSessionStats) {
+      return { success: false, error: 'electronAPI.getSessionStats is unavailable' };
+    }
+    try {
+      return await window.electronAPI.getSessionStats();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Failed to fetch session stats' };
+    }
+  }, []);
+  const changeApprovalMode = useCallback(
+    async (mode: OmpApprovalMode): Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }> => {
+      if (status !== 'idle') {
+        const confirmed = window.confirm('Đổi chế độ phê duyệt sẽ dừng lượt xử lý hiện tại. Bạn có chắc chắn muốn tiếp tục?');
+        if (!confirmed) {
+          return { success: false, error: 'User cancelled approval mode change' };
+        }
+      }
+
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.setApprovalMode(mode);
+          if (res.success) {
+            setApprovalMode(res.mode);
+            await refreshEngineState();
+            await refreshSessions();
+            return res;
+          }
+          return res;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[useOmpRpc] Failed to set approval mode:', err);
+          return { success: false, error: msg };
+        }
+      } else {
+        setApprovalMode(mode);
+        return { success: true, mode };
+      }
+    },
+    [status, refreshEngineState, refreshSessions]
+  );
+
+  const compact = useCallback(
+    async (customInstructions?: string): Promise<{ success: boolean; error?: string }> => {
+      if (status !== 'idle') {
+        return { success: false, error: 'Không thể nén context khi agent đang hoạt động' };
+      }
+      setIsCompacting(true);
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.compact(customInstructions);
+          if (res.success) {
+            await refreshEngineState();
+          }
+          return res;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { success: false, error: msg };
+        } finally {
+          setIsCompacting(false);
+        }
+      } else {
+        setIsCompacting(false);
+        return { success: true };
+      }
+    },
+    [status, refreshEngineState]
+  );
+
+  const setAutoCompaction = useCallback(
+    async (enabled: boolean): Promise<{ success: boolean; error?: string }> => {
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.setAutoCompaction(enabled);
+          if (res.success) {
+            await refreshEngineState();
+          }
+          return res;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { success: false, error: msg };
+        }
+      } else {
+        setEngineState((prev) => (prev ? { ...prev, autoCompactionEnabled: enabled } : null));
+        return { success: true };
+      }
+    },
+    [refreshEngineState]
+  );
+
+
 
   return {
     status,
@@ -723,10 +1007,30 @@ export function useOmpRpc() {
     switchSession,
     newSession,
     branchFromMessage,
+    renameSession,
+    deleteSession,
+    exportSession,
     subagents,
     sendMessage,
     respondPermission,
     acceptDiff,
     rejectDiff,
+    notifications,
+    dismissNotification,
+    clearNotifications,
+    engineStatuses,
+    engineWidgets,
+    contextUsage,
+    tokensPerSecond,
+    getSessionStats,
+    approvalMode,
+    setApprovalMode: changeApprovalMode,
+    changeApprovalMode,
+    compact,
+    isCompacting: isCompacting || Boolean(engineState?.isCompacting),
+    autoCompactionEnabled: engineState?.autoCompactionEnabled ?? false,
+    setAutoCompaction,
+    availableCommands,
+    refreshCommands,
   };
 }

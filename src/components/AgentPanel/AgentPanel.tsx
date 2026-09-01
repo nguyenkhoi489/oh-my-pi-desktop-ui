@@ -5,9 +5,14 @@ import {
   ThinkingBlock,
   ToolCall,
   OmpAgentStatus,
+  OmpEngineStatusEntry,
+  OmpWidgetEntry,
+  WorkspaceFile,
+  OmpCommandInfo,
 } from '../../types';
 import { ChatHistory } from './ChatHistory';
 import { PromptComposer } from './PromptComposer';
+import { EngineStatusStrip } from '../Notifications/EngineStatusStrip';
 
 interface AgentPanelProps {
   messages: ChatMessage[];
@@ -15,9 +20,14 @@ interface AgentPanelProps {
   activeToolCalls: ToolCall[];
   currentStreamText: string;
   status: OmpAgentStatus;
+  engineStatuses?: OmpEngineStatusEntry[];
+  engineWidgets?: OmpWidgetEntry[];
+  workspaceFiles?: WorkspaceFile[];
+  availableCommands?: OmpCommandInfo[];
   onSendMessage: (prompt: string, contextFiles?: string[]) => void;
   onBranchSession?: (entryId: string) => void;
   onCollapsePanel?: () => void;
+  onOpenFile?: (filePath: string) => void;
 }
 
 export const AgentPanel: React.FC<AgentPanelProps> = ({
@@ -26,9 +36,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   activeToolCalls,
   currentStreamText,
   status,
+  engineStatuses,
+  engineWidgets,
+  workspaceFiles,
+  availableCommands,
   onSendMessage,
   onBranchSession,
   onCollapsePanel,
+  onOpenFile,
 }) => {
   return (
     <div className="w-full flex flex-col h-full bg-panel select-none">
@@ -68,12 +83,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         currentStreamText={currentStreamText}
         status={status}
         onBranchSession={onBranchSession}
+        onOpenFile={onOpenFile}
+      />
+
+      {/* Engine Status & Widgets Strip */}
+      <EngineStatusStrip
+        statuses={engineStatuses}
+        widgets={engineWidgets}
       />
 
       {/* Docked Prompt Composer */}
       <PromptComposer
         onSendMessage={onSendMessage}
         status={status}
+        workspaceFiles={workspaceFiles}
+        availableCommands={availableCommands}
       />
     </div>
   );

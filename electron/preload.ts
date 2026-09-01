@@ -6,9 +6,17 @@ import type {
   FileDiffItem,
   PermissionRequest,
   OmpUiRequest,
+  OmpNotification,
+  OmpEngineStatusEntry,
+  OmpWidgetEntry,
   ChatMessage,
   WorkspaceFile,
   OmpThinkingLevel,
+  OmpApprovalMode,
+  OmpContextUsageUpdate,
+  OmpSessionStats,
+  OmpCommandInfo,
+  AppSettings,
 } from './types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -22,8 +30,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectBinaryFile: () =>
     ipcRenderer.invoke('fs:select-binary'),
 
-  startOmpProcess: (workspacePath: string, model?: string) =>
-    ipcRenderer.invoke('omp:start-process', workspacePath, model),
+  startOmpProcess: (workspacePath: string, model?: string, options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode }) =>
+    ipcRenderer.invoke('omp:start-process', workspacePath, model, options),
 
   stopOmpProcess: () =>
     ipcRenderer.invoke('omp:stop-process'),
@@ -53,6 +61,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getState: () =>
     ipcRenderer.invoke('omp:get-state'),
 
+  getSessionStats: () =>
+    ipcRenderer.invoke('omp:session-stats'),
+
+  setApprovalMode: (mode: OmpApprovalMode) =>
+    ipcRenderer.invoke('omp:set-approval-mode', mode),
+
+  getApprovalMode: () =>
+    ipcRenderer.invoke('omp:get-approval-mode'),
+
+  compact: (customInstructions?: string) =>
+    ipcRenderer.invoke('omp:compact', customInstructions),
+
+  setAutoCompaction: (enabled: boolean) =>
+    ipcRenderer.invoke('omp:set-auto-compaction', enabled),
   // Sessions & Subagent Hub (Phase 1 Additions)
   listSessions: () =>
     ipcRenderer.invoke('omp:list-sessions'),
@@ -72,9 +94,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBranchEntries: () =>
     ipcRenderer.invoke('omp:branch-entries'),
 
+  renameSession: (name: string) =>
+    ipcRenderer.invoke('omp:rename-session', name),
+
+  deleteSession: (sessionPath: string) =>
+    ipcRenderer.invoke('omp:delete-session', sessionPath),
+
+  exportSession: () =>
+    ipcRenderer.invoke('omp:export-session'),
+
   getSubagents: () =>
     ipcRenderer.invoke('omp:get-subagents'),
 
+  getAvailableCommands: () =>
+    ipcRenderer.invoke('omp:get-commands'),
   // File System & Dialogs
   selectFolder: () =>
     ipcRenderer.invoke('fs:select-folder'),
@@ -90,6 +123,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   deleteFile: (filePath: string) =>
     ipcRenderer.invoke('fs:delete-file', filePath),
+
+  // Settings & Persistence (Phase 7)
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  setSettings: (settings: Partial<AppSettings>) => ipcRenderer.invoke('settings:set', settings),
 
   // IPC Event Listeners
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => {
@@ -150,5 +187,38 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: any, subagents: any[]) => callback(subagents);
     ipcRenderer.on('omp:subagent-update', handler);
     return () => ipcRenderer.removeListener('omp:subagent-update', handler);
+  },
+
+  onOmpNotification: (callback: (notification: OmpNotification) => void) => {
+    const handler = (_: unknown, notif: OmpNotification) => callback(notif);
+    ipcRenderer.on('omp:notification', handler);
+    return () => ipcRenderer.removeListener('omp:notification', handler);
+  },
+
+  onOmpEngineStatus: (callback: (statuses: OmpEngineStatusEntry[]) => void) => {
+    const handler = (_: unknown, statuses: OmpEngineStatusEntry[]) => callback(statuses);
+    ipcRenderer.on('omp:engine-status', handler);
+    return () => ipcRenderer.removeListener('omp:engine-status', handler);
+  },
+
+  onOmpWidgetUpdate: (callback: (widgets: OmpWidgetEntry[]) => void) => {
+    const handler = (_: unknown, widgets: OmpWidgetEntry[]) => callback(widgets);
+    ipcRenderer.on('omp:widget-update', handler);
+    return () => ipcRenderer.removeListener('omp:widget-update', handler);
+  },
+  onOmpContextUsage: (callback: (data: OmpContextUsageUpdate) => void) => {
+    const handler = (_: unknown, data: OmpContextUsageUpdate) => callback(data);
+    ipcRenderer.on('omp:context-usage', handler);
+    return () => ipcRenderer.removeListener('omp:context-usage', handler);
+  },
+  onOmpCommandsUpdate: (callback: (commands: OmpCommandInfo[]) => void) => {
+    const handler = (_: unknown, commands: OmpCommandInfo[]) => callback(commands);
+    ipcRenderer.on('omp:commands-update', handler);
+    return () => ipcRenderer.removeListener('omp:commands-update', handler);
+  },
+  onOmpCommandOutput: (callback: (data: { text: string }) => void) => {
+    const handler = (_: unknown, data: { text: string }) => callback(data);
+    ipcRenderer.on('omp:command-output', handler);
+    return () => ipcRenderer.removeListener('omp:command-output', handler);
   },
 });

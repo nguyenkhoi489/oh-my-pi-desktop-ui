@@ -17,6 +17,7 @@ export type OmpThinkingLevel =
   | 'max'
   | 'auto';
 
+export type OmpApprovalMode = 'always-ask' | 'write' | 'yolo';
 // ==========================================
 // Handshake & Base Envelope Frames
 // ==========================================
@@ -76,6 +77,12 @@ export interface AbortCommand {
 
 export interface GetStateCommand {
   type: 'get_state';
+  id?: string;
+  [key: string]: unknown;
+}
+
+export interface GetSessionStatsCommand {
+  type: 'get_session_stats';
   id?: string;
   [key: string]: unknown;
 }
@@ -151,6 +158,14 @@ export interface ExtensionUiResponseCommand {
 export interface CompactCommand {
   type: 'compact';
   id?: string;
+  customInstructions?: string;
+  [key: string]: unknown;
+}
+
+export interface SetAutoCompactionCommand {
+  type: 'set_auto_compaction';
+  id?: string;
+  enabled: boolean;
   [key: string]: unknown;
 }
 
@@ -166,13 +181,38 @@ export interface NewSessionCommand {
   parentSession?: string;
   [key: string]: unknown;
 }
+export interface SetSessionNameCommand {
+  type: 'set_session_name';
+  id?: string;
+  name: string;
+  [key: string]: unknown;
+}
 
+export interface ExportHtmlCommand {
+  type: 'export_html';
+  id?: string;
+  outputPath: string;
+  [key: string]: unknown;
+}
+
+export interface GetBranchMessagesCommand {
+  type: 'get_branch_messages';
+  id?: string;
+  [key: string]: unknown;
+}
+
+export interface GetAvailableCommandsCommand {
+  type: 'get_available_commands';
+  id?: string;
+  [key: string]: unknown;
+}
 export type OmpCommandFrame =
   | NegotiateProtocolCommand
   | PromptCommand
   | SteerCommand
   | AbortCommand
   | GetStateCommand
+  | GetSessionStatsCommand
   | GetAvailableModelsCommand
   | SetModelCommand
   | SetThinkingLevelCommand
@@ -184,8 +224,12 @@ export type OmpCommandFrame =
   | ExtensionUiResponseCommand
   | CompactCommand
   | ForkCommand
-  | NewSessionCommand;
-
+  | NewSessionCommand
+  | SetSessionNameCommand
+  | ExportHtmlCommand
+  | GetBranchMessagesCommand
+  | GetAvailableCommandsCommand
+  | SetAutoCompactionCommand;
 // ==========================================
 // Message Content & Envelope Definitions
 // ==========================================
@@ -438,9 +482,49 @@ export interface ExtensionUiRequestEvent {
   [key: string]: unknown;
 }
 
+export interface OmpSubcommandInfo {
+  name: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
+export interface OmpCommandInfo {
+  name: string;
+  description?: string;
+  inputHint?: string;
+  subcommands?: OmpSubcommandInfo[];
+  [key: string]: unknown;
+}
+
+export interface GetAvailableCommandsResponseData {
+  commands?: OmpCommandInfo[];
+  [key: string]: unknown;
+}
+
 export interface AvailableCommandsUpdateEvent {
   type: 'available_commands_update';
-  commands?: unknown[];
+  commands?: OmpCommandInfo[];
+  [key: string]: unknown;
+}
+
+export interface CommandOutputEvent {
+  type: 'command_output';
+  text?: string;
+  id?: string;
+  [key: string]: unknown;
+}
+
+export interface SessionInfoUpdateEvent {
+  type: 'session_info_update';
+  title?: string;
+  sessionId?: string;
+  [key: string]: unknown;
+}
+
+export interface ConfigUpdateEvent {
+  type: 'config_update';
+  model?: OmpModelInfo | string;
+  thinkingLevel?: OmpThinkingLevel;
   [key: string]: unknown;
 }
 
@@ -539,10 +623,12 @@ export type OmpEventFrame =
   | ToolExecutionEndEvent
   | ExtensionUiRequestEvent
   | AvailableCommandsUpdateEvent
+  | CommandOutputEvent
+  | SessionInfoUpdateEvent
+  | ConfigUpdateEvent
   | SubagentLifecycleEvent
   | SubagentProgressEvent
   | SubagentEvent;
-
 // ==========================================
 // Inbound, Outbound & Overall Frame Unions
 // ==========================================
@@ -632,6 +718,59 @@ export interface GetMessagesPageResponseData {
   cursor?: number;
   [key: string]: unknown;
 }
+export interface OmpBranchMessage {
+  entryId: string;
+  text: string;
+  [key: string]: unknown;
+}
+
+export interface GetBranchMessagesResponseData {
+  messages: OmpBranchMessage[];
+  [key: string]: unknown;
+}
+
+export interface ExportHtmlResponseData {
+  path?: string;
+  [key: string]: unknown;
+}
+
+export interface OmpContextUsage {
+  tokens?: number;
+  contextWindow?: number;
+  percent?: number;
+  [key: string]: unknown;
+}
+
+export interface OmpSessionStatsTokens {
+  input?: number;
+  output?: number;
+  reasoning?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  total?: number;
+  [key: string]: unknown;
+}
+
+export interface OmpSessionStats {
+  sessionId?: string;
+  sessionFile?: string;
+  userMessages?: number;
+  assistantMessages?: number;
+  toolCalls?: number;
+  toolResults?: number;
+  totalMessages?: number;
+  tokens?: OmpSessionStatsTokens;
+  cost?: number;
+  premiumRequests?: number;
+  contextUsage?: OmpContextUsage;
+  [key: string]: unknown;
+}
+
+export interface OmpContextUsageUpdate {
+  contextUsage: OmpContextUsage | null;
+  tokensPerSecond?: number | null;
+  sessionName?: string;
+}
 
 export interface OmpEngineState {
   model?: OmpModelInfo;
@@ -644,17 +783,12 @@ export interface OmpEngineState {
   sessionFile?: string;
   sessionName?: string;
   autoCompactionEnabled?: boolean;
-  queuedMessageCount?: number;
+  approvalMode?: OmpApprovalMode;
   fastModeEnabled?: boolean;
   tokensPerSecond?: number | null;
   fastModeActive?: boolean;
   messageCount?: number;
-  contextUsage?: {
-    tokens?: number;
-    contextWindow?: number;
-    percent?: number;
-    [key: string]: unknown;
-  };
+  contextUsage?: OmpContextUsage;
   tools?: unknown[];
   commands?: unknown[];
   [key: string]: unknown;

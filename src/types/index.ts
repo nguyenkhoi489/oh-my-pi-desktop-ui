@@ -20,14 +20,22 @@ export interface ThinkingBlock {
   completed: boolean;
 }
 
+export interface ChatFileAttachment {
+  path: string;
+  name?: string;
+  content?: string;
+  lineCount?: number;
+}
+
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'fileMention';
   content: string;
   timestamp: number;
   thinking?: ThinkingBlock;
   toolCalls?: ToolCall[];
   entryId?: string;
+  files?: ChatFileAttachment[];
 }
 
 export interface FileDiffItem {
@@ -93,6 +101,24 @@ export interface ArtifactDocument {
   description?: string;
   language?: string;
 }
+export interface OmpNotification {
+  id: string;
+  message: string;
+  notifyType: 'info' | 'warning' | 'error' | string;
+  timestamp: number;
+}
+
+export interface OmpEngineStatusEntry {
+  key: string;
+  text: string;
+}
+
+export interface OmpWidgetEntry {
+  key: string;
+  lines: string[];
+  placement?: string;
+}
+
 
 export type OmpThinkingLevel =
   | 'off'
@@ -103,6 +129,22 @@ export type OmpThinkingLevel =
   | 'xhigh'
   | 'max'
   | 'auto';
+
+export type OmpApprovalMode = 'always-ask' | 'write' | 'yolo';
+
+export interface OmpSubcommandInfo {
+  name: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
+export interface OmpCommandInfo {
+  name: string;
+  description?: string;
+  inputHint?: string;
+  subcommands?: OmpSubcommandInfo[];
+  [key: string]: unknown;
+}
 
 export interface OmpModelCost {
   input?: number;
@@ -149,8 +191,47 @@ export interface OmpSessionInfo {
 
 export interface OmpBranchEntry {
   entryId: string;
-  role: string;
+  text?: string;
+  role?: string;
   timestamp?: number;
+}
+
+export interface OmpContextUsage {
+  tokens?: number;
+  contextWindow?: number;
+  percent?: number;
+  [key: string]: unknown;
+}
+
+export interface OmpSessionStatsTokens {
+  input?: number;
+  output?: number;
+  reasoning?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  total?: number;
+  [key: string]: unknown;
+}
+
+export interface OmpSessionStats {
+  sessionId?: string;
+  sessionFile?: string;
+  userMessages?: number;
+  assistantMessages?: number;
+  toolCalls?: number;
+  toolResults?: number;
+  totalMessages?: number;
+  tokens?: OmpSessionStatsTokens;
+  cost?: number;
+  premiumRequests?: number;
+  contextUsage?: OmpContextUsage;
+  [key: string]: unknown;
+}
+
+export interface OmpContextUsageUpdate {
+  contextUsage: OmpContextUsage | null;
+  tokensPerSecond?: number | null;
+  sessionName?: string;
 }
 
 export interface OmpEngineState {
@@ -164,27 +245,33 @@ export interface OmpEngineState {
   sessionFile?: string;
   sessionName?: string;
   autoCompactionEnabled?: boolean;
+  approvalMode?: OmpApprovalMode;
   queuedMessageCount?: number;
   fastModeEnabled?: boolean;
   tokensPerSecond?: number | null;
   fastModeActive?: boolean;
   messageCount?: number;
-  contextUsage?: {
-    tokens?: number;
-    contextWindow?: number;
-    percent?: number;
-    [key: string]: unknown;
-  };
+  contextUsage?: OmpContextUsage;
   tools?: unknown[];
-  commands?: unknown[];
+  commands?: OmpCommandInfo[];
   [key: string]: unknown;
+}
+
+export interface AppSettings {
+  theme?: 'light' | 'dark';
+  customBinaryPath?: string;
+  defaultProvider?: string;
+  defaultModel?: string;
+  defaultThinkingLevel?: OmpThinkingLevel;
+  approvalMode?: OmpApprovalMode;
+  autoCompaction?: boolean;
 }
 
 export interface ElectronAPI {
   checkOmpInstallation: () => Promise<OmpInstallStatus>;
   setCustomBinaryPath: (path: string) => Promise<OmpInstallStatus>;
   selectBinaryFile: () => Promise<string | null>;
-  startOmpProcess: (workspacePath: string, model?: string) => Promise<any>;
+  startOmpProcess: (workspacePath: string, model?: string, options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode }) => Promise<any>;
   stopOmpProcess: () => Promise<any>;
   sendOmpMessage: (prompt: string, context?: { files?: string[] }) => Promise<any>;
   respondToPermission: (requestId: string, approved: boolean) => Promise<any>;
@@ -196,16 +283,22 @@ export interface ElectronAPI {
   setThinkingLevel: (level: OmpThinkingLevel) => Promise<{ success: boolean; error?: string }>;
   getEngineState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
   getState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
-
-  // Sessions & Subagent Hub (Phase 1 & 3 Additions)
+  getSessionStats: () => Promise<{ success: boolean; stats?: OmpSessionStats; error?: string }>;
+  setApprovalMode: (mode: OmpApprovalMode) => Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }>;
+  getApprovalMode: () => Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }>;
+  compact: (customInstructions?: string) => Promise<{ success: boolean; error?: string }>;
+  setAutoCompaction: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   listSessions: () => Promise<{ success: boolean; sessions?: OmpSessionInfo[]; error?: string }>;
   newSession: (parentSession?: string) => Promise<{ success: boolean; error?: string }>;
   switchSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
   branchSession: (entryId: string) => Promise<{ success: boolean; error?: string }>;
   loadHistory: () => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
   getBranchEntries: () => Promise<{ success: boolean; entries?: OmpBranchEntry[]; error?: string }>;
+  renameSession: (name: string) => Promise<{ success: boolean; error?: string }>;
+  deleteSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
+  exportSession: () => Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }>;
   getSubagents?: () => Promise<OmpSubagentInfo[]>;
-
+  getAvailableCommands: () => Promise<{ success: boolean; commands?: OmpCommandInfo[]; error?: string }>;
   selectFolder: () => Promise<string | null>;
   readDirectory: (dirPath: string) => Promise<WorkspaceFile[]>;
   readFile: (filePath: string) => Promise<string>;
@@ -221,8 +314,17 @@ export interface ElectronAPI {
   onOmpUiRequestCancel: (callback: (targetId: string) => void) => () => void;
   onOmpMessageComplete: (callback: (message: ChatMessage) => void) => () => void;
   onOmpSubagentUpdate: (callback: (subagents: OmpSubagentInfo[]) => void) => () => void;
-}
 
+  // Settings & Persistence (Phase 7)
+  getSettings: () => Promise<AppSettings>;
+  setSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
+  onOmpNotification: (callback: (notification: OmpNotification) => void) => () => void;
+  onOmpEngineStatus: (callback: (statuses: OmpEngineStatusEntry[]) => void) => () => void;
+  onOmpWidgetUpdate: (callback: (widgets: OmpWidgetEntry[]) => void) => () => void;
+  onOmpContextUsage: (callback: (data: OmpContextUsageUpdate) => void) => () => void;
+  onOmpCommandsUpdate: (callback: (commands: OmpCommandInfo[]) => void) => () => void;
+  onOmpCommandOutput: (callback: (data: { text: string }) => void) => () => void;
+}
 declare global {
   interface Window {
     electronAPI?: ElectronAPI;

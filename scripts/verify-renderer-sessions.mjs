@@ -328,31 +328,41 @@ console.log('\n[Test 5] Branch Correlation & branchFromMessage Flow');
   const inputMessages = [
     { id: 'm-1', role: 'user', content: 'Turn 1 prompt', timestamp: 10000 },
     { id: 'm-2', role: 'assistant', content: 'Turn 1 reply', timestamp: 11000 },
-    { id: 'm-3', role: 'user', content: 'Turn 2 prompt (ambiguous timestamp)', timestamp: 20000 },
+    { id: 'm-3', role: 'user', content: 'Turn 2 duplicate prompt', timestamp: 20000 },
     { id: 'm-4', role: 'assistant', content: 'Turn 2 reply', timestamp: 21000 },
-    { id: 'm-5', role: 'user', content: 'Turn 3 prompt (no matching entry)', timestamp: 30000 },
+    { id: 'm-5', role: 'user', content: 'Turn 2 duplicate prompt', timestamp: 22000 },
+    { id: 'm-6', role: 'user', content: 'Turn 3 prompt (no matching entry)', timestamp: 30000 },
   ];
 
   const branchEntries = [
-    { entryId: 'entry-turn-1', role: 'user', timestamp: 10000 },
-    { entryId: 'entry-dup-1', role: 'user', timestamp: 20000 },
-    { entryId: 'entry-dup-2', role: 'user', timestamp: 20000 }, // Duplicate timestamp on user entry
-    { entryId: 'entry-assistant', role: 'assistant', timestamp: 11000 },
+    { entryId: 'entry-turn-1', text: 'Turn 1 prompt', role: 'user' },
+    { entryId: 'entry-dup-1', text: 'Turn 2 duplicate prompt', role: 'user' },
+    { entryId: 'entry-dup-2', text: 'Turn 2 duplicate prompt', role: 'user' },
   ];
 
   function correlateBranchEntries(currentMsgs, entries) {
-    const timestampCounts = new Map();
+    const textToEntries = new Map();
     for (const entry of entries) {
-      if (entry.role === 'user' && typeof entry.timestamp === 'number') {
-        const list = timestampCounts.get(entry.timestamp) || [];
+      const rawText = entry.text ?? entry.content;
+      if (typeof rawText === 'string') {
+        const list = textToEntries.get(rawText) || [];
         list.push(entry);
-        timestampCounts.set(entry.timestamp, list);
+        textToEntries.set(rawText, list);
       }
     }
+
+    const userTextCounts = new Map();
+    for (const m of currentMsgs) {
+      if (m.role === 'user' && typeof m.content === 'string') {
+        userTextCounts.set(m.content, (userTextCounts.get(m.content) || 0) + 1);
+      }
+    }
+
     return currentMsgs.map((m) => {
-      if (m.role === 'user') {
-        const matches = timestampCounts.get(m.timestamp);
-        if (matches && matches.length === 1) {
+      if (m.role === 'user' && typeof m.content === 'string') {
+        const matches = textToEntries.get(m.content);
+        const userCount = userTextCounts.get(m.content) || 0;
+        if (matches && matches.length === 1 && userCount === 1) {
           return { ...m, entryId: matches[0].entryId };
         }
         return { ...m, entryId: undefined };
@@ -365,10 +375,10 @@ console.log('\n[Test 5] Branch Correlation & branchFromMessage Flow');
 
   assert(correlated[0].entryId === 'entry-turn-1', 'Single match user message correctly assigned entryId');
   assert(correlated[1].entryId === undefined, 'Assistant message does not receive entryId');
-  assert(correlated[2].entryId === undefined, 'Ambiguous duplicate timestamp safely degrades to undefined');
+  assert(correlated[2].entryId === undefined, 'Ambiguous duplicate prompt text safely degrades to undefined');
   assert(correlated[3].entryId === undefined, 'Assistant message ignores matching entry');
-  assert(correlated[4].entryId === undefined, 'User message with no entry has undefined entryId');
-
+  assert(correlated[4].entryId === undefined, 'Second ambiguous duplicate prompt text degrades to undefined');
+  assert(correlated[5].entryId === undefined, 'User message with no entry has undefined entryId');
   // Test branch action
   let status = 'idle';
   let branchedEntryId = null;

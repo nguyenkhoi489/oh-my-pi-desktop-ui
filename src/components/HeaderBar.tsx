@@ -15,6 +15,9 @@ import {
   PanelRight,
   PanelRightClose,
   Brain,
+  Database,
+  Shield,
+  Settings,
 } from 'lucide-react';
 import {
   OmpAgentStatus,
@@ -22,8 +25,11 @@ import {
   ThemeMode,
   OmpModelInfo,
   OmpThinkingLevel,
+  OmpContextUsage,
+  OmpSessionStats,
+  OmpApprovalMode,
 } from '../types';
-
+import { SessionStatsPanel } from './HeaderBar/SessionStatsPanel';
 interface HeaderBarProps {
   workspaceName: string;
   onOpenFolder: () => void;
@@ -42,6 +48,16 @@ interface HeaderBarProps {
   onToggleLeftSidebar: () => void;
   isRightSidebarOpen: boolean;
   onToggleRightSidebar: () => void;
+  contextUsage?: OmpContextUsage | null;
+  tokensPerSecond?: number | null;
+  onGetSessionStats?: () => Promise<{ success: boolean; stats?: OmpSessionStats; error?: string }>;
+  approvalMode?: OmpApprovalMode;
+  onSelectApprovalMode?: (mode: OmpApprovalMode) => void;
+  isCompacting?: boolean;
+  autoCompactionEnabled?: boolean;
+  onCompact?: (customInstructions?: string) => Promise<{ success: boolean; error?: string }>;
+  onSetAutoCompaction?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onOpenSettingsModal?: () => void;
 }
 
 const FALLBACK_MODELS: OmpModelInfo[] = [
@@ -62,6 +78,17 @@ const THINKING_LEVELS: OmpThinkingLevel[] = [
   'auto',
 ];
 
+interface ApprovalOption {
+  id: OmpApprovalMode;
+  label: string;
+  description: string;
+}
+
+const APPROVAL_OPTIONS: ApprovalOption[] = [
+  { id: 'always-ask', label: 'Hỏi mọi tool', description: 'Yêu cầu phê duyệt trước khi gọi bất kỳ tool nào' },
+  { id: 'write', label: 'Hỏi khi ghi & exec', description: 'Chỉ yêu cầu phê duyệt khi sửa file hoặc thực thi lệnh' },
+  { id: 'yolo', label: 'Tự chạy', description: 'Tự động thực thi mọi tool mà không cần hỏi' },
+];
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   workspaceName,
   onOpenFolder,
@@ -80,9 +107,22 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onToggleLeftSidebar,
   isRightSidebarOpen,
   onToggleRightSidebar,
+  contextUsage,
+  tokensPerSecond,
+  onGetSessionStats,
+  approvalMode,
+  onSelectApprovalMode,
+  isCompacting = false,
+  autoCompactionEnabled = false,
+  onCompact,
+  onSetAutoCompaction,
+  onOpenSettingsModal,
 }) => {
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [isApprovalDropdownOpen, setIsApprovalDropdownOpen] = useState(false);
+  const [isStatsPanelOpen, setIsStatsPanelOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const approvalDropdownRef = useRef<HTMLDivElement>(null);
 
   const isBusy = status !== 'idle';
   const modelList = availableModels.length > 0 ? availableModels : FALLBACK_MODELS;
@@ -104,12 +144,22 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsModelDropdownOpen(false);
       }
+      if (approvalDropdownRef.current && !approvalDropdownRef.current.contains(e.target as Node)) {
+        setIsApprovalDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
   const getStatusBadge = () => {
+    if (isCompacting) {
+      return (
+        <span className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 animate-pulse">
+          <RotateCw className="w-3.5 h-3.5 animate-spin text-purple-500" />
+          Đang nén context...
+        </span>
+      );
+    }
     switch (status) {
       case 'thinking':
         return (
@@ -146,6 +196,31 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </span>
         );
     }
+  };
+
+  const hasContextUsage =
+    contextUsage?.percent != null &&
+    typeof contextUsage.percent === 'number' &&
+    !isNaN(contextUsage.percent);
+
+  const percent = hasContextUsage
+    ? Math.round((contextUsage!.percent as number) * 10) / 10
+    : null;
+
+  const contextTooltip = hasContextUsage
+    ? contextUsage!.tokens != null && contextUsage!.contextWindow != null
+      ? `Context: ${(contextUsage!.tokens as number).toLocaleString()} / ${(contextUsage!.contextWindow as number).toLocaleString()} tokens (${percent}%) - Click xem chi tiết`
+      : `Context: ${percent}% - Click xem chi tiết`
+    : undefined;
+
+  const getMeterColorClass = (pct: number) => {
+    if (pct > 90) {
+      return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 animate-pulse font-semibold';
+    }
+    if (pct > 75) {
+      return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-semibold';
+    }
+    return 'bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border';
   };
 
   return (
@@ -325,7 +400,86 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           )}
         </div>
 
+        {/* Approval Mode Selector */}
+        <div className="relative" ref={approvalDropdownRef}>
+          <button
+            onClick={() => {
+              setIsApprovalDropdownOpen(!isApprovalDropdownOpen);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border border-border bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 transition-colors font-medium cursor-pointer"
+            title="Chế độ phê duyệt công cụ (Approval Mode)"
+          >
+            <Shield className="w-3.5 h-3.5 text-codex-accent shrink-0" />
+            <span className="text-[12px] truncate max-w-[130px]">
+              {approvalMode === 'always-ask'
+                ? 'Hỏi mọi tool'
+                : approvalMode === 'yolo'
+                ? 'Tự chạy'
+                : 'Hỏi khi ghi & exec'}
+            </span>
+            <ChevronDown className="w-3 h-3 text-slate-400 dark:text-zinc-500 shrink-0" />
+          </button>
+
+          {isApprovalDropdownOpen && (
+            <div className="absolute top-full mt-1.5 left-0 w-64 bg-panel border border-border rounded-xl shadow-xl py-2 z-50 animate-fade-in divide-y divide-border">
+              <div className="px-3 py-1 text-[10.5px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                Approval Mode
+              </div>
+              <div className="pt-1 space-y-0.5 px-1">
+                {APPROVAL_OPTIONS.map((opt) => {
+                  const isSelected = approvalMode === opt.id || (!approvalMode && opt.id === 'write');
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => {
+                        onSelectApprovalMode?.(opt.id);
+                        setIsApprovalDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs text-left transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-codex-accent/10 text-codex-accent font-semibold'
+                          : 'text-slate-700 dark:text-zinc-300 hover:bg-surface-highlight'
+                      }`}
+                    >
+                      <div className="flex flex-col min-w-0 pr-2">
+                        <span className="text-[11.5px] font-medium">{opt.label}</span>
+                        <span className="text-[10px] text-slate-400 dark:text-zinc-500 leading-tight mt-0.5">
+                          {opt.description}
+                        </span>
+                      </div>
+                      {isSelected && (
+                        <Check className="w-3.5 h-3.5 text-codex-accent shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         {getStatusBadge()}
+
+        {status === 'streaming' && tokensPerSecond != null && tokensPerSecond > 0 && (
+          <span
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-mono font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 animate-pulse"
+            title="Tốc độ sinh token"
+          >
+            <Zap className="w-3 h-3 text-emerald-500" />
+            {tokensPerSecond >= 10 ? Math.round(tokensPerSecond) : tokensPerSecond.toFixed(1)} tok/s
+          </span>
+        )}
+
+        {hasContextUsage && percent != null && (
+          <button
+            onClick={() => setIsStatsPanelOpen(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors cursor-pointer ${getMeterColorClass(percent)}`}
+            title={contextTooltip}
+          >
+            <Database className="w-3.5 h-3.5 shrink-0 text-codex-accent" />
+            <span className="font-mono text-[11.5px]">{percent}%</span>
+          </button>
+        )}
       </div>
 
       {/* Right: Right Sidebar Toggle, Theme Toggle & Quick Action ⌘K */}
@@ -360,6 +514,16 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           )}
         </button>
 
+        {onOpenSettingsModal && (
+          <button
+            onClick={onOpenSettingsModal}
+            className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
+            title="Cài đặt (Settings)"
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         <button
           onClick={onOpenOmnibar}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
@@ -369,6 +533,18 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <span className="font-semibold text-[11px]">K</span>
         </button>
       </div>
+      {onGetSessionStats && (
+        <SessionStatsPanel
+          isOpen={isStatsPanelOpen}
+          onClose={() => setIsStatsPanelOpen(false)}
+          onRefresh={onGetSessionStats}
+          contextUsage={contextUsage}
+          isCompacting={isCompacting}
+          autoCompactionEnabled={autoCompactionEnabled}
+          onCompact={onCompact}
+          onSetAutoCompaction={onSetAutoCompaction}
+        />
+      )}
     </header>
   );
 };

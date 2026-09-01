@@ -8,17 +8,19 @@ import { AgentPanel } from './components/AgentPanel/AgentPanel';
 import { OmnibarModal } from './components/Modals/OmnibarModal';
 import { PermissionModal } from './components/Modals/PermissionModal';
 import { OmpRequiredModal } from './components/Modals/OmpRequiredModal';
+import { SettingsModal } from './components/Modals/SettingsModal';
+import { ToastStack } from './components/Notifications/ToastStack';
 import { useOmpRpc } from './hooks/useOmpRpc';
 import { useWorkspace } from './hooks/useWorkspace';
-import { ThemeMode, FileDiffItem } from './types';
+import { ThemeMode, FileDiffItem, WorkspaceFile } from './types';
 
 export function App() {
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [isOmnibarOpen, setIsOmnibarOpen] = useState<boolean>(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isOmpModalOpen, setIsOmpModalOpen] = useState<boolean>(false);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(true);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(true);
-
   // Sync theme class on HTML root element
   useEffect(() => {
     const root = document.documentElement;
@@ -31,8 +33,52 @@ export function App() {
     }
   }, [theme]);
 
+  // Load initial theme from settings
+  useEffect(() => {
+    const initSettings = async () => {
+      try {
+        if (window.electronAPI?.getSettings) {
+          const settings = await window.electronAPI.getSettings();
+          if (settings?.theme) {
+            setTheme(settings.theme);
+          }
+        } else {
+          const raw = localStorage.getItem('omp_settings');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed?.theme) {
+              setTheme(parsed.theme);
+            }
+          } else {
+            const legacy = localStorage.getItem('omp_theme');
+            if (legacy === 'light' || legacy === 'dark') {
+              setTheme(legacy);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[App] Lỗi khi nạp cấu hình ban đầu:', err);
+      }
+    };
+    initSettings();
+  }, []);
+
+  const handleThemeChange = (newTheme: ThemeMode) => {
+    setTheme(newTheme);
+    if (window.electronAPI?.setSettings) {
+      window.electronAPI.setSettings({ theme: newTheme }).catch(() => {});
+    } else {
+      try {
+        const raw = localStorage.getItem('omp_settings');
+        const obj = raw ? JSON.parse(raw) : {};
+        localStorage.setItem('omp_settings', JSON.stringify({ ...obj, theme: newTheme }));
+        localStorage.setItem('omp_theme', newTheme);
+      } catch {}
+    }
+  };
+
   const toggleTheme = () => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+    handleThemeChange(theme === 'light' ? 'dark' : 'light');
   };
 
   const toggleLeftSidebar = () => {
@@ -74,10 +120,28 @@ export function App() {
     switchSession,
     newSession,
     branchFromMessage,
+    renameSession,
+    deleteSession,
+    exportSession,
+    engineState,
     subagents,
     sendMessage,
     acceptDiff,
     rejectDiff,
+    notifications,
+    dismissNotification,
+    engineStatuses,
+    engineWidgets,
+    contextUsage,
+    tokensPerSecond,
+    getSessionStats,
+    approvalMode,
+    setApprovalMode,
+    compact,
+    isCompacting,
+    autoCompactionEnabled,
+    setAutoCompaction,
+    availableCommands,
   } = useOmpRpc();
 
   // Principle #1: When app loads, if OMP is not installed, open the Requirement Modal
@@ -96,6 +160,7 @@ export function App() {
   }, [refreshEngineState, refreshModels, refreshSessions]);
 
   const {
+    workspacePath,
     workspaceName,
     files,
     selectedFile,
@@ -140,6 +205,53 @@ export function App() {
       }
     }
   }, [activeDiff, refreshFiles]);
+
+  const handleRestartEngine = async () => {
+    if (window.electronAPI) {
+      if (workspacePath) {
+        await window.electronAPI.startOmpProcess(workspacePath);
+      } else {
+        await checkInstallation();
+      }
+      await refreshModels();
+      await refreshEngineState();
+    }
+  };
+  const handleOpenFileByPath = useCallback(
+    (targetPath: string) => {
+      const findInTree = (tree: WorkspaceFile[]): WorkspaceFile | null => {
+        for (const item of tree) {
+          if (
+            item.path === targetPath ||
+            item.relativePath === targetPath ||
+            item.path.endsWith(targetPath)
+          ) {
+            return item;
+          }
+          if (item.children) {
+            const found = findInTree(item.children);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
+      const found = findInTree(files);
+      if (found) {
+        selectFile(found);
+      } else {
+        const fullPath = workspacePath ? `${workspacePath}/${targetPath}` : targetPath;
+        selectFile({
+          path: fullPath,
+          relativePath: targetPath,
+          name: targetPath.split('/').pop() || targetPath,
+          isDirectory: false,
+        });
+      }
+    },
+    [files, workspacePath, selectFile]
+  );
+
 
   // Keyboard shortcut listener: ⌘+K (Omnibar), ⌘+B (Left Sidebar), ⌘+J (Right Sidebar), ⌘+Enter (Accept Diff)
   useEffect(() => {
@@ -191,6 +303,16 @@ export function App() {
         onToggleLeftSidebar={toggleLeftSidebar}
         isRightSidebarOpen={isRightSidebarOpen}
         onToggleRightSidebar={toggleRightSidebar}
+        contextUsage={contextUsage}
+        tokensPerSecond={tokensPerSecond}
+        onGetSessionStats={getSessionStats}
+        approvalMode={approvalMode}
+        onSelectApprovalMode={setApprovalMode}
+        isCompacting={isCompacting}
+        autoCompactionEnabled={autoCompactionEnabled}
+        onCompact={compact}
+        onSetAutoCompaction={setAutoCompaction}
+        onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
       />
 
       {/* 2. Main 3-Column Layout */}
@@ -211,9 +333,13 @@ export function App() {
             <ThreadList
               sessions={sessions}
               activeSessionPath={activeSessionPath}
+              activeSessionName={engineState?.sessionName}
               status={status}
               onSelectSession={switchSession}
               onNewThread={newSession}
+              onRenameSession={renameSession}
+              onDeleteSession={deleteSession}
+              onExportSession={exportSession}
             />
             <SubagentHub subagents={subagents} />
           </div>
@@ -244,9 +370,14 @@ export function App() {
               activeToolCalls={activeToolCalls}
               currentStreamText={currentStreamText}
               status={status}
+              engineStatuses={engineStatuses}
+              engineWidgets={engineWidgets}
+              workspaceFiles={files}
+              availableCommands={availableCommands}
               onSendMessage={sendMessage}
               onBranchSession={branchFromMessage}
               onCollapsePanel={() => setIsRightSidebarOpen(false)}
+              onOpenFile={handleOpenFileByPath}
             />
           </div>
         </div>
@@ -277,6 +408,26 @@ export function App() {
         onContinueDemo={() => setIsOmpModalOpen(false)}
         onSelectCustomFile={browseBinaryFile}
         onSetCustomPath={setCustomPath}
+      />
+
+      {/* 4. Settings Modal (Phase 7) */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        theme={theme}
+        onThemeChange={handleThemeChange}
+        installStatus={installStatus}
+        onSelectBinaryFile={browseBinaryFile}
+        onSetCustomBinaryPath={setCustomPath}
+        availableModels={availableModels}
+        onRestartEngine={handleRestartEngine}
+        isEngineRunning={status !== 'idle'}
+      />
+
+      {/* 4. Notification Toast Stack */}
+      <ToastStack
+        notifications={notifications}
+        onDismiss={dismissNotification}
       />
     </div>
   );

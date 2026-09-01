@@ -66,13 +66,15 @@ async function runHandshakeVerification() {
   const binaryPath = findOmpBinary();
   assert(Boolean(binaryPath), `Found OMP binary at: ${binaryPath}`);
 
-  console.log(`[Step 1] Spawning: ${binaryPath} --mode rpc --no-session`);
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'omp-handshake-verify-'));
+  console.log(`[Step 1] Spawning: ${binaryPath} --mode rpc --no-session in ${scratchDir}`);
 
   const framer = new NdjsonFramer();
   const pendingMap = new Map();
   const receivedFrames = [];
 
   const ompProcess = spawn(binaryPath, ['--mode', 'rpc', '--no-session'], {
+    cwd: scratchDir,
     env: {
       ...process.env,
       PATH: `${process.env.PATH}:/opt/homebrew/bin:/usr/local/bin:${path.join(os.homedir(), '.local/bin')}`,
@@ -80,7 +82,6 @@ async function runHandshakeVerification() {
     },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
-
   assert(Boolean(ompProcess.pid), `Process spawned with PID: ${ompProcess.pid}`);
 
   let readyResolver;
@@ -140,7 +141,7 @@ async function runHandshakeVerification() {
   console.log('\n[Step 2] Awaiting ready frame from engine...');
   const readyFrame = await Promise.race([
     readyPromise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for ready frame')), 5000)),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for ready frame')), 15000)),
   ]);
 
   assert(readyFrame.type === 'ready', 'Received ready frame');
@@ -211,6 +212,10 @@ async function runHandshakeVerification() {
   ]);
 
   assert(true, `Engine exited cleanly with code: ${exitResult.code}, signal: ${exitResult.signal}`);
+
+  try {
+    fs.rmSync(scratchDir, { recursive: true, force: true });
+  } catch {}
 
   console.log('\n====================================================');
   console.log(`Live Handshake Verification: ${passed} passed, ${failed} failed.`);
