@@ -12,8 +12,9 @@ export default {
         panel: 'var(--color-panel)',
         surface: 'var(--color-surface)',
         'surface-highlight': 'var(--color-surface-highlight)',
+        'surface-card': 'var(--color-surface-card)',
         border: 'var(--color-border)',
-        'border-focus': 'rgba(147, 51, 234, 0.5)',
+        'border-focus': 'var(--color-border-focus)',
         brand: {
           50: '#faf5ff',
           100: '#f3e8ff',
@@ -23,36 +24,53 @@ export default {
           700: '#7e22ce',
         },
         codex: {
+          50: '#f0fdf9',
+          100: '#ccfbf1',
+          200: '#99f6e4',
+          300: '#5eead4',
+          400: '#2dd4bf',
+          500: '#14b8a6',
+          600: '#0d9488',
           accent: '#10a37f',
-          dark: '#0b0c0e',
-          card: '#16171b',
+          'accent-hover': '#0e8c6d',
+          'accent-subtle': 'rgba(16, 163, 127, 0.12)',
+          dark: '#0c0d10',
+          panel: '#13151b',
+          card: '#181b22',
+          surface: '#1c1f28',
+          highlight: '#242834',
         }
       },
       fontFamily: {
         sans: [
+          'Inter',
           '-apple-system',
           'BlinkMacSystemFont',
           'SF Pro Display',
           'SF Pro Text',
-          'Inter',
           'sans-serif'
         ],
         mono: [
-          'SF Mono',
           'JetBrains Mono',
+          'SF Mono',
           'Fira Code',
           'Menlo',
+          'Consolas',
           'monospace'
         ],
       },
+      boxShadow: {
+        'codex-card': '0 4px 14px 0 rgba(0, 0, 0, 0.25)',
+        'codex-glow': '0 0 20px -3px rgba(16, 163, 127, 0.3)',
+      },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'glow': 'glow 2s ease-in-out infinite alternate',
+        'fade-in': 'fadeIn 0.2s ease-out',
       },
       keyframes: {
-        glow: {
-          '0%': { boxShadow: '0 0 10px rgba(168, 85, 247, 0.2)' },
-          '100%': { boxShadow: '0 0 25px rgba(168, 85, 247, 0.5)' },
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'scale(0.99)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
         }
       }
     },

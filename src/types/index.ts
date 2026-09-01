@@ -78,3 +78,30 @@ export interface ArtifactDocument {
   description?: string;
   language?: string;
 }
+
+export interface ElectronAPI {
+  checkOmpInstallation: () => Promise<OmpInstallStatus>;
+  setCustomBinaryPath: (path: string) => Promise<OmpInstallStatus>;
+  selectBinaryFile: () => Promise<string | null>;
+  startOmpProcess: (workspacePath: string, model?: string) => Promise<any>;
+  stopOmpProcess: () => Promise<any>;
+  sendOmpMessage: (prompt: string, context?: { files?: string[] }) => Promise<any>;
+  respondToPermission: (requestId: string, approved: boolean) => Promise<any>;
+  selectFolder: () => Promise<string | null>;
+  readDirectory: (dirPath: string) => Promise<WorkspaceFile[]>;
+  readFile: (filePath: string) => Promise<string>;
+  saveFile: (filePath: string, content: string) => Promise<any>;
+  onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => () => void;
+  onOmpStreamToken: (callback: (token: string) => void) => () => void;
+  onOmpThinking: (callback: (thinking: ThinkingBlock) => void) => () => void;
+  onOmpToolCall: (callback: (toolCall: ToolCall) => void) => () => void;
+  onOmpDiffGenerated: (callback: (diff: FileDiffItem) => void) => () => void;
+  onOmpPermissionRequest: (callback: (request: PermissionRequest) => void) => () => void;
+  onOmpMessageComplete: (callback: (message: ChatMessage) => void) => () => void;
+}
+
+declare global {
+  interface Window {
+    electronAPI?: ElectronAPI;
+  }
+}
