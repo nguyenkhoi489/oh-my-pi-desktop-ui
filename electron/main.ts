@@ -4,7 +4,16 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { OmpBridge } from './omp-bridge.ts';
-import type { WorkspaceFile, OmpThinkingLevel, OmpApprovalMode, OmpTodoPhase } from './types.ts';
+import type {
+  WorkspaceFile,
+  OmpThinkingLevel,
+  OmpApprovalMode,
+  OmpTodoPhase,
+  FetchEngineConfigOptions,
+  SetEngineConfigOptions,
+  ResetEngineConfigOptions,
+  EngineConfigPathOptions,
+} from './types.ts';
 import { getSettingsStore, type AppSettings } from './settings-store.ts';
 import {
   readModelsConfig,
@@ -20,6 +29,12 @@ import { shareSession, joinCollabSession, type ShareSessionOptions } from './col
 import { OpsManager } from './ops-manager.ts';
 import { ExtensionManager } from './extension-manager.ts';
 import { listProfiles, createProfile, deleteProfile } from './profile-paths.ts';
+import {
+  fetchEngineConfig,
+  setEngineConfigValue,
+  resetEngineConfigValue,
+  getEngineConfigPath,
+} from './engine-config.ts';
 import { setCurrentLocale } from '../shared/i18n/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -319,6 +334,27 @@ ipcMain.handle('omp:global-usage', async (_, forceRefresh?: boolean) => {
 ipcMain.handle('omp:global-stats', async (_, forceRefresh?: boolean) => {
   const binaryPath = await resolveOmpBinaryPath();
   return fetchGlobalStats(binaryPath, { forceRefresh: Boolean(forceRefresh) });
+});
+
+// IPC Handlers: Engine Configuration (Phase 2 Parity)
+ipcMain.handle('omp:config-list', async (_, options?: FetchEngineConfigOptions) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  return fetchEngineConfig(binaryPath, options);
+});
+
+ipcMain.handle('omp:config-set', async (_, key: string, value: string, options?: SetEngineConfigOptions) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  return setEngineConfigValue(binaryPath, key, value, options);
+});
+
+ipcMain.handle('omp:config-reset', async (_, key: string, options?: ResetEngineConfigOptions) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  return resetEngineConfigValue(binaryPath, key, options);
+});
+
+ipcMain.handle('omp:config-path', async (_, options?: EngineConfigPathOptions) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  return getEngineConfigPath(binaryPath, options);
 });
 
 ipcMain.handle('omp:get-approval-mode', async () => {

@@ -21,6 +21,10 @@ import type {
   AuthLoginEvent,
   OmpTodoPhase,
   OmpTodoItem,
+  FetchEngineConfigOptions,
+  SetEngineConfigOptions,
+  ResetEngineConfigOptions,
+  EngineConfigPathOptions,
 } from './types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -93,6 +97,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getGlobalStats: (forceRefresh?: boolean) =>
     ipcRenderer.invoke('omp:global-stats', forceRefresh),
+
+  // Engine Configuration (Phase 2)
+  getEngineConfig: (options?: FetchEngineConfigOptions) =>
+    ipcRenderer.invoke('omp:config-list', options),
+
+  setEngineConfigValue: (key: string, value: string, options?: SetEngineConfigOptions) =>
+    ipcRenderer.invoke('omp:config-set', key, value, options),
+
+  resetEngineConfigValue: (key: string, options?: ResetEngineConfigOptions) =>
+    ipcRenderer.invoke('omp:config-reset', key, options),
+
+  getEngineConfigPath: (options?: EngineConfigPathOptions) =>
+    ipcRenderer.invoke('omp:config-path', options),
 
   setApprovalMode: (mode: OmpApprovalMode) =>
     ipcRenderer.invoke('omp:set-approval-mode', mode),

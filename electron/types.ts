@@ -702,6 +702,50 @@ export interface ModelRolesWriteResult {
   error?: string;
 }
 
+export type EngineConfigValueType = 'string' | 'number' | 'boolean' | 'enum' | 'array' | 'record';
+
+export interface EngineConfigEntry {
+  key: string;
+  value?: unknown;
+  type: EngineConfigValueType | string;
+  description?: string;
+  enumOptions?: string[];
+  redacted?: boolean;
+}
+export interface FetchEngineConfigOptions {
+  profile?: string;
+  forceRefresh?: boolean;
+}
+
+export interface SetEngineConfigOptions {
+  profile?: string;
+}
+
+export interface ResetEngineConfigOptions {
+  profile?: string;
+}
+
+export interface EngineConfigPathOptions {
+  profile?: string;
+}
+
+export interface EngineConfigListResult {
+  success: boolean;
+  entries?: EngineConfigEntry[];
+  error?: string;
+}
+
+export interface EngineConfigMutationResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface EngineConfigPathResult {
+  success: boolean;
+  path?: string;
+  error?: string;
+}
+
 export interface LoginProviderItem {
   id: string;
   name: string;
@@ -842,6 +886,11 @@ export interface ElectronAPI {
   getAuthStatus: () => Promise<{ success: boolean; providers?: string[]; error?: string }>;
   sendAuthLoginInput: (text: string) => Promise<{ success: boolean; error?: string }>;
   onAuthLoginEvent: (callback: (event: AuthLoginEvent) => void) => () => void;
+  // Engine Configuration (Phase 2)
+  getEngineConfig: (options?: FetchEngineConfigOptions) => Promise<EngineConfigListResult>;
+  setEngineConfigValue: (key: string, value: string, options?: SetEngineConfigOptions) => Promise<EngineConfigMutationResult>;
+  resetEngineConfigValue: (key: string, options?: ResetEngineConfigOptions) => Promise<EngineConfigMutationResult>;
+  getEngineConfigPath: (options?: EngineConfigPathOptions) => Promise<EngineConfigPathResult>;
   // Event listeners from Main to Renderer
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => () => void;
   onOmpStreamToken: (callback: (token: string) => void) => () => void;

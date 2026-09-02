@@ -26,6 +26,13 @@ import {
   OmpRetryState,
   GlobalUsageResult,
   GlobalStatsResult,
+  FetchEngineConfigOptions,
+  SetEngineConfigOptions,
+  ResetEngineConfigOptions,
+  EngineConfigPathOptions,
+  EngineConfigListResult,
+  EngineConfigMutationResult,
+  EngineConfigPathResult,
 } from '../types';
 import { reconcileFollowUpQueue, type FollowUpQueueItem } from '../utils/followUpQueue';
 import { DEMO_MESSAGES, DEMO_INITIAL_DIFF } from '../mock/demoData';
@@ -1216,6 +1223,66 @@ export function useOmpRpc() {
       return { success: false, error: msg || 'Failed to fetch global stats' };
     }
   }, []);
+
+  const getEngineConfig = useCallback(
+    async (options?: FetchEngineConfigOptions): Promise<EngineConfigListResult> => {
+      if (!window.electronAPI?.getEngineConfig) {
+        return { success: false, error: 'electronAPI.getEngineConfig is unavailable' };
+      }
+      try {
+        return await window.electronAPI.getEngineConfig(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg || 'Failed to fetch engine config' };
+      }
+    },
+    []
+  );
+
+  const setEngineConfigValue = useCallback(
+    async (key: string, value: string, options?: SetEngineConfigOptions): Promise<EngineConfigMutationResult> => {
+      if (!window.electronAPI?.setEngineConfigValue) {
+        return { success: false, error: 'electronAPI.setEngineConfigValue is unavailable' };
+      }
+      try {
+        return await window.electronAPI.setEngineConfigValue(key, value, options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg || 'Failed to set engine config' };
+      }
+    },
+    []
+  );
+
+  const resetEngineConfigValue = useCallback(
+    async (key: string, options?: ResetEngineConfigOptions): Promise<EngineConfigMutationResult> => {
+      if (!window.electronAPI?.resetEngineConfigValue) {
+        return { success: false, error: 'electronAPI.resetEngineConfigValue is unavailable' };
+      }
+      try {
+        return await window.electronAPI.resetEngineConfigValue(key, options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg || 'Failed to reset engine config' };
+      }
+    },
+    []
+  );
+
+  const getEngineConfigPath = useCallback(
+    async (options?: EngineConfigPathOptions): Promise<EngineConfigPathResult> => {
+      if (!window.electronAPI?.getEngineConfigPath) {
+        return { success: false, error: 'electronAPI.getEngineConfigPath is unavailable' };
+      }
+      try {
+        return await window.electronAPI.getEngineConfigPath(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg || 'Failed to get engine config path' };
+      }
+    },
+    []
+  );
   const changeApprovalMode = useCallback(
     async (mode: OmpApprovalMode): Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }> => {
       if (status !== 'idle') {
@@ -1428,6 +1495,10 @@ export function useOmpRpc() {
     getSessionStats,
     getGlobalUsage,
     getGlobalStats,
+    getEngineConfig,
+    setEngineConfigValue,
+    resetEngineConfigValue,
+    getEngineConfigPath,
     approvalMode,
     setApprovalMode: changeApprovalMode,
     changeApprovalMode,

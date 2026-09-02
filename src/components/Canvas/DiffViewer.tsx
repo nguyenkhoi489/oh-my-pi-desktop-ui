@@ -130,6 +130,11 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             scrollBeyondLastLine: false,
             automaticLayout: true,
             diffWordWrap: 'off',
+            scrollbar: {
+              verticalScrollbarSize: 8,
+              horizontalScrollbarSize: 8,
+              useShadows: false,
+            },
           }}
         />
       </div>

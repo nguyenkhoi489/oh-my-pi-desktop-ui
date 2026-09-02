@@ -15,6 +15,24 @@ Entry template:
 - **Refs:** report/journal/plan paths
 ```
 
+## 2026-09-02 — Phase 2: Engine Config Backend (omp config parity)
+
+- **State:** Đã hoàn thành toàn bộ Phase 2 của roadmap OMP Parity Gap:
+  - `electron/engine-config.ts`: Module đọc/ghi cấu hình engine qua `omp config list --json` (482 keys) và `omp config list` (trích xuất 87 enum options dạng `(a|b|c)`), hỗ trợ `setEngineConfigValue`, `resetEngineConfigValue`, `getEngineConfigPath`, cơ chế cache in-memory 60s theo `profile` (tự động invalidate khi set/reset, hỗ trợ `forceRefresh`), timeout 15s, buffer 10MB và validation key an toàn.
+  - `electron/types.ts` & `src/types/index.ts`: Bổ sung các kiểu `EngineConfigValueType`, `EngineConfigEntry`, `FetchEngineConfigOptions`, `SetEngineConfigOptions`, `ResetEngineConfigOptions`, `EngineConfigPathOptions`, `EngineConfigListResult`, `EngineConfigMutationResult`, `EngineConfigPathResult`, và cập nhật `ElectronAPI` với `getEngineConfig`, `setEngineConfigValue`, `resetEngineConfigValue`, `getEngineConfigPath`.
+  - `electron/main.ts` & `electron/preload.ts`: Đăng ký 4 IPC handler (`omp:config-list`, `omp:config-set`, `omp:config-reset`, `omp:config-path`) và expose trong context bridge preload.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung các callback `getEngineConfig`, `setEngineConfigValue`, `resetEngineConfigValue`, `getEngineConfigPath`.
+  - `scripts/verify-engine-config.mjs`: Test suite (35 assertions) kiểm tra parser, banner handling, merger enum options, validation key rỗng/khoảng trắng, live fetch (≥480 keys, ≥80 enums), roundtrip set/reset trên `tui.tight`, `config path`, và cache/forceRefresh invalidation.
+  - `package.json`: Thêm script `test:engine-config` vào `test` chain.
+  - Verification: `test:engine-config` (35/35 passed), `test:preload` (pass), và cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) 0 lỗi.
+- **In-flight:** Không có. Sẵn sàng cho Phase 3: Engine Config Editor UI.
+- **Next:**
+  1. Triển khai Phase 3: Engine Config Editor UI (`plans/260902-2057-omp-parity-gap-i18n/phase-03-engine-config-editor-ui.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-02-engine-config-backend.md`
+  - `scripts/verify-engine-config.mjs`
+
 ---
 ## 2026-09-02 — OMP CLI → Desktop Feature Parity Roadmap (All 18 Phases Complete)
 
