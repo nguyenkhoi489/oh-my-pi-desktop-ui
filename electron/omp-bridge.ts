@@ -400,6 +400,37 @@ export class OmpBridge {
     this.emitTodosUpdate();
   }
 
+  // Reminder chỉ trả todos phẳng không kèm phase; giữ nguyên cấu trúc phase và chỉ đồng bộ trạng thái
+  private mergeTodoStatuses(todos: OmpTodoItem[]): boolean {
+    if (this.currentTodoPhases.length === 0 || todos.some((t) => typeof t.phase === 'string' && t.phase)) {
+      return false;
+    }
+    const statusByContent = new Map<string, OmpTodoStatus>();
+    for (const t of todos) {
+      if (typeof t.content === 'string' && t.content) {
+        statusByContent.set(t.content, t.status);
+      }
+    }
+    let matched = false;
+    const mergedPhases = this.currentTodoPhases.map((phase) => ({
+      ...phase,
+      tasks: (phase.tasks || []).map((task) => {
+        const next = statusByContent.get(task.content);
+        if (next === undefined || next === task.status) {
+          if (next !== undefined) matched = true;
+          return task;
+        }
+        matched = true;
+        return { ...task, status: next };
+      }),
+    }));
+    if (!matched) {
+      return false;
+    }
+    this.normalizeAndSetTodos(mergedPhases);
+    return true;
+  }
+
   private emitTodosUpdate(): void {
     if (this.window && !this.window.isDestroyed()) {
       this.window.webContents.send('omp:todos-update', {
@@ -3162,7 +3193,7 @@ export class OmpBridge {
       case 'todo_reminder': {
         const reminderFrame = frame as TodoReminderEvent;
         const rawTodos = reminderFrame.todos;
-        if (Array.isArray(rawTodos)) {
+        if (Array.isArray(rawTodos) && !this.mergeTodoStatuses(rawTodos)) {
           this.normalizeAndSetTodos(undefined, rawTodos);
         }
         break;

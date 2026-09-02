@@ -175,6 +175,46 @@ async function runTodosPanelVerification() {
   }
 
   // ----------------------------------------------------
+  // Test 3b: `todo_reminder` giữ nguyên tên phase đã có
+  // ----------------------------------------------------
+  console.log('\n[Test 3b] `todo_reminder` preserves existing phase structure...');
+  {
+    const mockWindow = {
+      isDestroyed: () => false,
+      webContents: { send: () => {} },
+    };
+
+    const bridge = new OmpBridge(mockWindow);
+
+    bridge.dispatchInboundFrame({
+      type: 'todos',
+      phases: [
+        { name: 'Phase 1 - Setup', tasks: [{ content: 'Task A', status: 'pending' }] },
+        { name: 'Phase 2 - Build', tasks: [{ content: 'Task B', status: 'pending' }] },
+      ],
+    });
+
+    // Reminder trả todos phẳng không kèm phase (đúng như engine thật gửi)
+    bridge.dispatchInboundFrame({
+      type: 'todo_reminder',
+      todos: [
+        { content: 'Task A', status: 'done' },
+        { content: 'Task B', status: 'in_progress' },
+      ],
+      attempt: 1,
+      maxAttempts: 3,
+    });
+
+    const snapshot = bridge.getTodos();
+    assert(snapshot.phases.length === 2, 'Both phases survive the reminder');
+    assert(snapshot.phases[0].name === 'Phase 1 - Setup', 'Phase 1 name preserved');
+    assert(snapshot.phases[1].name === 'Phase 2 - Build', 'Phase 2 name preserved');
+    assert(snapshot.phases[0].tasks[0].status === 'done', 'Task A status synced from reminder');
+    assert(snapshot.phases[1].tasks[0].status === 'in_progress', 'Task B status synced from reminder');
+    assert(snapshot.todos.every((t) => typeof t.phase === 'string' && t.phase), 'Flat todos keep phase attribution');
+  }
+
+  // ----------------------------------------------------
   // Test 4: getState response updates todos snapshot
   // ----------------------------------------------------
   console.log('\n[Test 4] getState response synchronization with todoPhases...');
