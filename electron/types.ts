@@ -445,6 +445,21 @@ export interface ElectronAPI {
   deleteSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
   exportSession: () => Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }>;
   getSubagents?: () => Promise<OmpSubagentInfo[]>;
+  getSubagentMessages?: (params: {
+    subagentId?: string;
+    sessionFile?: string;
+    fromByte?: number;
+  }) => Promise<{
+    success: boolean;
+    data?: {
+      sessionFile?: string;
+      fromByte: number;
+      nextByte: number;
+      reset: boolean;
+      messages: ChatMessage[];
+    };
+    error?: string;
+  }>;
   getAvailableCommands: () => Promise<{ success: boolean; commands?: OmpCommandInfo[]; error?: string }>;
   // Todos Management (Phase 4)
   getTodos: () => Promise<{ success: boolean; phases?: OmpTodoPhase[]; todos?: OmpTodoItem[]; error?: string }>;

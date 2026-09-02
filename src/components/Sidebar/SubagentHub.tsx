@@ -1,16 +1,24 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Bot, Cpu, Loader2 } from 'lucide-react';
 import { OmpSubagentInfo } from '../../types';
+import { SubagentTranscript } from '../AgentPanel/SubagentTranscript';
 
 interface SubagentHubProps {
   subagents?: OmpSubagentInfo[];
+  onSelectSubagent?: (subagent: OmpSubagentInfo) => void;
 }
 
-export const SubagentHub: React.FC<SubagentHubProps> = ({ subagents = [] }) => {
+export const SubagentHub: React.FC<SubagentHubProps> = ({ subagents = [], onSelectSubagent }) => {
+  const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null);
+
+  const activeSelectedSubagent = useMemo(() => {
+    if (!selectedSubagentId) return null;
+    return subagents.find((s) => s.id === selectedSubagentId) || { id: selectedSubagentId, agent: 'task', status: 'completed' } as OmpSubagentInfo;
+  }, [selectedSubagentId, subagents]);
+
   if (!subagents || subagents.length === 0) {
     return null;
   }
-
   return (
     <div className="flex flex-col border-t border-border p-2.5 bg-panel shrink-0 max-h-[35%] overflow-hidden animate-in fade-in duration-200">
       <div className="flex items-center justify-between px-1.5 py-1 mb-1.5 text-[11px] font-bold text-slate-400 dark:text-zinc-500 tracking-wider uppercase shrink-0">
@@ -27,10 +35,16 @@ export const SubagentHub: React.FC<SubagentHubProps> = ({ subagents = [] }) => {
       <div className="space-y-1.5 overflow-y-auto min-h-0 flex-1 pr-0.5">
         {subagents.map((subagent) => {
           const isRunning = subagent.status === 'running' || subagent.status === 'started';
+          const handleClick = () => {
+            setSelectedSubagentId(subagent.id);
+            onSelectSubagent?.(subagent);
+          };
           return (
             <div
               key={subagent.id}
-              className="flex flex-col gap-1 p-2 rounded-lg bg-surface border border-border text-slate-900 dark:text-zinc-100 shadow-xs select-none"
+              onClick={handleClick}
+              className="flex flex-col gap-1 p-2 rounded-lg bg-surface border border-border hover:border-blue-500/50 hover:bg-surface-highlight text-slate-900 dark:text-zinc-100 shadow-xs select-none cursor-pointer transition-all group"
+              title="Nhấn để xem transcript chi tiết"
             >
               <div className="flex items-center justify-between gap-1.5">
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -72,6 +86,13 @@ export const SubagentHub: React.FC<SubagentHubProps> = ({ subagents = [] }) => {
           );
         })}
       </div>
+
+      {/* Transcript Drawer */}
+      <SubagentTranscript
+        subagent={activeSelectedSubagent}
+        isOpen={Boolean(activeSelectedSubagent)}
+        onClose={() => setSelectedSubagentId(null)}
+      />
     </div>
   );
 };

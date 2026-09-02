@@ -55,6 +55,8 @@ import type {
   SetSubagentSubscriptionCommand,
   GetSubagentsCommand,
   GetSubagentsResponseData,
+  GetSubagentMessagesCommand,
+  GetSubagentMessagesResponseData,
   SessionChangeResponseData,
   GetMessagesPageResponseData,
   ExtensionUiResponseCommand,
@@ -448,6 +450,59 @@ export class OmpBridge {
       return { success: false, error: err.message || 'Error executing get_subagents' };
     }
   }
+  public async getSubagentMessages(params: {
+    subagentId?: string;
+    sessionFile?: string;
+    fromByte?: number;
+  }): Promise<{
+    success: boolean;
+    data?: {
+      sessionFile?: string;
+      fromByte: number;
+      nextByte: number;
+      reset: boolean;
+      messages: ChatMessage[];
+    };
+    error?: string;
+  }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+
+    if (!params.subagentId && !params.sessionFile) {
+      return { success: false, error: 'get_subagent_messages requires subagentId or sessionFile' };
+    }
+
+    try {
+      const res = await this.sendCommand<GetSubagentMessagesResponseData>({
+        type: 'get_subagent_messages',
+        id: this.generateId(),
+        subagentId: params.subagentId,
+        sessionFile: params.sessionFile,
+        fromByte: params.fromByte,
+      });
+
+      if (res.success && res.data) {
+        const rawMessages = Array.isArray(res.data.messages) ? res.data.messages : [];
+        const messages = this.translateHistoryMessages(rawMessages);
+        return {
+          success: true,
+          data: {
+            sessionFile: res.data.sessionFile,
+            fromByte: typeof res.data.fromByte === 'number' ? res.data.fromByte : (params.fromByte ?? 0),
+            nextByte: typeof res.data.nextByte === 'number' ? res.data.nextByte : (params.fromByte ?? 0),
+            reset: Boolean(res.data.reset),
+            messages,
+          },
+        };
+      }
+      return { success: false, error: res.error || 'Failed to fetch subagent messages' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing get_subagent_messages' };
+    }
+  }
+
 
   private emitSubagentUpdate() {
     if (this.window && !this.window.isDestroyed()) {

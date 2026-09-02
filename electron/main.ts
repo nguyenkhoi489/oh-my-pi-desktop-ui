@@ -368,6 +368,10 @@ ipcMain.handle('omp:get-subagents', async () => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
   return { success: true, subagents: ompBridge.getSubagents() };
 });
+ipcMain.handle('omp:get-subagent-messages', async (_event, params: { subagentId?: string; sessionFile?: string; fromByte?: number }) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.getSubagentMessages(params || {});
+});
 // IPC Handlers: File System & Workspace
 ipcMain.handle('fs:select-folder', async () => {
   if (!mainWindow) return null;

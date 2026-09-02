@@ -16,6 +16,26 @@ Entry template:
 ```
 
 ---
+## 2026-09-02 — Phase 5: Subagent Transcript Viewer
+
+- **State:** Đã hoàn thành toàn bộ Phase 5:
+  - `electron/omp-rpc-types.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung `GetSubagentMessagesCommand`, `GetSubagentMessagesResponseData`, `OmpCommandFrame` union update, và API contract `getSubagentMessages` trong `ElectronAPI`.
+  - `electron/omp-bridge.ts`: Bổ sung `getSubagentMessages({ subagentId, sessionFile, fromByte })` gọi lệnh RPC `get_subagent_messages`, dịch `messages` qua `translateHistoryMessages` thành `ChatMessage[]`, trả về `{ sessionFile, fromByte, nextByte, reset, messages }`, và xử lý lỗi mềm không crash.
+  - `electron/main.ts` & `electron/preload.ts`: Đăng ký IPC handler `omp:get-subagent-messages` và expose trong context bridge preload.
+  - `src/hooks/useSubagentTranscript.ts`: Tạo hook quản lý transcript incremental, tracking `fromByte`, tự động tail polling interval khi subagent có trạng thái `running`/`started`, tự động dừng khi kết thúc hoặc đóng drawer, hỗ trợ manual `refresh` và `clear`.
+  - `src/components/AgentPanel/SubagentTranscript.tsx`: Tạo slide-over drawer xem transcript chi tiết của subagent với backdrop blur, header info (id, agent badge, status pulse, live indicator), banner mô tả nhiệm vụ, scroll view hiển thị message bubbles (User, Assistant ThinkingCard, ToolCallCard, MarkdownRenderer, System), toggle auto-scroll, và status bar đếm số message / dung lượng byte.
+  - `src/components/Sidebar/SubagentHub.tsx`: Click vào subagent card trong SubagentHub để mở `SubagentTranscript` drawer.
+  - `scripts/verify-subagent-transcript.mjs`: Test suite (39 checks) kiểm tra offline guard, validation, command formatting, translation sang ChatMessage, incremental nextByte, reset handling, bus unavailable error handling, và IPC/preload contract.
+  - `package.json`: Thêm `test:subagent-transcript` vào `scripts` và `npm test`.
+  - Typecheck (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) và toàn bộ test suites pass 100%.
+- **In-flight:** Phase 5 hoàn thành, sẵn sàng chuyển tiếp sang Phase 6 (Retry, Fast Mode & Utils).
+- **Next:**
+  1. Thực hiện Phase 6: `phase-06-retry-fastmode-utils.md` (`set_auto_retry`, `abort_retry`, `set_fast_mode`, `get_last_assistant_text`, `cycle_model`, `cycle_thinking_level`, `handoff`).
+- **Refs:**
+  - `plans/260902-1133-omp-cli-desktop-parity/phase-05-subagent-transcript.md`
+  - `scripts/verify-subagent-transcript.mjs`
+
+---
 ## 2026-09-02 — Phase 4: Todos Panel — hiển thị plan/tiến độ của agent
 
 - **State:** Đã hoàn thành toàn bộ Phase 4:

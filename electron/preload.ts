@@ -129,6 +129,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSubagents: () =>
     ipcRenderer.invoke('omp:get-subagents'),
 
+  getSubagentMessages: (params: { subagentId?: string; sessionFile?: string; fromByte?: number }) =>
+    ipcRenderer.invoke('omp:get-subagent-messages', params),
+
   getAvailableCommands: () =>
     ipcRenderer.invoke('omp:get-commands'),
 

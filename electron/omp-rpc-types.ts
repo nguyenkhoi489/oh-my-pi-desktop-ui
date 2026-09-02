@@ -171,6 +171,15 @@ export interface GetSubagentsCommand {
   id?: string;
   [key: string]: unknown;
 }
+export interface GetSubagentMessagesCommand {
+  type: 'get_subagent_messages';
+  id?: string;
+  subagentId?: string;
+  sessionFile?: string;
+  fromByte?: number;
+  [key: string]: unknown;
+}
+
 
 export interface GetMessagesPageCommand {
   type: 'get_messages_page';
@@ -275,6 +284,7 @@ export type OmpCommandFrame =
   | SwitchSessionCommand
   | BranchCommand
   | GetSubagentsCommand
+  | GetSubagentMessagesCommand
   | GetMessagesPageCommand
   | ExtensionUiResponseCommand
   | CompactCommand
@@ -817,6 +827,16 @@ export interface GetMessagesPageResponseData {
   cursor?: number;
   [key: string]: unknown;
 }
+export interface GetSubagentMessagesResponseData {
+  sessionFile?: string;
+  fromByte?: number;
+  nextByte?: number;
+  reset?: boolean;
+  entries?: unknown[];
+  messages: AgentMessage[];
+  [key: string]: unknown;
+}
+
 export interface OmpBranchMessage {
   entryId: string;
   text: string;
