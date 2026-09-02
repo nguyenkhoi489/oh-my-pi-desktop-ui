@@ -33,6 +33,7 @@ import type {
 import type { SettingsStore } from './settings-store.ts';
 import { NdjsonFramer } from './ndjson-framer.ts';
 import { RpcFrameLogger } from './rpc-frame-logger.ts';
+import { HostToolRegistry } from './host-tools.ts';
 import type {
   OmpFrame,
   OmpInboundFrame,
@@ -48,6 +49,9 @@ import type {
   SetSteeringModeCommand,
   SetFollowUpModeCommand,
   SetInterruptModeCommand,
+  BashCommand,
+  AbortBashCommand,
+  BashResultData,
   NewSessionCommand,
   SwitchSessionCommand,
   BranchCommand,
@@ -96,6 +100,9 @@ import type {
   CommandOutputEvent,
   SessionInfoUpdateEvent,
   ConfigUpdateEvent,
+  SetHostToolsCommand,
+  SetHostUriSchemesCommand,
+  HostToolResultFrame,
   SetTodosCommand,
   SetTodosResponseData,
   TodosEvent,
@@ -218,8 +225,11 @@ export class OmpBridge {
   private engineStatuses: Map<string, string> = new Map();
   private engineWidgets: Map<string, { lines: string[]; placement?: string }> = new Map();
   private currentApprovalMode: OmpApprovalMode | undefined = undefined;
+  private currentProfile: string = 'default';
   private currentThinkingLevel: OmpThinkingLevel = 'off';
   private availableCommands: OmpCommandInfo[] = [];
+  public hostToolRegistry: HostToolRegistry = new HostToolRegistry();
+  private activeHostToolCalls: Map<string, AbortController> = new Map();
   private sessionName: string | undefined = undefined;
   private lastContextUsage: OmpContextUsage | null = null;
   private lastTokensPerSecond: number | null = null;
@@ -707,7 +717,7 @@ export class OmpBridge {
   public async startProcess(
     workspacePath: string,
     model?: string,
-    options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode }
+    options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode; profile?: string }
   ): Promise<{ success: boolean; pid?: number }> {
     if (this.process) {
       // Chờ tiến trình cũ thoát hẳn trước khi spawn, tránh handshake timeout do tranh chấp
@@ -739,6 +749,8 @@ export class OmpBridge {
     if (effectiveApprovalMode) {
       this.currentApprovalMode = effectiveApprovalMode;
     }
+    const effectiveProfile = options?.profile ?? settings?.profile ?? this.currentProfile ?? 'default';
+    this.currentProfile = effectiveProfile;
     const binaryPath = this.detectBinaryPath() ?? (await this.detectViaLoginShell());
     if (!binaryPath || !fs.existsSync(binaryPath)) {
       console.warn('[OmpBridge] Binary not found. Live process start aborted; fallback mode available.');
@@ -756,6 +768,9 @@ export class OmpBridge {
     }
     if (effectiveApprovalMode) {
       args.push('--approval-mode', effectiveApprovalMode);
+    }
+    if (effectiveProfile && effectiveProfile !== 'default') {
+      args.push('--profile', effectiveProfile);
     }
     if (options?.extraArgs && Array.isArray(options.extraArgs)) {
       args.push(...options.extraArgs);
@@ -1186,6 +1201,7 @@ export class OmpBridge {
         }
         res.data.thinkingLevel = this.currentThinkingLevel;
         res.data.approvalMode = this.currentApprovalMode;
+        res.data.profile = this.currentProfile;
         return { success: true, state: res.data };
       }
       return { success: false, error: res.error || 'Failed to get state' };
@@ -1267,6 +1283,105 @@ export class OmpBridge {
       this.settingsStore.set({ approvalMode: mode });
     }
     return { success: true, mode };
+  }
+
+  public getProfile(): { success: boolean; profile: string } {
+    return { success: true, profile: this.currentProfile || 'default' };
+  }
+
+  public async setProfile(
+    profile: string
+  ): Promise<{ success: boolean; profile: string; error?: string }> {
+    const cleanProfile = profile?.trim() || 'default';
+    if (cleanProfile === this.currentProfile) {
+      return { success: true, profile: this.currentProfile };
+    }
+
+    const oldProfile = this.currentProfile;
+    if (this.process && this.lifecycleState !== 'idle') {
+      const oldWs = this.workspacePath;
+      const oldModel = this.currentModel;
+      const oldProvider = this.currentProvider;
+
+      this.stopProcess();
+
+      if (oldWs) {
+        const startResult = await this.startProcess(oldWs, oldModel, {
+          provider: oldProvider,
+          approvalMode: this.currentApprovalMode,
+          profile: cleanProfile,
+        });
+
+        if (startResult.success) {
+          this.currentProfile = cleanProfile;
+          if (this.settingsStore) {
+            this.settingsStore.set({ profile: cleanProfile });
+          }
+          await this.getState().catch(() => {});
+          return { success: true, profile: cleanProfile };
+        } else {
+          this.currentProfile = oldProfile;
+          return {
+            success: false,
+            profile: oldProfile,
+            error: 'Khởi động lại engine thất bại khi chuyển profile',
+          };
+        }
+      }
+    }
+
+    this.currentProfile = cleanProfile;
+    if (this.settingsStore) {
+      this.settingsStore.set({ profile: cleanProfile });
+    }
+    return { success: true, profile: cleanProfile };
+  }
+
+  public async registerHostTools(): Promise<{ success: boolean; toolNames?: string[]; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'Engine offline' };
+    }
+    const settings = this.settingsStore?.get();
+    if (settings && settings.hostToolsEnabled === false) {
+      return { success: true, toolNames: [] };
+    }
+    const tools = this.hostToolRegistry.getDeclarations();
+    const cmdId = this.generateId();
+    const frame: SetHostToolsCommand = {
+      type: 'set_host_tools',
+      id: cmdId,
+      tools,
+    };
+    try {
+      const res = await this.sendCommand(frame);
+      if (res.success && res.data && Array.isArray((res.data as any).toolNames)) {
+        return { success: true, toolNames: (res.data as any).toolNames };
+      }
+      return { success: res.success, error: res.error };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Error registering host tools' };
+    }
+  }
+
+  public async setHostUriSchemes(schemes: string[]): Promise<{ success: boolean; schemes?: string[]; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'Engine offline' };
+    }
+    const cmdId = this.generateId();
+    const frame: SetHostUriSchemesCommand = {
+      type: 'set_host_uri_schemes',
+      id: cmdId,
+      schemes,
+    };
+    try {
+      const res = await this.sendCommand(frame);
+      if (res.success && res.data && Array.isArray((res.data as any).schemes)) {
+        return { success: true, schemes: (res.data as any).schemes };
+      }
+      return { success: res.success, error: res.error };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Error setting host URI schemes' };
+    }
   }
 
   public async compact(
@@ -1509,6 +1624,67 @@ export class OmpBridge {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg || 'Error executing handoff' };
+    }
+  }
+
+  public async runBash(
+    command: string
+  ): Promise<{ success: boolean; data?: BashResultData; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const reqId = this.generateId();
+      const cmd: BashCommand = {
+        type: 'bash',
+        id: reqId,
+        command,
+      };
+      const res = await this.sendCommand<BashResultData>(cmd);
+      if (res.success) {
+        const data = res.data || {};
+        let output = typeof data.output === 'string' ? data.output : '';
+        let truncated = Boolean(data.truncated);
+        const MAX_OUTPUT_CHARS = 200_000;
+        if (output.length > MAX_OUTPUT_CHARS) {
+          output = '… [Output truncated to avoid flood] …\n' + output.slice(output.length - MAX_OUTPUT_CHARS);
+          truncated = true;
+        }
+        return {
+          success: true,
+          data: {
+            exitCode: typeof data.exitCode === 'number' ? data.exitCode : 0,
+            output,
+            outputBytes: data.outputBytes ?? output.length,
+            totalLines: data.totalLines ?? (output ? output.split('\n').length : 0),
+            truncated,
+          },
+        };
+      }
+      return { success: false, error: res.error || 'Failed to execute bash command' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing bash' };
+    }
+  }
+
+  public async abortBash(): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const cmd: AbortBashCommand = {
+        type: 'abort_bash',
+        id: this.generateId(),
+      };
+      const res = await this.sendCommand(cmd);
+      if (res.success) {
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Failed to abort bash' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing abort_bash' };
     }
   }
 
@@ -2182,6 +2358,12 @@ export class OmpBridge {
             this.refreshSubagentsOnDemand().catch((err) => {
               console.warn('[OmpBridge] get_subagents sync unavailable:', err.message);
             });
+            this.registerHostTools().catch((err) => {
+              console.warn('[OmpBridge] set_host_tools unavailable:', err.message);
+            });
+            this.setHostUriSchemes(['ompapp', 'vscode', 'cursor']).catch((err) => {
+              console.warn('[OmpBridge] set_host_uri_schemes unavailable:', err.message);
+            });
             if (this.settingsStore) {
               const s = this.settingsStore.get();
               if (s.defaultThinkingLevel && s.defaultThinkingLevel !== 'off') {
@@ -2231,6 +2413,65 @@ export class OmpBridge {
       return;
     }
 
+
+    // Host Tool Execution Inbound Frames (Phase 17 & 18)
+    if (frame.type === 'host_tool_call') {
+      const callFrame = frame as any;
+      const callId = callFrame.id as string;
+      const toolCallId = callFrame.toolCallId as string;
+      const toolName = callFrame.toolName as string;
+      const args = callFrame.arguments || {};
+
+      const abortController = new AbortController();
+      this.activeHostToolCalls.set(callId, abortController);
+
+      this.hostToolRegistry
+        .executeTool(toolName, args, {
+          toolCallId,
+          signal: abortController.signal,
+        })
+        .then((res) => {
+          if (!this.process || !this.process.stdin?.writable) return;
+          const replyFrame: HostToolResultFrame = {
+            type: 'host_tool_result',
+            id: callId,
+            result: {
+              content: res.content,
+              details: res.details || {},
+            },
+            isError: Boolean(res.isError),
+          };
+          this.writeFrame(replyFrame);
+        })
+        .catch((err) => {
+          if (!this.process || !this.process.stdin?.writable) return;
+          const replyFrame: HostToolResultFrame = {
+            type: 'host_tool_result',
+            id: callId,
+            result: {
+              content: [{ type: 'text', text: err?.message || String(err) }],
+              details: {},
+            },
+            isError: true,
+          };
+          this.writeFrame(replyFrame);
+        })
+        .finally(() => {
+          this.activeHostToolCalls.delete(callId);
+        });
+
+      return;
+    }
+
+    if (frame.type === 'host_tool_cancel') {
+      const cancelFrame = frame as any;
+      const targetId = cancelFrame.targetId as string;
+      if (targetId && this.activeHostToolCalls.has(targetId)) {
+        this.activeHostToolCalls.get(targetId)!.abort();
+        this.activeHostToolCalls.delete(targetId);
+      }
+      return;
+    }
     // 4. Extension UI Requests (Interactive, Cancel, Legacy, and Fire-and-forget)
     if (frame.type === 'extension_ui_request') {
       const reqEvent = frame as ExtensionUiRequestEvent;
@@ -2791,8 +3032,10 @@ export class OmpBridge {
       case 'command_output': {
         const outFrame = frame as CommandOutputEvent;
         const text = typeof outFrame.text === 'string' ? outFrame.text : (typeof (outFrame as any).output === 'string' ? (outFrame as any).output : '');
+        const id = typeof outFrame.id === 'string' ? outFrame.id : (typeof (outFrame as any).commandId === 'string' ? (outFrame as any).commandId : undefined);
         if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:command-output', { text });
+          this.window.webContents.send('omp:command-output', { text, id });
+          this.window.webContents.send('omp:bash-output', { text, id });
         }
         break;
       }

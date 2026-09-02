@@ -146,11 +146,104 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportSession: () =>
     ipcRenderer.invoke('omp:export-session'),
 
+  listImportCandidates: (source?: 'claude' | 'codex') =>
+    ipcRenderer.invoke('omp:list-import-candidates', source),
+
+  importSession: (candidate: any, targetCwd?: string) =>
+    ipcRenderer.invoke('omp:import-session', candidate, targetCwd),
+  // Engine Maintenance (Phase 9)
+  checkEngineUpdate: () =>
+    ipcRenderer.invoke('omp:maintenance-check-update'),
+
+  checkEngineComponents: () =>
+    ipcRenderer.invoke('omp:maintenance-check-components'),
+
+  listTinyModels: () =>
+    ipcRenderer.invoke('omp:maintenance-list-tiny-models'),
+
+  runMaintenanceTask: (taskId: string, args: string[]) =>
+    ipcRenderer.invoke('omp:maintenance-run-task', taskId, args),
+
+  cancelMaintenanceTask: () =>
+    ipcRenderer.invoke('omp:maintenance-cancel-task'),
+
   getSubagents: () =>
     ipcRenderer.invoke('omp:get-subagents'),
 
   getSubagentMessages: (params: { subagentId?: string; sessionFile?: string; fromByte?: number }) =>
     ipcRenderer.invoke('omp:get-subagent-messages', params),
+
+  // Bash Bridge & Terminal (Phase 10 & 11)
+  runBash: (command: string) =>
+    ipcRenderer.invoke('omp:run-bash', command),
+
+  abortBash: () =>
+    ipcRenderer.invoke('omp:abort-bash'),
+
+  // Collab Share & Join (Phase 12)
+  shareSession: (sessionIdentifier: string, options?: { gist?: boolean }) =>
+    ipcRenderer.invoke('omp:share-session', sessionIdentifier, options),
+
+  joinSession: (link: string) =>
+    ipcRenderer.invoke('omp:join-session', link),
+
+  // Background Process & Worktree Managers (Phase 13)
+  listProcesses: (options?: { all?: boolean; global?: string }) =>
+    ipcRenderer.invoke('omp:ps-list', options),
+
+  controlProcess: (action: 'stop' | 'kill' | 'restart', name: string, options?: { global?: string; timeout?: number }) =>
+    ipcRenderer.invoke('omp:ps-control', action, name, options),
+
+  getProcessLogs: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) =>
+    ipcRenderer.invoke('omp:ps-logs', name, options),
+
+  listWorktrees: () =>
+    ipcRenderer.invoke('omp:worktree-list'),
+
+  clearWorktrees: (options?: { all?: boolean; dryRun?: boolean }) =>
+    ipcRenderer.invoke('omp:worktree-clear', options),
+
+  // Plugin & Agents Managers (Phase 14 & 15)
+  listPlugins: () =>
+    ipcRenderer.invoke('omp:plugin-list'),
+
+  installPlugin: (target: string, options?: { scope?: 'user' | 'project'; force?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-install', target, options),
+
+  uninstallPlugin: (target: string, options?: { scope?: 'user' | 'project' }) =>
+    ipcRenderer.invoke('omp:plugin-uninstall', target, options),
+
+  linkPlugin: (localPath: string) =>
+    ipcRenderer.invoke('omp:plugin-link', localPath),
+
+  listAgents: () =>
+    ipcRenderer.invoke('omp:agents-list'),
+
+  unpackAgents: (options?: { scope?: 'user' | 'project'; force?: boolean; dir?: string }) =>
+    ipcRenderer.invoke('omp:agents-unpack', options),
+
+  // Profile Management (Phase 16)
+  getProfile: () =>
+    ipcRenderer.invoke('omp:get-profile'),
+
+  setProfile: (profile: string) =>
+    ipcRenderer.invoke('omp:set-profile', profile),
+
+  listProfiles: () =>
+    ipcRenderer.invoke('omp:profile-list'),
+
+  createProfile: (name: string) =>
+    ipcRenderer.invoke('omp:profile-create', name),
+
+  deleteProfile: (name: string) =>
+    ipcRenderer.invoke('omp:profile-delete', name),
+
+  // Host Tools & URI Schemes (Phase 17 & 18)
+  registerHostTools: () =>
+    ipcRenderer.invoke('omp:register-host-tools'),
+
+  setHostUriSchemes: (schemes: string[]) =>
+    ipcRenderer.invoke('omp:set-host-uri-schemes', schemes),
 
   getAvailableCommands: () =>
     ipcRenderer.invoke('omp:get-commands'),
@@ -334,5 +427,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: unknown, state: any) => callback(state);
     ipcRenderer.on('omp:retry-state', handler);
     return () => ipcRenderer.removeListener('omp:retry-state', handler);
+  },
+  onMaintenanceOutput: (callback: (event: any) => void) => {
+    const handler = (_: unknown, event: any) => callback(event);
+    ipcRenderer.on('omp:maintenance-output', handler);
+    return () => ipcRenderer.removeListener('omp:maintenance-output', handler);
+  },
+  onBashOutput: (callback: (data: { text: string; id?: string }) => void) => {
+    const handler = (_: unknown, data: { text: string; id?: string }) => callback(data);
+    ipcRenderer.on('omp:bash-output', handler);
+    return () => ipcRenderer.removeListener('omp:bash-output', handler);
   },
 });

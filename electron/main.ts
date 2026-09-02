@@ -13,6 +13,12 @@ import {
 import { AuthLoginManager, fetchAuthenticatedProviders } from './auth-login.ts';
 import { readModelRolesConfig, writeModelRolesConfig } from './roles-config.ts';
 import { fetchGlobalUsage, fetchGlobalStats } from './usage-stats.ts';
+import { listImportCandidates, importForeignSession } from './session-import.ts';
+import { EngineMaintenanceManager } from './engine-maintenance.ts';
+import { shareSession, joinCollabSession, type ShareSessionOptions } from './collab-share.ts';
+import { OpsManager } from './ops-manager.ts';
+import { ExtensionManager } from './extension-manager.ts';
+import { listProfiles, createProfile, deleteProfile } from './profile-paths.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +26,9 @@ const __dirname = path.dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
 let ompBridge: OmpBridge | null = null;
 const authLoginManager = new AuthLoginManager((url) => shell.openExternal(url));
+const engineMaintenanceManager = new EngineMaintenanceManager();
+const opsManager = new OpsManager();
+const extensionManager = new ExtensionManager();
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -324,6 +333,17 @@ ipcMain.handle('omp:handoff', async () => {
   return ompBridge.handoff();
 });
 
+// IPC Handlers: Integrated Bash Bridge (Phase 10)
+ipcMain.handle('omp:run-bash', async (_, command: string) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.runBash(command);
+});
+
+ipcMain.handle('omp:abort-bash', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.abortBash();
+});
+
 
 // IPC Handlers: Todos Management (Phase 4)
 ipcMain.handle('omp:get-todos', async () => {
@@ -399,6 +419,171 @@ ipcMain.handle('omp:export-session', async () => {
     return { success: true, path: filePath };
   }
   return { success: false, error: res.error };
+});
+
+ipcMain.handle('omp:list-import-candidates', async (_, source?: 'claude' | 'codex') => {
+  try {
+    const state = ompBridge ? await ompBridge.getState().catch(() => null) : null;
+    const currentCwd = state?.state?.cwd as string | undefined;
+    const candidates = await listImportCandidates(source, currentCwd);
+    return { success: true, candidates };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Lỗi quét session' };
+  }
+});
+
+ipcMain.handle('omp:import-session', async (_, candidate: any, targetCwd?: string) => {
+  try {
+    const state = ompBridge ? await ompBridge.getState().catch(() => null) : null;
+    const cwd = targetCwd || (state?.state?.cwd as string) || process.cwd();
+    const sessionDir = ompBridge?.getCurrentSessionFile()
+      ? path.dirname(ompBridge.getCurrentSessionFile()!)
+      : undefined;
+    const result = await importForeignSession(candidate, cwd, sessionDir);
+    return result;
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Lỗi import session' };
+  }
+});
+
+// IPC Handlers: Collab Share & Join (Phase 12)
+ipcMain.handle('omp:share-session', async (_, sessionIdentifier: string, options?: ShareSessionOptions) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return shareSession(binary, sessionIdentifier, options);
+});
+
+ipcMain.handle('omp:join-session', async (_, link: string) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  const result = await joinCollabSession(binary, link);
+  if (result.success && ompBridge) {
+    await ompBridge.listSessions().catch(() => {});
+  }
+  return result;
+});
+
+// IPC Handlers: Engine Maintenance (Phase 9)
+ipcMain.handle('omp:maintenance-check-update', async () => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return engineMaintenanceManager.checkUpdate(binary);
+});
+
+ipcMain.handle('omp:maintenance-check-components', async () => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return engineMaintenanceManager.checkComponents(binary);
+});
+
+ipcMain.handle('omp:maintenance-list-tiny-models', async () => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return engineMaintenanceManager.listTinyModels(binary);
+});
+
+ipcMain.handle('omp:maintenance-run-task', async (_, taskId: string, args: string[]) => {
+  const win = mainWindow || BrowserWindow.getFocusedWindow();
+  if (!win) return { success: false, error: 'Không tìm thấy cửa sổ ứng dụng' };
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return engineMaintenanceManager.startTask(taskId, binary, args, win);
+});
+
+ipcMain.handle('omp:maintenance-cancel-task', async () => {
+  return engineMaintenanceManager.cancelTask();
+});
+
+// IPC Handlers: Background Process & Worktree Managers (Phase 13)
+ipcMain.handle('omp:ps-list', async (_, options?: { all?: boolean; global?: string }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return opsManager.listProcesses(binary, options);
+});
+
+ipcMain.handle('omp:ps-control', async (_, action: 'stop' | 'kill' | 'restart', name: string, options?: { global?: string; timeout?: number }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return opsManager.controlProcess(binary, action, name, options);
+});
+
+ipcMain.handle('omp:ps-logs', async (_, name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return opsManager.getProcessLogs(binary, name, options);
+});
+
+ipcMain.handle('omp:worktree-list', async () => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return opsManager.listWorktrees(binary);
+});
+
+ipcMain.handle('omp:worktree-clear', async (_, options?: { all?: boolean; dryRun?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return opsManager.clearWorktrees(binary, options);
+});
+
+// IPC Handlers: Plugin & Agents Managers (Phase 14 & 15)
+ipcMain.handle('omp:plugin-list', async () => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.listPlugins(binary);
+});
+
+ipcMain.handle('omp:plugin-install', async (_, target: string, options?: { scope?: 'user' | 'project'; force?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.installPlugin(binary, target, options);
+});
+
+ipcMain.handle('omp:plugin-uninstall', async (_, target: string, options?: { scope?: 'user' | 'project' }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.uninstallPlugin(binary, target, options);
+});
+
+ipcMain.handle('omp:plugin-link', async (_, localPath: string) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.linkPlugin(binary, localPath);
+});
+
+ipcMain.handle('omp:agents-list', async () => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  const state = ompBridge ? await ompBridge.getState().catch(() => null) : null;
+  const currentCwd = state?.state?.cwd as string | undefined;
+  return extensionManager.listAgents(binary, currentCwd);
+});
+
+ipcMain.handle('omp:agents-unpack', async (_, options?: { scope?: 'user' | 'project'; force?: boolean; dir?: string }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.unpackAgents(binary, options);
+});
+
+// IPC Handlers: Profiles Management (Phase 16)
+ipcMain.handle('omp:get-profile', async () => {
+  if (!ompBridge) return { success: false, profile: 'default', error: 'Bridge uninitialized' };
+  return ompBridge.getProfile();
+});
+
+ipcMain.handle('omp:set-profile', async (_, profile: string) => {
+  if (!ompBridge) return { success: false, profile: 'default', error: 'Bridge uninitialized' };
+  return ompBridge.setProfile(profile);
+});
+
+ipcMain.handle('omp:profile-list', async () => {
+  try {
+    const profiles = await listProfiles();
+    return { success: true, profiles };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Lỗi khi lấy danh sách profiles' };
+  }
+});
+
+ipcMain.handle('omp:profile-create', async (_, name: string) => {
+  return createProfile(name);
+});
+
+ipcMain.handle('omp:profile-delete', async (_, name: string) => {
+  return deleteProfile(name);
+});
+
+// IPC Handlers: Host Tools Management (Phase 17 & 18)
+ipcMain.handle('omp:register-host-tools', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.registerHostTools();
+});
+
+ipcMain.handle('omp:set-host-uri-schemes', async (_, schemes: string[]) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.setHostUriSchemes(schemes);
 });
 
 ipcMain.handle('omp:get-subagents', async () => {

@@ -16,6 +16,28 @@ Entry template:
 ```
 
 ---
+## 2026-09-02 — OMP CLI → Desktop Feature Parity Roadmap (All 18 Phases Complete)
+
+- **State:** Đã hoàn thành 100% toàn bộ 18 Phase của Roadmap Parity CLI v18:
+  - **Phase 1-6 (RPC Core & Observability):** Probe live, Steering, Follow-up queue & 3 modes, Todos Panel, Subagent Transcript, Auto-retry/Fast Mode/Handoff.
+  - **Phase 7 (Global Usage & Stats):** `omp usage --json` & `omp stats --json`, cache 60s, SessionStatsPanel tabs.
+  - **Phase 8 (Session Import):** `session-import.ts`, import session từ Claude Code (`~/.claude/projects`) và Codex (`~/.codex/sessions` / sqlite), convert sang format OMP v3 headers, ImportSessionModal UI.
+  - **Phase 9 (Engine Maintenance):** `engine-maintenance.ts`, check update binary `omp update`, quản lý local tiny-models, setup components, OpsModal Engine tab.
+  - **Phase 10 & 11 (Bash Bridge & Terminal Panel UI):** RPC `bash` execution, streaming output & buffer truncation, `abort_bash`, TerminalView component tích hợp trong Canvas.
+  - **Phase 12 (Collab Share & Join):** `collab-share.ts`, `omp share` (gist/url), `omp join`, ShareSessionModal & JoinSessionModal UI.
+  - **Phase 13 (PS & Worktree Managers):** `ops-manager.ts`, `omp ps` background daemons list/logs/stop/restart/kill, `omp worktree` list/clear, OpsModal Processes & Worktrees tabs.
+  - **Phase 14 & 15 (Plugin & Agents Managers):** `extension-manager.ts`, `omp plugin` install/uninstall/link/list, `omp agents unpack` (user/project scope), OpsModal Extensions & Agents tabs.
+  - **Phase 16 (Profiles):** `profile-paths.ts`, `--profile` spawn flag, resolve `~/.omp/profiles/<name>`, list/create/switch profiles, SettingsModal profile selector & active badge.
+  - **Phase 17 & 18 (Host Tools Foundation, Suite & URI Schemes):** `host-tools.ts`, `HostToolRegistry`, protocol `set_host_tools` & `set_host_uri_schemes`, inbound `host_tool_call` execution (với timeout guard & abort controller) & `host_tool_result` response, 5 built-in tools (`notify_user`, `open_in_browser`, `reveal_file`, `open_in_app`, `pick_file`), SettingsModal toggle.
+  - **Verification & Testing:** Toàn bộ test verify suites (`test:host-tools`, `test:profiles`, `test:extension-manager`, `test:ops-manager`, `test:share-join`, `test:terminal`, `test:engine-maintenance`, `test:session-import`, `test:usage-stats`, `test:retry-fastmode`, `test:subagent-transcript`, `test:todos-panel`, `test:steering`) và cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) đạt 100% pass.
+- **In-flight:** Toàn bộ code đã clean, sẵn sàng commit.
+- **Next:**
+  1. Thực hiện commit thay đổi và bàn giao cho người dùng.
+- **Refs:**
+  - `plans/260902-1133-omp-cli-desktop-parity/plan.md`
+  - `plans/260902-1133-omp-cli-desktop-parity/phase-*.md`
+
+---
 ## 2026-09-02 — Phase 7: Global Usage & Stats (omp usage / omp stats)
 
 - **State:** Đã hoàn thành toàn bộ Phase 7:

@@ -427,6 +427,137 @@ export interface GlobalStatsResult {
   error?: string;
 }
 
+export interface ForeignSessionCandidate {
+  source: 'claude' | 'codex';
+  id: string;
+  path: string;
+  cwd?: string;
+  title?: string;
+  created: string;
+  modified: string;
+  firstMessage?: string;
+  messageCount?: number;
+}
+
+export interface ImportSessionResult {
+  success: boolean;
+  sessionId?: string;
+  sessionPath?: string;
+  title?: string;
+  error?: string;
+}
+
+export interface EngineUpdateCheckResult {
+  success: boolean;
+  currentVersion: string;
+  hasUpdate: boolean;
+  latestVersion?: string;
+  rawOutput?: string;
+  error?: string;
+}
+
+export interface EngineComponentStatus {
+  id: string;
+  name: string;
+  description: string;
+  isInstalled: boolean;
+  details?: string;
+}
+
+export interface TinyModelItem {
+  key: string;
+  isDefault: boolean;
+  description: string;
+}
+
+export interface BashResultData {
+  exitCode?: number;
+  output?: string;
+  outputBytes?: number;
+  totalLines?: number;
+  truncated?: boolean;
+}
+
+export interface ShareSessionResult {
+  success: boolean;
+  url?: string;
+  rawOutput?: string;
+  error?: string;
+}
+
+export interface JoinSessionResult {
+  success: boolean;
+  message?: string;
+  rawOutput?: string;
+  error?: string;
+}
+
+export interface OmpDaemonInfo {
+  name: string;
+  id?: string;
+  state: 'running' | 'exited' | 'starting' | 'stopped' | string;
+  createdAt?: number;
+  startedAt?: number;
+  readyAt?: number;
+  exitedAt?: number;
+  exitCode?: number;
+  restartCount?: number;
+  outputBytes?: number;
+  readyMatch?: string;
+  persist?: boolean;
+  detached?: boolean;
+  command?: string;
+  cwd?: string;
+  supervised?: boolean;
+}
+
+export interface OmpPsScope {
+  kind: 'project' | 'global' | string;
+  projectDir?: string;
+  service?: string;
+  runtimeDir?: string;
+  brokerPid?: number;
+  daemons: OmpDaemonInfo[];
+}
+
+export interface OmpWorktreeInfo {
+  path: string;
+  branch?: string;
+  commit?: string;
+  mtime?: number | string;
+  isPrCheckout?: boolean;
+  isDirty?: boolean;
+  sizeBytes?: number;
+  [key: string]: unknown;
+}
+
+export interface OmpPluginInfo {
+  name: string;
+  version?: string;
+  description?: string;
+  source?: 'npm' | 'marketplace' | 'local' | string;
+  enabled?: boolean;
+  scope?: 'user' | 'project' | string;
+  path?: string;
+  [key: string]: unknown;
+}
+
+export interface OmpAgentItem {
+  id: string;
+  name: string;
+  description?: string;
+  scope: 'bundled' | 'user' | 'project';
+  path?: string;
+}
+
+export interface MaintenanceEvent {
+  taskId: string;
+  type: 'stdout' | 'stderr' | 'status';
+  text?: string;
+  status?: 'running' | 'done' | 'error';
+  exitCode?: number;
+}
+
 export interface OmpEngineState {
   model?: OmpModelInfo;
   isStreaming?: boolean;
@@ -450,6 +581,7 @@ export interface OmpEngineState {
   todoPhases?: OmpTodoPhase[];
   todos?: OmpTodoItem[];
   [key: string]: unknown;
+  profile?: string;
 }
 
 export interface AppSettings {
@@ -465,6 +597,8 @@ export interface AppSettings {
   steeringMode?: string;
   followUpMode?: string;
   interruptMode?: string;
+  profile?: string;
+  hostToolsEnabled?: boolean;
 }
 
 export interface CustomModelCost {
@@ -606,6 +740,8 @@ export interface ElectronAPI {
   renameSession: (name: string) => Promise<{ success: boolean; error?: string }>;
   deleteSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
   exportSession: () => Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }>;
+  listImportCandidates: (source?: 'claude' | 'codex') => Promise<{ success: boolean; candidates?: ForeignSessionCandidate[]; error?: string }>;
+  importSession: (candidate: ForeignSessionCandidate, targetCwd?: string) => Promise<ImportSessionResult>;
   getSubagents?: () => Promise<OmpSubagentInfo[]>;
   getSubagentMessages?: (params: {
     subagentId?: string;
@@ -632,6 +768,42 @@ export interface ElectronAPI {
   setFastMode: (enabled: boolean) => Promise<{ success: boolean; data?: { enabled?: boolean }; error?: string }>;
   getLastAssistantText: () => Promise<{ success: boolean; text?: string; error?: string }>;
   handoff: () => Promise<{ success: boolean; data?: unknown; error?: string }>;
+  // Engine Maintenance (Phase 9)
+  checkEngineUpdate: () => Promise<EngineUpdateCheckResult>;
+  checkEngineComponents: () => Promise<{ success: boolean; components?: EngineComponentStatus[]; error?: string }>;
+  listTinyModels: () => Promise<{ success: boolean; models?: TinyModelItem[]; error?: string }>;
+  runMaintenanceTask: (taskId: string, args: string[]) => Promise<{ success: boolean; error?: string }>;
+  cancelMaintenanceTask: () => Promise<{ success: boolean }>;
+  onMaintenanceOutput: (callback: (event: MaintenanceEvent) => void) => () => void;
+  // Bash Bridge & Terminal (Phase 10 & 11)
+  runBash: (command: string) => Promise<{ success: boolean; data?: BashResultData; error?: string }>;
+  abortBash: () => Promise<{ success: boolean; error?: string }>;
+  onBashOutput: (callback: (data: { text: string; id?: string }) => void) => () => void;
+  // Collab Share & Join (Phase 12)
+  shareSession: (sessionIdentifier: string, options?: { gist?: boolean }) => Promise<ShareSessionResult>;
+  joinSession: (link: string) => Promise<JoinSessionResult>;
+  // Background Process & Worktree Managers (Phase 13)
+  listProcesses: (options?: { all?: boolean; global?: string }) => Promise<{ success: boolean; scopes?: OmpPsScope[]; error?: string }>;
+  controlProcess: (action: 'stop' | 'kill' | 'restart', name: string, options?: { global?: string; timeout?: number }) => Promise<{ success: boolean; message?: string; error?: string }>;
+  getProcessLogs: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) => Promise<{ success: boolean; logs?: string; error?: string }>;
+  listWorktrees: () => Promise<{ success: boolean; worktrees?: OmpWorktreeInfo[]; error?: string }>;
+  clearWorktrees: (options?: { all?: boolean; dryRun?: boolean }) => Promise<{ success: boolean; rawOutput?: string; error?: string }>;
+  // Plugin & Agents Managers (Phase 14 & 15)
+  listPlugins: () => Promise<{ success: boolean; plugins?: OmpPluginInfo[]; error?: string }>;
+  installPlugin: (target: string, options?: { scope?: 'user' | 'project'; force?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
+  uninstallPlugin: (target: string, options?: { scope?: 'user' | 'project' }) => Promise<{ success: boolean; message?: string; error?: string }>;
+  linkPlugin: (localPath: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  listAgents: () => Promise<{ success: boolean; agents?: OmpAgentItem[]; error?: string }>;
+  unpackAgents: (options?: { scope?: 'user' | 'project'; force?: boolean; dir?: string }) => Promise<{ success: boolean; rawOutput?: string; error?: string }>;
+  // Profile Management (Phase 16)
+  getProfile: () => Promise<{ success: boolean; profile: string; error?: string }>;
+  setProfile: (profile: string) => Promise<{ success: boolean; profile: string; error?: string }>;
+  listProfiles: () => Promise<{ success: boolean; profiles?: string[]; error?: string }>;
+  createProfile: (name: string) => Promise<{ success: boolean; profile?: string; error?: string }>;
+  deleteProfile: (name: string) => Promise<{ success: boolean; error?: string }>;
+  // Host Tools & URI Schemes (Phase 17 & 18)
+  registerHostTools: () => Promise<{ success: boolean; toolNames?: string[]; error?: string }>;
+  setHostUriSchemes: (schemes: string[]) => Promise<{ success: boolean; schemes?: string[]; error?: string }>;
   // Workspace / Filesystem
   selectFolder: () => Promise<string | null>;
   readDirectory: (dirPath: string) => Promise<WorkspaceFile[]>;

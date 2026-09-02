@@ -17,6 +17,8 @@ export interface AppSettings {
   steeringMode?: string;
   followUpMode?: string;
   interruptMode?: string;
+  profile?: string;
+  hostToolsEnabled?: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

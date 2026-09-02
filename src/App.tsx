@@ -13,6 +13,7 @@ import { ToastStack } from './components/Notifications/ToastStack';
 import { useOmpRpc } from './hooks/useOmpRpc';
 import { useWorkspace } from './hooks/useWorkspace';
 import { ThemeMode, FileDiffItem, WorkspaceFile } from './types';
+import { OpsModal } from './components/Modals/OpsModal';
 
 export function App() {
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -33,6 +34,7 @@ export function App() {
     }
   }, [theme]);
 
+  const [isOpsModalOpen, setIsOpsModalOpen] = useState(false);
   // Load initial theme from settings
   useEffect(() => {
     const initSettings = async () => {
@@ -287,6 +289,11 @@ export function App() {
         e.preventDefault();
         setIsRightSidebarOpen((prev) => !prev);
       }
+      // ⌘+` or ⌘+~: Toggle Terminal Canvas Tab
+      if ((e.metaKey || e.ctrlKey) && (e.key === '`' || e.key === '~')) {
+        e.preventDefault();
+        setActiveTab((prev) => (prev === 'terminal' ? 'diff' : 'terminal'));
+      }
       // ⌘+Enter to accept diff
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && activeDiff && activeDiff.status === 'pending') {
         e.preventDefault();
@@ -355,9 +362,11 @@ export function App() {
         onCompact={compact}
         onSetAutoCompaction={setAutoCompaction}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+        onOpenOpsModal={() => setIsOpsModalOpen(true)}
+        onToggleTerminal={() => setActiveTab((prev) => (prev === 'terminal' ? 'diff' : 'terminal'))}
+        isTerminalActive={activeTab === 'terminal'}
         onCopyLastAssistantText={getLastAssistantText}
       />
-
       {/* 2. Main 3-Column Layout */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Left Sidebar: File Tree & Sessions */}
@@ -378,6 +387,7 @@ export function App() {
               activeSessionPath={activeSessionPath}
               activeSessionName={engineState?.sessionName}
               status={status}
+              currentCwd={workspacePath}
               onSelectSession={switchSession}
               onNewThread={newSession}
               onRenameSession={renameSession}
@@ -485,6 +495,13 @@ export function App() {
         isEngineRunning={status !== 'idle'}
       />
 
+
+      {/* 5. Ops & Maintenance Modal (Phase 9) */}
+      <OpsModal
+        isOpen={isOpsModalOpen}
+        onClose={() => setIsOpsModalOpen(false)}
+        onRestartEngine={handleRestartEngine}
+      />
       {/* 4. Notification Toast Stack */}
       <ToastStack
         notifications={notifications}

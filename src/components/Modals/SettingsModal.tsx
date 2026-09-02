@@ -32,6 +32,7 @@ import {
   Clock,
   Square,
   Zap,
+  User,
 } from 'lucide-react';
 import {
   ThemeMode,
@@ -248,6 +249,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [rolesSaveSuccess, setRolesSaveSuccess] = useState<boolean>(false);
   const [newRoleName, setNewRoleName] = useState<string>('');
 
+  // State cho Profile (Phase 16)
+  const [availableProfiles, setAvailableProfiles] = useState<string[]>(['default']);
+  const [newProfileInput, setNewProfileInput] = useState<string>('');
+  const [isCreatingProfile, setIsCreatingProfile] = useState<boolean>(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
   const loadSettings = useCallback(async () => {
     try {
       if (window.electronAPI?.getSettings) {
@@ -323,6 +330,59 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setRolesSaveSuccess(false);
   }, []);
 
+  const loadProfiles = useCallback(async () => {
+    try {
+      if (window.electronAPI?.listProfiles) {
+        const res = await window.electronAPI.listProfiles();
+        if (res.success && res.profiles) {
+          setAvailableProfiles(res.profiles);
+        }
+      }
+    } catch {}
+  }, []);
+
+  const handleSwitchProfile = async (newProfile: string) => {
+    setProfileError(null);
+    try {
+      if (window.electronAPI?.setProfile) {
+        const res = await window.electronAPI.setProfile(newProfile);
+        if (res.success) {
+          setSettings((prev) => ({ ...prev, profile: res.profile }));
+          setHasEngineChanged(true);
+        } else {
+          setProfileError(res.error || 'Lỗi chuyển profile');
+        }
+      } else {
+        setSettings((prev) => ({ ...prev, profile: newProfile }));
+      }
+    } catch (err: any) {
+      setProfileError(err?.message || 'Lỗi chuyển profile');
+    }
+  };
+
+  const handleCreateProfile = async () => {
+    const name = newProfileInput.trim();
+    if (!name) return;
+    setIsCreatingProfile(true);
+    setProfileError(null);
+    try {
+      if (window.electronAPI?.createProfile) {
+        const res = await window.electronAPI.createProfile(name);
+        if (res.success && res.profile) {
+          setNewProfileInput('');
+          await loadProfiles();
+          await handleSwitchProfile(res.profile);
+        } else {
+          setProfileError(res.error || 'Lỗi tạo profile');
+        }
+      }
+    } catch (err: any) {
+      setProfileError(err?.message || 'Lỗi tạo profile');
+    } finally {
+      setIsCreatingProfile(false);
+    }
+  };
+
   // Trạng thái đã-đăng-nhập lấy từ `omp usage --json` (chạy nền, mất vài giây)
   const refreshAuthStatus = useCallback(async () => {
     try {
@@ -349,6 +409,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setEditingProvider(null);
       setModelsSaveSuccess(false);
       setShowApiKey(false);
+      loadProfiles();
     }
   }, [isOpen, loadSettings, loadProvidersData, loadModelRoles, refreshAuthStatus]);
 
@@ -958,6 +1019,67 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
+              {/* Profile Management Section (Phase 16) */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-codex-accent" />
+                    Hồ sơ Engine (Profile Cô Lập)
+                  </span>
+                  {settings.profile && settings.profile !== 'default' && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                      active: {settings.profile}
+                    </span>
+                  )}
+                </label>
+                <div className="p-3 bg-surface rounded-xl border border-border space-y-3">
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
+                    Mỗi profile cô lập toàn bộ thông tin đăng nhập auth, danh sách session, settings và cache (~/.omp/profiles/&lt;name&gt;).
+                  </p>
+
+                  {profileError && (
+                    <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs">
+                      {profileError}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                    <select
+                      value={settings.profile || 'default'}
+                      onChange={(e) => handleSwitchProfile(e.target.value)}
+                      className="flex-1 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-medium text-slate-900 dark:text-zinc-100 outline-none"
+                    >
+                      {availableProfiles.map((p) => (
+                        <option key={p} value={p}>
+                          {p === 'default' ? 'default (mặc định)' : p}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Create new profile */}
+                  <div className="pt-2 border-t border-border flex gap-2">
+                    <input
+                      type="text"
+                      value={newProfileInput}
+                      onChange={(e) => setNewProfileInput(e.target.value)}
+                      placeholder="Tên profile mới (ví dụ: work, personal)..."
+                      disabled={isCreatingProfile}
+                      className="flex-1 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 placeholder-slate-400 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateProfile}
+                      disabled={!newProfileInput.trim() || isCreatingProfile}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-codex-accent text-white rounded-lg text-xs font-medium hover:bg-codex-accent/90 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{isCreatingProfile ? 'Đang tạo...' : 'Tạo mới'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Default Model & Provider */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center justify-between">
@@ -1247,6 +1369,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClick={handleFastModeToggle}
                   className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
                     settings.fastMode ? 'bg-codex-accent justify-end' : 'bg-slate-300 dark:bg-zinc-700 justify-start'
+                  }`}
+                >
+                  <div className="w-4 h-4 rounded-full bg-white shadow-xs" />
+                </button>
+              </div>
+
+              {/* Host Tools & Desktop Integration Toggle (Phase 18) */}
+              <div className="p-3.5 bg-surface rounded-xl border border-border flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Boxes className="w-4 h-4 text-purple-500 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-slate-900 dark:text-zinc-100">
+                      Tích hợp Desktop Host Tools & URI Schemes
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-zinc-400">
+                      Cho phép model gửi thông báo macOS, mở file trong app và kích hoạt native picker
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => savePartial({ hostToolsEnabled: settings.hostToolsEnabled === false ? true : false })}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                    settings.hostToolsEnabled !== false ? 'bg-codex-accent justify-end' : 'bg-slate-300 dark:bg-zinc-700 justify-start'
                   }`}
                 >
                   <div className="w-4 h-4 rounded-full bg-white shadow-xs" />

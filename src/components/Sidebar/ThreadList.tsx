@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { MessageSquare, Plus, Edit2, Trash2, Download, Check } from 'lucide-react';
+import { MessageSquare, Plus, Edit2, Trash2, Download, Check, FolderInput, Share2, Users } from 'lucide-react';
 import { OmpSessionInfo, OmpAgentStatus } from '../../types';
+import { ImportSessionModal } from './ImportSessionModal';
+import { ShareSessionModal } from './ShareSessionModal';
+import { JoinSessionModal } from './JoinSessionModal';
 export function formatRelativeTime(dateInput?: string | number | Date): string {
   if (!dateInput) return '';
   const date = new Date(dateInput);
@@ -30,6 +33,7 @@ interface ThreadListProps {
   activeSessionPath?: string | null;
   activeSessionName?: string;
   status?: OmpAgentStatus;
+  currentCwd?: string;
   onSelectSession?: (path: string) => void;
   onNewThread?: () => void;
   onRenameSession?: (name: string) => Promise<boolean>;
@@ -41,6 +45,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
   activeSessionPath = null,
   activeSessionName,
   status = 'idle',
+  currentCwd,
   onSelectSession,
   onNewThread,
   onRenameSession,
@@ -54,8 +59,11 @@ export const ThreadList: React.FC<ThreadListProps> = ({
   const [isRenaming, setIsRenaming] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<OmpSessionInfo | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const [sessionToShare, setSessionToShare] = useState<OmpSessionInfo | null>(null);
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
 
   useEffect(() => {
     if (editingSessionPath && editInputRef.current) {
@@ -90,24 +98,60 @@ export const ThreadList: React.FC<ThreadListProps> = ({
           <MessageSquare className="w-3.5 h-3.5" />
           <span>Recent Sessions</span>
         </div>
-        <button
-          onClick={() => {
-            if (!isBusy && onNewThread) {
-              onNewThread();
-            }
-          }}
-          disabled={isBusy}
-          className={`p-1 rounded-md transition-colors ${
-            isBusy
-              ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600'
-              : 'hover:bg-surface-highlight text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 cursor-pointer'
-          }`}
-          title={isBusy ? 'Đang xử lý...' : 'Tạo phiên mới'}
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              if (!isBusy) {
+                setIsJoinModalOpen(true);
+              }
+            }}
+            disabled={isBusy}
+            className={`p-1 rounded-md transition-colors ${
+              isBusy
+                ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600'
+                : 'hover:bg-surface-highlight text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 cursor-pointer'
+            }`}
+            title="Tham gia Collab session (/join)"
+          >
+            <Users className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!isBusy) {
+                setIsImportModalOpen(true);
+              }
+            }}
+            disabled={isBusy}
+            className={`p-1 rounded-md transition-colors ${
+              isBusy
+                ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600'
+                : 'hover:bg-surface-highlight text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 cursor-pointer'
+            }`}
+            title="Nhập session từ Claude Code / Codex"
+          >
+            <FolderInput className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!isBusy && onNewThread) {
+                onNewThread();
+              }
+            }}
+            disabled={isBusy}
+            className={`p-1 rounded-md transition-colors ${
+              isBusy
+                ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600'
+                : 'hover:bg-surface-highlight text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 cursor-pointer'
+            }`}
+            title={isBusy ? 'Đang xử lý...' : 'Tạo phiên mới'}
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
-
       <div className="space-y-1 overflow-y-auto min-h-0 flex-1 pr-0.5">
         {renderDemoFallback ? (
           demoThreads.map((thread) => (
@@ -288,21 +332,47 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                         >
                           <Download className="w-3 h-3" />
                         </button>
+                        <button
+                          onClick={() => {
+                            if (!isBusy) {
+                              setSessionToShare(session);
+                            }
+                          }}
+                          disabled={isBusy}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-opacity cursor-pointer"
+                          title="Chia sẻ phiên làm việc (/share)"
+                        >
+                          <Share2 className="w-3 h-3" />
+                        </button>
                         <span className="w-1.5 h-1.5 rounded-full bg-codex-accent shrink-0 mt-0.5 ml-1" />
                       </>
                     ) : (
-                      <button
-                        onClick={() => {
-                          if (!isBusy) {
-                            setSessionToDelete(session);
-                          }
-                        }}
-                        disabled={isBusy}
-                        className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition-opacity cursor-pointer"
-                        title="Xóa phiên làm việc"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                      <>
+                        <button
+                          onClick={() => {
+                            if (!isBusy) {
+                              setSessionToShare(session);
+                            }
+                          }}
+                          disabled={isBusy}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-opacity cursor-pointer"
+                          title="Chia sẻ phiên làm việc (/share)"
+                        >
+                          <Share2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!isBusy) {
+                              setSessionToDelete(session);
+                            }
+                          }}
+                          disabled={isBusy}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition-opacity cursor-pointer"
+                          title="Xóa phiên làm việc"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </>
                     )}
                   </div>
                 )}
@@ -379,6 +449,29 @@ export const ThreadList: React.FC<ThreadListProps> = ({
           </div>,
           document.body
         )}
+      <ImportSessionModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        currentCwd={currentCwd}
+        onImportSuccess={(newPath) => {
+          if (onSelectSession) {
+            onSelectSession(newPath);
+          }
+        }}
+      />
+
+      {/* Share Session Modal */}
+      <ShareSessionModal
+        isOpen={Boolean(sessionToShare)}
+        onClose={() => setSessionToShare(null)}
+        session={sessionToShare}
+      />
+
+      {/* Join Session Modal */}
+      <JoinSessionModal
+        isOpen={isJoinModalOpen}
+        onClose={() => setIsJoinModalOpen(false)}
+      />
     </div>
   );
 };

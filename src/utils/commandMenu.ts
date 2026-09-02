@@ -5,6 +5,8 @@ export const DEMO_COMMANDS: OmpCommandInfo[] = [
   { name: 'thinking', description: 'Cài đặt mức độ suy nghĩ (off/low/medium/high/max)', inputHint: '<level>' },
   { name: 'compact', description: 'Nén ngữ cảnh phiên hội thoại hiện tại', inputHint: '[instructions]' },
   { name: 'handoff', description: 'Tạo tài liệu bàn giao ngữ cảnh phiên làm việc hiện tại', inputHint: '[instructions]' },
+  { name: 'share', description: 'Chia sẻ phiên làm việc hiện tại qua liên kết mã hoá', inputHint: '[--gist]' },
+  { name: 'join', description: 'Tham gia phiên làm việc cộng tác (collab) qua liên kết', inputHint: '<link>' },
   { name: 'help', description: 'Hiển thị trợ giúp danh sách lệnh' },
   {
     name: 'security',

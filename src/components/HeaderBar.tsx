@@ -19,6 +19,8 @@ import {
   Database,
   Shield,
   Settings,
+  SlidersHorizontal,
+  Terminal,
 } from 'lucide-react';
 import {
   OmpAgentStatus,
@@ -64,7 +66,10 @@ interface HeaderBarProps {
   onCompact?: (customInstructions?: string) => Promise<{ success: boolean; error?: string }>;
   onSetAutoCompaction?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onOpenSettingsModal?: () => void;
+  onOpenOpsModal?: () => void;
   onCopyLastAssistantText?: () => Promise<string | null>;
+  onToggleTerminal?: () => void;
+  isTerminalActive?: boolean;
 }
 
 const FALLBACK_MODELS: OmpModelInfo[] = [
@@ -124,9 +129,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   autoCompactionEnabled = false,
   onCompact,
   onSetAutoCompaction,
+  onOpenOpsModal,
   onOpenSettingsModal,
   onGetGlobalUsage,
   onGetGlobalStats,
+  onToggleTerminal,
+  isTerminalActive,
   onCopyLastAssistantText,
 }) => {
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
@@ -568,6 +576,30 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </button>
         )}
 
+        {onToggleTerminal && (
+          <button
+            onClick={onToggleTerminal}
+            className={`p-2 rounded-lg text-xs border transition-colors cursor-pointer ${
+              isTerminalActive
+                ? 'bg-emerald-950/60 border-emerald-800/60 text-emerald-400'
+                : 'bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
+            }`}
+            title="Bật/tắt Terminal Console (⌘`)"
+          >
+            <Terminal className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+
+        {onOpenOpsModal && (
+          <button
+            onClick={onOpenOpsModal}
+            className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
+            title="Quản lý vận hành (Ops Center)"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {onOpenSettingsModal && (
           <button

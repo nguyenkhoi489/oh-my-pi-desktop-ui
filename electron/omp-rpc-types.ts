@@ -103,6 +103,27 @@ export interface SetFollowUpModeCommand {
   [key: string]: unknown;
 }
 
+export interface BashCommand {
+  type: 'bash';
+  id?: string;
+  command: string;
+  [key: string]: unknown;
+}
+
+export interface AbortBashCommand {
+  type: 'abort_bash';
+  id?: string;
+  [key: string]: unknown;
+}
+
+export interface BashResultData {
+  exitCode?: number;
+  output?: string;
+  outputBytes?: number;
+  totalLines?: number;
+  truncated?: boolean;
+}
+
 export interface SetInterruptModeCommand {
   type: 'set_interrupt_mode';
   id?: string;
@@ -296,6 +317,58 @@ export interface HandoffCommand {
   id?: string;
   [key: string]: unknown;
 }
+
+export interface SetHostToolsCommand {
+  type: 'set_host_tools';
+  id?: string;
+  tools: Array<{
+    name: string;
+    label?: string;
+    description: string;
+    parameters: Record<string, unknown>;
+    hidden?: boolean;
+    loadMode?: string;
+  }>;
+}
+
+export interface SetHostUriSchemesCommand {
+  type: 'set_host_uri_schemes';
+  id?: string;
+  schemes: string[];
+}
+
+export interface HostToolResultFrame {
+  type: 'host_tool_result';
+  id: string;
+  result: {
+    content: Array<{ type: string; text?: string; [k: string]: unknown }>;
+    details?: Record<string, unknown>;
+  };
+  isError: boolean;
+}
+
+export interface HostToolUpdateFrame {
+  type: 'host_tool_update';
+  id: string;
+  partialResult: {
+    content: Array<{ type: string; text?: string; [k: string]: unknown }>;
+    details?: Record<string, unknown>;
+  };
+}
+
+export interface HostToolCallEvent {
+  type: 'host_tool_call';
+  id: string;
+  toolCallId: string;
+  toolName: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface HostToolCancelEvent {
+  type: 'host_tool_cancel';
+  id?: string;
+  targetId: string;
+}
 export type OmpCommandFrame =
   | NegotiateProtocolCommand
   | PromptCommand
@@ -331,7 +404,13 @@ export type OmpCommandFrame =
   | AbortRetryCommand
   | SetFastModeCommand
   | GetLastAssistantTextCommand
-  | HandoffCommand;
+  | HandoffCommand
+  | BashCommand
+  | AbortBashCommand
+  | SetHostToolsCommand
+  | SetHostUriSchemesCommand
+  | HostToolResultFrame
+  | HostToolUpdateFrame;
 // ==========================================
 // Message Content & Envelope Definitions
 // ==========================================
@@ -791,7 +870,9 @@ export type OmpEventFrame =
   | SubagentProgressEvent
   | SubagentEvent
   | AutoRetryStartEvent
-  | AutoRetryEndEvent;
+  | AutoRetryEndEvent
+  | HostToolCallEvent
+  | HostToolCancelEvent;
 // ==========================================
 // Inbound, Outbound & Overall Frame Unions
 // ==========================================
