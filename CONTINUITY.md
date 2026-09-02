@@ -15,6 +15,26 @@ Entry template:
 - **Refs:** report/journal/plan paths
 ```
 
+## 2026-09-02 — Phase 3: Engine Config Editor UI
+
+- **State:** Đã hoàn thành toàn bộ Phase 3 của roadmap OMP Parity Gap:
+  - `src/utils/engineConfig.ts`: Module pure utils với `groupByPrefix`, `filterEntries` (tìm kiếm key/mô tả không dấu, case-insensitive), `coerceInput` (kiểm tra type boolean, number, enum, string, array, record, validate cú pháp JSON), `formatConfigValue`, danh sách 18 `PINNED_CONFIG_KEYS`, 7 `SESSION_OVERRIDE_KEYS` (kèm tooltip giải thích setting ứng dụng tương ứng), và giới hạn `MAX_RENDER_CONFIG_ROWS = 200`.
+  - `src/components/Modals/settings/EngineConfigEditor.tsx`: Tab component quản lý chỉnh sửa 482 key cấu hình engine, hỗ trợ tìm kiếm nhanh, nút làm mới (forceRefresh), đường dẫn file config, nhóm "Thường dùng" (Ghim) mở sẵn, các nhóm prefix collapsible có đếm số key, badge "Phiên đang ghi đè", các loại input theo type (toggle boolean, select enum với options fallback text, number, string, textarea JSON cho array/record), lưu optimistic theo từng dòng (Enter/blur), nút reset khôi phục mặc định engine, trạng thái dirty/saving/error chi tiết, race condition guard cho async loads.
+  - `src/components/Modals/SettingsModal.tsx`: Tích hợp tab `'engine-config'` vào thanh điều hướng tab cùng icon `FileCode` và nhãn i18n `t('settings.tab.engineConfig')`, kết nối các props callback `getEngineConfig`, `setEngineConfigValue`, `resetEngineConfigValue`, `getEngineConfigPath`.
+  - `src/App.tsx`: Destructure các callback từ `useOmpRpc()` và truyền đầy đủ vào `<SettingsModal />`.
+  - `shared/i18n/vi.ts` & `shared/i18n/en.ts`: Bổ sung đồng bộ 29 khóa i18n mới cho Engine Config Editor.
+  - `scripts/verify-engine-config-ui.mjs`: Test suite 167 assertions kiểm tra pure utils, search, grouping, coercion, JSON validation, pinned keys, session overrides, static contract wiring, và i18n parity.
+  - `package.json`: Thêm script `test:engine-config-ui` vào `test` chain.
+  - Verification: `test:engine-config-ui` (167/167 passed), `test:engine-config` (35/35 passed), `test:i18n` (155/155 passed), `test:modal-ux` (44/44 passed), và cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) 0 lỗi.
+- **In-flight:** Không có. Sẵn sàng cho Phase 4: Launch Options.
+- **Next:**
+  1. Triển khai Phase 4: Launch Options (`plans/260902-2057-omp-parity-gap-i18n/phase-04-launch-options.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-03-engine-config-editor-ui.md`
+  - `scripts/verify-engine-config-ui.mjs`
+
+---
 ## 2026-09-02 — Phase 2: Engine Config Backend (omp config parity)
 
 - **State:** Đã hoàn thành toàn bộ Phase 2 của roadmap OMP Parity Gap:

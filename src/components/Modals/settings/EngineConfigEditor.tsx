@@ -78,7 +78,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
   const [keyErrors, setKeyErrors] = useState<Record<string, string>>({});
 
   const savedTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
-
+  const requestIdRef = useRef<number>(0);
   // Dọn dẹp timer khi unmount
   useEffect(() => {
     return () => {
@@ -90,6 +90,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
   const loadConfig = useCallback(
     async (forceRefresh = false) => {
       if (!getEngineConfig) return;
+      const currentRequestId = ++requestIdRef.current;
       setLoading(true);
       setError(null);
       try {
@@ -97,6 +98,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
           profile: currentProfile,
           forceRefresh,
         });
+        if (currentRequestId !== requestIdRef.current) return;
         if (result.success && result.entries) {
           setEntries(result.entries);
           // Đồng bộ giá trị nháp ban đầu
@@ -108,16 +110,19 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
           setDirtyKeys(new Set());
           setKeyErrors({});
         } else {
-          setError(result.error || 'Failed to fetch engine configuration');
+          setError(result.error || t('common.error.generic'));
         }
       } catch (err: unknown) {
+        if (currentRequestId !== requestIdRef.current) return;
         const msg = err instanceof Error ? err.message : String(err);
-        setError(msg || 'Error loading engine config');
+        setError(msg || t('common.error.generic'));
       } finally {
-        setLoading(false);
+        if (currentRequestId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
     },
-    [getEngineConfig, currentProfile],
+    [getEngineConfig, currentProfile, t],
   );
 
   // Nạp đường dẫn file cấu hình engine
@@ -280,7 +285,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
           );
           setKeyErrors((prev) => ({
             ...prev,
-            [key]: res.error || 'Failed to save config value',
+            [key]: res.error || t('common.error.generic'),
           }));
         }
       } catch (err: unknown) {
@@ -288,8 +293,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
         setEntries((prev) =>
           prev.map((e) => (e.key === key ? { ...e, value: entry.value } : e)),
         );
-        setKeyErrors((prev) => ({ ...prev, [key]: msg || 'Save failed' }));
-      } finally {
+        setKeyErrors((prev) => ({ ...prev, [key]: msg || t('common.error.generic') }));
         setSavingKeys((prev) => {
           const next = new Set(prev);
           next.delete(key);
@@ -316,19 +320,30 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
       try {
         const res = await resetEngineConfigValue(key, { profile: currentProfile });
         if (res.success) {
-          // Tải lại cấu hình mới nhất từ engine
-          await loadConfig(true);
+          if (getEngineConfig) {
+            const fresh = await getEngineConfig({ profile: currentProfile, forceRefresh: true });
+            if (fresh.success && fresh.entries) {
+              setEntries(fresh.entries);
+              const freshEntry = fresh.entries.find((e) => e.key === key);
+              const formattedFresh = formatConfigValue(freshEntry?.value);
+              setDraftValues((prev) => ({ ...prev, [key]: formattedFresh }));
+              setDirtyKeys((prev) => {
+                const next = new Set(prev);
+                next.delete(key);
+                return next;
+              });
+            }
+          }
           markKeySaved(key);
         } else {
           setKeyErrors((prev) => ({
             ...prev,
-            [key]: res.error || 'Failed to reset config value',
+            [key]: res.error || t('common.error.generic'),
           }));
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        setKeyErrors((prev) => ({ ...prev, [key]: msg || 'Reset failed' }));
-      } finally {
+        setKeyErrors((prev) => ({ ...prev, [key]: msg || t('common.error.generic') }));
         setSavingKeys((prev) => {
           const next = new Set(prev);
           next.delete(key);
@@ -490,7 +505,11 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
                 value={draftValue}
                 disabled={isSaving}
                 onChange={(e) => handleDraftChange(key, e.target.value)}
-                placeholder={type === 'array' ? '[\n  "item"\n]' : '{\n  "key": "value"\n}'}
+                onBlur={() => {
+                  if (isDirty) {
+                    handleSaveKey(entry);
+                  }
+                }}
                 className={`w-full bg-surface border rounded-lg p-2.5 text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-codex-accent ${
                   keyError ? 'border-rose-500 focus:ring-rose-500' : 'border-border'
                 }`}
