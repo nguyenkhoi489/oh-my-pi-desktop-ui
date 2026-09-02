@@ -10,6 +10,8 @@ const __dirname = path.dirname(__filename);
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Đường dẫn asset tương đối để app đóng gói nạp được qua file://
+  base: './',
   plugins: [
     react(),
     electron([

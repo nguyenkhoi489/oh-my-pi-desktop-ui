@@ -1,0 +1,276 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="100%" height="100%">
+  <defs>
+    <!-- macOS Dock Elevation Shadows -->
+    <filter id="mac-drop-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.45" />
+      <feDropShadow dx="0" dy="24" stdDeviation="36" flood-color="#000000" flood-opacity="0.6" />
+      <feDropShadow dx="0" dy="48" stdDeviation="64" flood-color="#020617" flood-opacity="0.4" />
+    </filter>
+
+    <!-- Intense Core Glow Filters -->
+    <filter id="neon-cyan-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="16" result="blur1" />
+      <feGaussianBlur in="SourceGraphic" stdDeviation="32" result="blur2" />
+      <feMerge>
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <filter id="core-singularity-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur1" />
+      <feGaussianBlur in="SourceGraphic" stdDeviation="24" result="blur2" />
+      <feGaussianBlur in="SourceGraphic" stdDeviation="56" result="blur3" />
+      <feMerge>
+        <feMergeNode in="blur3" />
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Squircle Clip Path -->
+    <clipPath id="squircle-clip">
+      <rect x="100" y="100" width="824" height="824" rx="185" ry="185" />
+    </clipPath>
+
+    <!-- Background Gradients -->
+    <linearGradient id="bg-obsidian" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#151928" />
+      <stop offset="40%" stop-color="#0A0D18" />
+      <stop offset="100%" stop-color="#030408" />
+    </linearGradient>
+
+    <!-- Ambient Cosmic Field -->
+    <radialGradient id="cosmic-aura" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25" />
+      <stop offset="35%" stop-color="#8b5cf6" stop-opacity="0.18" />
+      <stop offset="70%" stop-color="#d946ef" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Bevel & Edge Borders -->
+    <linearGradient id="border-rim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.8" />
+      <stop offset="30%" stop-color="#818cf8" stop-opacity="0.5" />
+      <stop offset="70%" stop-color="#c084fc" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0.4" />
+    </linearGradient>
+
+    <linearGradient id="inner-dark-stroke" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.8" />
+    </linearGradient>
+
+    <!-- Ring Gradients -->
+    <linearGradient id="ring-cyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5ff" />
+      <stop offset="50%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#2563eb" stop-opacity="0.2" />
+    </linearGradient>
+
+    <linearGradient id="ring-magenta" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f43f5e" />
+      <stop offset="40%" stop-color="#d946ef" />
+      <stop offset="80%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.15" />
+    </linearGradient>
+
+    <linearGradient id="ring-violet" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a855f7" />
+      <stop offset="60%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.3" />
+    </linearGradient>
+
+    <!-- Floating Singularity Sphere Gradients -->
+    <radialGradient id="sphere-core" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="18%" stop-color="#e0f2fe" />
+      <stop offset="35%" stop-color="#38bdf8" />
+      <stop offset="60%" stop-color="#6366f1" />
+      <stop offset="85%" stop-color="#1e1b4b" />
+      <stop offset="100%" stop-color="#030712" />
+    </radialGradient>
+
+    <radialGradient id="singularity-flare" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
+      <stop offset="25%" stop-color="#00f5ff" stop-opacity="0.8" />
+      <stop offset="55%" stop-color="#8b5cf6" stop-opacity="0.5" />
+      <stop offset="85%" stop-color="#d946ef" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Glass Top Sheen -->
+    <linearGradient id="top-gloss" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22" />
+      <stop offset="30%" stop-color="#ffffff" stop-opacity="0.06" />
+      <stop offset="70%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Gravitational Beam / Energy Cones -->
+    <linearGradient id="energy-beam" x1="50%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0" />
+      <stop offset="35%" stop-color="#3b82f6" stop-opacity="0.12" />
+      <stop offset="65%" stop-color="#06b6d4" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#00f5ff" stop-opacity="0.9" />
+    </linearGradient>
+
+    <!-- Pi Glyph Laser Gradient -->
+    <linearGradient id="pi-laser" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="45%" stop-color="#e0f2fe" />
+      <stop offset="80%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+  </defs>
+
+  <!-- ==================== MAIN SQUIRCLE CANVAS ==================== -->
+  <g filter="url(#mac-drop-shadow)">
+    <!-- Base Squircle Shape -->
+    <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#bg-obsidian)" />
+
+    <!-- Content Clipped Inside Squircle -->
+    <g clip-path="url(#squircle-clip)">
+      <!-- Cosmic Nebula Atmosphere -->
+      <circle cx="512" cy="512" r="420" fill="url(#cosmic-aura)" />
+
+      <!-- Deep Cyber Sub-Grid Matrix -->
+      <g stroke="#38bdf8" stroke-opacity="0.06" stroke-width="1.2">
+        <!-- Isometric/Perspective Depth Lines -->
+        <line x1="100" y1="512" x2="924" y2="512" />
+        <line x1="512" y1="100" x2="512" y2="924" />
+        <line x1="220" y1="220" x2="804" y2="804" />
+        <line x1="220" y1="804" x2="804" y2="220" />
+        <circle cx="512" cy="512" r="320" fill="none" stroke-dasharray="4 8" />
+        <circle cx="512" cy="512" r="240" fill="none" stroke-dasharray="2 6" stroke-opacity="0.08" />
+        <circle cx="512" cy="512" r="160" fill="none" stroke-opacity="0.05" />
+      </g>
+
+      <!-- Gravitational Light Well / Antigravity Vortex Rays -->
+      <polygon points="512,512 360,924 664,924" fill="url(#energy-beam)" opacity="0.45" />
+      <polygon points="512,512 430,100 594,100" fill="url(#energy-beam)" opacity="0.3" transform="rotate(180 512 512)" />
+
+      <!-- Floating Energy Sparks & Code Constellations -->
+      <g fill="#38bdf8" opacity="0.75" filter="url(#neon-cyan-glow)">
+        <circle cx="340" cy="380" r="2.5" />
+        <circle cx="680" cy="340" r="3" />
+        <circle cx="640" cy="650" r="2.5" />
+        <circle cx="360" cy="660" r="3.5" />
+        <circle cx="512" cy="280" r="3" fill="#ffffff" />
+        <circle cx="512" cy="744" r="2.5" />
+        <circle cx="280" cy="512" r="2" />
+        <circle cx="744" cy="512" r="3" />
+      </g>
+
+      <!-- Distant Stars / Floating Particles -->
+      <g fill="#ffffff">
+        <circle cx="270" cy="310" r="1.5" opacity="0.4" />
+        <circle cx="760" cy="290" r="1.8" opacity="0.6" />
+        <circle cx="780" cy="680" r="1.4" opacity="0.3" />
+        <circle cx="260" cy="710" r="1.6" opacity="0.5" />
+        <circle cx="430" cy="240" r="1.2" opacity="0.4" />
+        <circle cx="590" cy="780" r="1.5" opacity="0.5" />
+      </g>
+
+      <!-- ==================== ORBITAL GYROSCOPIC RINGS (BACK LAYERS) ==================== -->
+      <!-- Ring 3: Deep Outer Planetary Ring -->
+      <g transform="rotate(25 512 512)">
+        <ellipse cx="512" cy="512" rx="340" ry="120" fill="none" stroke="url(#ring-violet)" stroke-width="2.5" stroke-dasharray="16 12 48 12" opacity="0.6" />
+        <ellipse cx="512" cy="512" rx="340" ry="120" fill="none" stroke="#a855f7" stroke-width="6" stroke-linecap="round" stroke-dasharray="1 180" opacity="0.8" filter="url(#neon-cyan-glow)" />
+      </g>
+
+      <!-- Ring 2: Magenta Quantum Accelerator Ring (Back Half) -->
+      <g transform="rotate(-40 512 512)">
+        <ellipse cx="512" cy="512" rx="290" ry="95" fill="none" stroke="url(#ring-magenta)" stroke-width="4.5" stroke-dasharray="120 40 80 30" opacity="0.7" />
+        <circle cx="230" cy="512" r="5" fill="#f43f5e" filter="url(#neon-cyan-glow)" />
+      </g>
+
+      <!-- Ring 1: Cyan Relativistic Ring (Back Half) -->
+      <g transform="rotate(50 512 512)">
+        <ellipse cx="512" cy="512" rx="270" ry="85" fill="none" stroke="url(#ring-cyan)" stroke-width="5" stroke-dasharray="160 50 40 30" opacity="0.8" />
+        <circle cx="770" cy="512" r="5.5" fill="#00f5ff" filter="url(#neon-cyan-glow)" />
+      </g>
+
+      <!-- Singularity Event Horizon Atmospheric Halo -->
+      <circle cx="512" cy="512" r="190" fill="url(#singularity-flare)" opacity="0.85" filter="url(#core-singularity-glow)" />
+
+      <!-- ==================== CENTRAL QUANTUM CORE SPHERE ==================== -->
+      <!-- Outer Accretion Energy Halo -->
+      <circle cx="512" cy="512" r="132" fill="none" stroke="#00f5ff" stroke-width="3" stroke-opacity="0.7" filter="url(#neon-cyan-glow)" />
+      <circle cx="512" cy="512" r="136" fill="none" stroke="#d946ef" stroke-width="1.8" stroke-dasharray="8 14 32 14" stroke-opacity="0.6" />
+
+      <!-- Main Quantum Sphere (Solid 3D Glass / Obsidian Core) -->
+      <circle cx="512" cy="512" r="126" fill="url(#sphere-core)" />
+
+      <!-- Internal Caustic Energy Core Glow -->
+      <circle cx="485" cy="480" r="85" fill="url(#singularity-flare)" opacity="0.9" />
+
+      <!-- ==================== EMBEDDED AGENTIC PI (π) GLYPH ==================== -->
+      <g filter="url(#core-singularity-glow)">
+        <!-- Futuristic Cyber π Monogram with Geometric Precision -->
+        <!-- Top Horizontal Energy Bar -->
+        <path d="M 432 452 C 432 447 438 442 446 442 L 578 442 C 586 442 592 447 592 452 C 592 457 586 462 578 462 L 446 462 C 438 462 432 457 432 452 Z" fill="url(#pi-laser)" />
+        
+        <!-- Left Vertical Pillar with Smooth Taper -->
+        <path d="M 464 458 L 464 564 C 464 576 454 584 442 584 C 438 584 434 582 434 576 C 434 570 438 566 444 566 C 448 566 450 562 450 556 L 450 458 Z" fill="url(#pi-laser)" />
+        
+        <!-- Right Vertical Pillar with Dynamic Energy Curve -->
+        <path d="M 554 458 L 554 550 C 554 565 562 574 574 574 C 584 574 590 566 590 558 C 590 552 586 548 580 548 C 574 548 570 544 570 538 L 570 458 Z" fill="url(#pi-laser)" />
+
+        <!-- High-Energy Singularity Node Spark at Center of Pi -->
+        <circle cx="512" cy="512" r="5" fill="#ffffff" filter="url(#neon-cyan-glow)" />
+        <circle cx="512" cy="512" r="12" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.8" />
+      </g>
+
+      <!-- Sphere Specular Reflection / 3D Glass Arc -->
+      <path d="M 410 425 C 440 395 490 382 540 390 C 510 392 460 410 435 445 C 425 460 420 478 418 495 C 414 470 416 445 410 425 Z" fill="#ffffff" opacity="0.65" />
+      <ellipse cx="465" cy="435" rx="30" ry="12" transform="rotate(-35 465 435)" fill="#ffffff" opacity="0.45" />
+
+      <!-- ==================== ORBITAL RINGS (FRONT FOREGROUND LAYERS) ==================== -->
+      <!-- Ring 1: Cyan Foreground Arc (Cutting in Front of Core) -->
+      <g transform="rotate(50 512 512)">
+        <path d="M 242 512 A 270 85 0 0 0 782 512" fill="none" stroke="url(#ring-cyan)" stroke-width="6.5" stroke-linecap="round" filter="url(#neon-cyan-glow)" />
+        <circle cx="512" cy="597" r="4.5" fill="#ffffff" filter="url(#neon-cyan-glow)" />
+      </g>
+
+      <!-- Ring 2: Magenta Foreground Arc (Cutting in Front of Core) -->
+      <g transform="rotate(-40 512 512)">
+        <path d="M 222 512 A 290 95 0 0 0 802 512" fill="none" stroke="url(#ring-magenta)" stroke-width="5.5" stroke-linecap="round" filter="url(#neon-cyan-glow)" />
+        <circle cx="512" cy="607" r="4" fill="#ffffff" />
+      </g>
+
+      <!-- Quantum Pulse Emitters (Orbiting Satellites / Sub-Agents) -->
+      <g filter="url(#neon-cyan-glow)">
+        <!-- Top Right AI Drone Node -->
+        <circle cx="688" cy="360" r="6" fill="#00f5ff" />
+        <circle cx="688" cy="360" r="14" fill="none" stroke="#00f5ff" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.8" />
+        <!-- Bottom Left Tool Node -->
+        <circle cx="336" cy="664" r="5" fill="#f43f5e" />
+        <circle cx="336" cy="664" r="11" fill="none" stroke="#f43f5e" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.8" />
+      </g>
+
+      <!-- Terminal / Coding HUD Corner Accents -->
+      <g stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" opacity="0.4">
+        <!-- Top Left Bracket -->
+        <path d="M 160 210 L 160 175 L 195 175" fill="none" />
+        <!-- Top Right Bracket -->
+        <path d="M 864 210 L 864 175 L 829 175" fill="none" />
+        <!-- Bottom Left Bracket -->
+        <path d="M 160 814 L 160 849 L 195 849" fill="none" />
+        <!-- Bottom Right Bracket -->
+        <path d="M 864 814 L 864 849 L 829 849" fill="none" />
+      </g>
+
+      <!-- Top Glass Arch Highlight (Apple macOS Premium Polish) -->
+      <path d="M 100 285 C 100 183 183 100 285 100 L 739 100 C 841 100 924 183 924 285 L 924 430 C 720 370 304 370 100 430 Z" fill="url(#top-gloss)" />
+      
+      <!-- Crisp Top Rim Light -->
+      <path d="M 285 102 L 739 102" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-opacity="0.4" />
+    </g>
+
+    <!-- Outer Squircle Bevel Highlight Rim (Precision Stroke) -->
+    <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="none" stroke="url(#border-rim)" stroke-width="3" />
+    <rect x="102" y="102" width="820" height="820" rx="183" ry="183" fill="none" stroke="url(#inner-dark-stroke)" stroke-width="2" />
+  </g>
+</svg>

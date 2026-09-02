@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OMP Agent - App Icon Showcase</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .dock-glass {
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+    .dock-glass-dark {
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(35px);
+      -webkit-backdrop-filter: blur(35px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+    .icon-bounce {
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .icon-bounce:hover {
+      transform: translateY(-16px) scale(1.15);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen pb-20 selection:bg-cyan-500 selection:text-black">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/40 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl overflow-hidden shadow-lg shadow-cyan-500/20 border border-cyan-500/30">
+          <img src="omp-agent-icon.svg" alt="OMP Agent Icon" class="w-full h-full object-contain" />
+        </div>
+        <div>
+          <h1 class="font-bold text-lg text-white flex items-center gap-2">
+            OMP Agent <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">Icon Design System</span>
+          </h1>
+          <p class="text-xs text-slate-400">Concept: Antigravity Quantum Core (macOS Squircle)</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="omp-agent-icon.svg" download="omp-agent-icon.svg" class="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-xs transition flex items-center gap-2 shadow-lg shadow-cyan-500/25">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Tải Vector SVG
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 pt-10 space-y-12">
+    <!-- Hero Showcase -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-gradient-to-b from-slate-900/80 to-slate-950 border border-slate-800 rounded-3xl p-8 lg:p-12 relative overflow-hidden">
+      <div class="absolute -top-32 -left-32 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-fuchsia-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <!-- Icon Display -->
+      <div class="lg:col-span-5 flex flex-col items-center justify-center">
+        <div class="w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 relative group">
+          <div class="absolute inset-0 bg-gradient-to-tr from-cyan-500/30 to-fuchsia-500/30 rounded-[80px] blur-2xl group-hover:blur-3xl transition duration-500 opacity-70"></div>
+          <img src="omp-agent-icon.svg" alt="OMP Agent Master Icon" class="w-full h-full relative z-10 transition duration-500 group-hover:scale-105" />
+        </div>
+        <span class="mt-4 text-xs mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-full border border-slate-800">Master Canvas: 1024 × 1024 px</span>
+      </div>
+
+      <!-- Specs & Story -->
+      <div class="lg:col-span-7 space-y-6">
+        <div>
+          <span class="text-xs font-bold tracking-wider uppercase text-cyan-400">Design Breakdown</span>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-white mt-1">Antigravity Quantum Core</h2>
+          <p class="text-sm text-slate-300 mt-2 leading-relaxed">
+            Thiết kế được xây dựng theo chuẩn <strong>Apple macOS Human Interface Guidelines (Squircle 824px / r185px)</strong> kết hợp linh hồn của <strong>oh-my-pi</strong> và triết lý <strong>Antigravity</strong>: Không gian lượng tử đa lớp, lõi năng lượng phát sáng không trọng lực và ký tự π viễn tưởng.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1.5">
+            <div class="flex items-center gap-2 text-cyan-400 font-semibold">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+              Obsidian Dark Glass
+            </div>
+            <p class="text-slate-400">Nền đen vũ trụ sâu thẳm kết hợp viền vát chamfered phát sáng neon vi mô.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1.5">
+            <div class="flex items-center gap-2 text-fuchsia-400 font-semibold">
+              <span class="w-2 h-2 rounded-full bg-fuchsia-400"></span>
+              Gyroscopic Orbital Rings
+            </div>
+            <p class="text-slate-400">3 vòng quỹ đạo đa chiều cắt lớp 3D (cyan, fuchsia, violet) chuyển tải tính linh hoạt của coding agent.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1.5">
+            <div class="flex items-center gap-2 text-indigo-400 font-semibold">
+              <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+              Laser Singularity &amp; π Monogram
+            </div>
+            <p class="text-slate-400">Ký tự π cách điệu viễn tưởng phát sáng laser tại trung tâm điểm kỳ dị.</p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1.5">
+            <div class="flex items-center gap-2 text-sky-400 font-semibold">
+              <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+              Antigravity Energy Cones
+            </div>
+            <p class="text-slate-400">Tia năng lượng chống trọng lực và các hạt photon lượng tử lơ lửng.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- macOS Dock Simulation -->
+    <section class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-bold text-white">Mô phỏng trên macOS Dock</h3>
+          <p class="text-xs text-slate-400">Rê chuột vào các icon trên Dock để cảm nhận hiệu ứng tương tác tự nhiên</p>
+        </div>
+      </div>
+
+      <!-- Dock Container with Wallpaper Background -->
+      <div class="relative h-64 rounded-3xl overflow-hidden border border-slate-800 flex items-end justify-center pb-6 bg-cover bg-center" style="background-image: url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2000&auto=format&fit=crop');">
+        <div class="absolute inset-0 bg-slate-950/40"></div>
+
+        <!-- The Dock -->
+        <div class="relative z-10 dock-glass-dark px-4 py-2.5 rounded-2xl flex items-center gap-3">
+          <!-- Finder Mock -->
+          <div class="w-14 h-14 rounded-xl overflow-hidden icon-bounce cursor-pointer flex items-center justify-center bg-gradient-to-tr from-sky-400 to-blue-600 shadow-md">
+            <svg class="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14.5h-2v-2h2v2zm0-4h-2V7h2v5.5z"/></svg>
+          </div>
+
+          <!-- VSCode Mock -->
+          <div class="w-14 h-14 rounded-xl overflow-hidden icon-bounce cursor-pointer flex items-center justify-center bg-[#1e1e1e] border border-slate-700 shadow-md">
+            <svg class="w-8 h-8 text-sky-400" viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 3L8.5 10.5 4 7 2 8.5 6 12 2 15.5 4 17l4.5-3.5 9 7.5 4.5-2V5l-4.5-2z"/></svg>
+          </div>
+
+          <!-- OMP Agent (Featured) -->
+          <div class="relative group">
+            <div class="w-16 h-16 rounded-2xl icon-bounce cursor-pointer relative z-10 transition transform group-hover:scale-125">
+              <img src="omp-agent-icon.svg" alt="OMP Agent" class="w-full h-full object-contain" />
+            </div>
+            <!-- Active Dot Indicator -->
+            <div class="w-1 h-1 rounded-full bg-cyan-400 mx-auto mt-1 shadow-sm shadow-cyan-400"></div>
+          </div>
+
+          <!-- Terminal Mock -->
+          <div class="w-14 h-14 rounded-xl overflow-hidden icon-bounce cursor-pointer flex items-center justify-center bg-black border border-slate-700 shadow-md">
+            <span class="mono text-green-400 font-bold text-base">>_</span>
+          </div>
+
+          <!-- Safari Mock -->
+          <div class="w-14 h-14 rounded-xl overflow-hidden icon-bounce cursor-pointer flex items-center justify-center bg-gradient-to-tr from-blue-500 to-indigo-600 shadow-md">
+            <svg class="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-12.5l-6 2.5-2.5 6 6-2.5 2.5-6z"/></svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scale & Grid Matrix (HiDPI Multi-size Matrix) -->
+    <section class="space-y-6">
+      <div>
+        <h3 class="text-lg font-bold text-white">HiDPI Multi-size Icon Matrix</h3>
+        <p class="text-xs text-slate-400">Kiểm tra độ sắc nét và nhận diện hình ảnh ở mọi kích thước chuẩn macOS</p>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+        <!-- 512px -->
+        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col items-center justify-between gap-3">
+          <div class="w-28 h-28 flex items-center justify-center">
+            <img src="omp-agent-icon.svg" class="w-full h-full object-contain" />
+          </div>
+          <span class="mono text-[11px] text-slate-400">512 × 512 px</span>
+        </div>
+
+        <!-- 256px -->
+        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col items-center justify-between gap-3">
+          <div class="w-20 h-20 flex items-center justify-center">
+            <img src="omp-agent-icon.svg" class="w-full h-full object-contain" />
+          </div>
+          <span class="mono text-[11px] text-slate-400">256 × 256 px</span>
+        </div>
+
+        <!-- 128px -->
+        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col items-center justify-between gap-3">
+          <div class="w-16 h-16 flex items-center justify-center">
+            <img src="omp-agent-icon.svg" class="w-full h-full object-contain" />
+          </div>
+          <span class="mono text-[11px] text-slate-400">128 × 128 px</span>
+        </div>
+
+        <!-- 64px -->
+        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col items-center justify-between gap-3">
+          <div class="w-12 h-12 flex items-center justify-center">
+            <img src="omp-agent-icon.svg" class="w-full h-full object-contain" />
+          </div>
+          <span class="mono text-[11px] text-slate-400">64 × 64 px</span>
+        </div>
+
+        <!-- 32px -->
+        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col items-center justify-between gap-3">
+          <div class="w-8 h-8 flex items-center justify-center">
+            <img src="omp-agent-icon.svg" class="w-full h-full object-contain" />
+          </div>
+          <span class="mono text-[11px] text-slate-400">32 × 32 px</span>
+        </div>
+
+        <!-- 16px -->
+        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col items-center justify-between gap-3">
+          <div class="w-4 h-4 flex items-center justify-center">
+            <img src="omp-agent-icon.svg" class="w-full h-full object-contain" />
+          </div>
+          <span class="mono text-[11px] text-slate-400">16 × 16 px</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contrast Test: Dark vs Light Theme -->
+    <section class="space-y-4">
+      <div>
+        <h3 class="text-lg font-bold text-white">Kiểm tra độ tương phản nền (Dark vs Light)</h3>
+        <p class="text-xs text-slate-400">Đảm bảo icon nổi bật trên cả hình nền sáng và tối</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Dark Background -->
+        <div class="p-8 rounded-3xl bg-slate-950 border border-slate-800 flex flex-col items-center justify-center gap-4">
+          <div class="w-36 h-36">
+            <img src="omp-agent-icon.svg" class="w-full h-full object-contain" />
+          </div>
+          <span class="text-xs font-semibold text-slate-300">Dark Mode / OLED Desktop</span>
+        </div>
+
+        <!-- Light Background -->
+        <div class="p-8 rounded-3xl bg-slate-200 border border-slate-300 flex flex-col items-center justify-center gap-4">
+          <div class="w-36 h-36">
+            <img src="omp-agent-icon.svg" class="w-full h-full object-contain" />
+          </div>
+          <span class="text-xs font-semibold text-slate-700">Light Mode / Daylight Desktop</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="mt-16 text-center text-xs text-slate-500 border-t border-slate-900 pt-8">
+    OMP Agent Desktop IDE • Crafted with Antigravity Quantum Core Vector Identity
+  </footer>
+</body>
+</html>

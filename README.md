@@ -50,9 +50,23 @@ npm run dev
 ### 3. Build gói cài đặt macOS (.dmg / .app)
 
 ```bash
-npm run build
+npm run dist:mac                     # arm64, ký Developer ID + notarize + staple
+npm run dist:mac -- --universal      # arm64 + x64 trong một bundle
+npm run dist:mac -- --skip-notarize  # bỏ notarize (chỉ chạy sạch trên máy build)
 ```
-File cài đặt sẽ được tạo tự động trong thư mục `dist/` hoặc `release/`.
+
+Kết quả: `release/OMP Agent-<version>-<arch>.dmg` (kéo app vào `/Applications`) và `release/mac-<arch>/OMP Agent.app`.
+
+Yêu cầu để ký và notarize:
+* Xcode Command Line Tools (`xcrun`, `stapler`, `notarytool`).
+* Identity "Developer ID Application" trong Keychain; electron-builder tự chọn.
+* Keychain profile `ktstack-notary` cho `notarytool` (đổi bằng biến `NOTARY_PROFILE`), tạo một lần:
+  ```bash
+  xcrun notarytool store-credentials ktstack-notary --apple-id you@example.com --team-id 44452PW7V3 --password APP-SPECIFIC-PW
+  ```
+
+Pipeline nằm trong `scripts/release/`: `build-mac.sh` (typecheck → vite build → electron-builder → ký/notarize → DMG), `notarize.sh`, `build-dmg.sh`.
+`npm run build` chỉ tạo `.app` (ký nếu có identity, không notarize, không DMG) để thử nhanh.
 
 ---
 

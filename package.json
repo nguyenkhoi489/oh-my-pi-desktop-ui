@@ -10,6 +10,7 @@
     "build": "tsc && vite build && electron-builder --dir",
     "build:renderer": "tsc && vite build",
     "build:electron": "tsc -p tsconfig.node.json",
+    "dist:mac": "bash scripts/release/build-mac.sh",
     "start": "vite",
     "test": "npm run test:preload && npm run test:framer && npm run test:bridge && npm run test:slash-commands && npm run test:tool-events && npm run test:extension-ui && npm run test:notifications && npm run test:observability && npm run test:session-control && npm run test:engine-control && npm run test:composer-attach && npm run test:composer-image-attachment && npm run test:markdown && npm run test:handshake && npm run test:stream && npm run test:model-state && npm run test:sessions && npm run test:subagent-hub && npm run test:renderer-chat && npm run test:renderer-tool-diff && npm run test:renderer-ui-request && npm run test:renderer-sessions && npm run test:tool-events-live && npm run test:extension-ui-live && npm run test:sessions-live && npm run test:auth-login && npm run test:rpc-parity-live && npm run test:steering && npm run test:todos-panel && npm run test:subagent-transcript && npm run test:retry-fastmode && npm run test:usage-stats && npm run test:session-import && npm run test:engine-maintenance && npm run test:terminal && npm run test:share-join && npm run test:ops-manager && npm run test:extension-manager && npm run test:profiles && npm run test:host-tools",
     "test:host-tools": "node --experimental-strip-types scripts/verify-host-tools.mjs",
@@ -95,5 +96,27 @@
     "vite": "^6.2.0",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "build": {
+    "appId": "com.omp.agent",
+    "productName": "OMP Agent",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "assets/icons/icon.icns",
+      "target": [
+        "dir"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "notarize": false
+    },
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "assets/icons/icon-1024.png"
+    ]
   }
 }
