@@ -41,7 +41,6 @@ interface AgentPanelProps {
   onAbortAndPrompt?: (prompt: string, contextFiles?: string[]) => void;
   onFollowUpMessage?: (prompt: string, contextFiles?: string[]) => void;
   followUpQueue?: Array<{ id: string; content: string; files?: string[]; timestamp: number }>;
-  onCancelFollowUp?: (id: string) => void;
   onBranchSession?: (entryId: string) => void;
   onCollapsePanel?: () => void;
   onOpenFile?: (filePath: string) => void;
@@ -75,7 +74,6 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   onOpenFile,
   onFollowUpMessage,
   followUpQueue,
-  onCancelFollowUp,
   todoPhases,
   todos,
   retryState,
@@ -174,7 +172,6 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
         workspacePath={workspacePath}
         onFollowUpMessage={onFollowUpMessage}
         followUpQueue={followUpQueue}
-        onCancelFollowUp={onCancelFollowUp}
         availableCommands={availableCommands}
         isToolApprovalPending={Boolean(pendingToolApproval)}
       />

@@ -7,6 +7,7 @@ import type {
   PermissionRequest,
   OmpUiRequest,
   OmpNotification,
+  HostOpenRequest,
   OmpEngineStatusEntry,
   OmpWidgetEntry,
   ChatMessage,
@@ -390,6 +391,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: unknown, notif: OmpNotification) => callback(notif);
     ipcRenderer.on('omp:notification', handler);
     return () => ipcRenderer.removeListener('omp:notification', handler);
+  },
+
+  onHostOpenRequest: (callback: (request: HostOpenRequest) => void) => {
+    const handler = (_: unknown, request: HostOpenRequest) => callback(request);
+    ipcRenderer.on('omp:host-open-request', handler);
+    return () => ipcRenderer.removeListener('omp:host-open-request', handler);
   },
 
   onOmpEngineStatus: (callback: (statuses: OmpEngineStatusEntry[]) => void) => {

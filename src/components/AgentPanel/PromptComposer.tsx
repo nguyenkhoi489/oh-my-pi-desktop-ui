@@ -41,7 +41,6 @@ interface PromptComposerProps {
   onAbortAndPrompt?: (prompt: string, contextFiles?: string[]) => void;
   onFollowUpMessage?: (prompt: string, contextFiles?: string[]) => void;
   followUpQueue?: Array<{ id: string; content: string; files?: string[]; timestamp: number }>;
-  onCancelFollowUp?: (id: string) => void;
   status: OmpAgentStatus;
   workspaceFiles?: WorkspaceFile[];
   workspacePath?: string;
@@ -57,7 +56,6 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   onAbortAndPrompt,
   onFollowUpMessage,
   followUpQueue,
-  onCancelFollowUp,
   status,
   workspaceFiles,
   workspacePath,
@@ -705,16 +703,6 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                     </span>
                   )}
                 </div>
-                {onCancelFollowUp && (
-                  <button
-                    type="button"
-                    onClick={() => onCancelFollowUp(item.id)}
-                    className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors cursor-pointer shrink-0"
-                    title="Huỷ tin nhắn follow-up này"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
               </div>
             ))}
           </div>

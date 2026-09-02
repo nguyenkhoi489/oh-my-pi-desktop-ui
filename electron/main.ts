@@ -67,6 +67,7 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
     authLoginManager.dispose();
+    engineMaintenanceManager.dispose();
     if (ompBridge) {
       ompBridge.stopProcess();
     }

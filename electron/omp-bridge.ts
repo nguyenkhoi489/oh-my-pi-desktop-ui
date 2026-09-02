@@ -29,11 +29,12 @@ import type {
   OmpTodoPhase,
   OmpTodoItem,
   OmpTodoStatus,
+  HostOpenRequest,
 } from './types.ts';
 import type { SettingsStore } from './settings-store.ts';
 import { NdjsonFramer } from './ndjson-framer.ts';
 import { RpcFrameLogger } from './rpc-frame-logger.ts';
-import { HostToolRegistry } from './host-tools.ts';
+import { HostToolRegistry, HostUriRouter } from './host-tools.ts';
 import type {
   OmpFrame,
   OmpInboundFrame,
@@ -103,6 +104,8 @@ import type {
   SetHostToolsCommand,
   SetHostUriSchemesCommand,
   HostToolResultFrame,
+  HostUriRequestEvent,
+  HostUriResultFrame,
   SetTodosCommand,
   SetTodosResponseData,
   TodosEvent,
@@ -228,7 +231,14 @@ export class OmpBridge {
   private currentProfile: string = 'default';
   private currentThinkingLevel: OmpThinkingLevel = 'off';
   private availableCommands: OmpCommandInfo[] = [];
-  public hostToolRegistry: HostToolRegistry = new HostToolRegistry();
+  public hostToolRegistry: HostToolRegistry = new HostToolRegistry({
+    openInApp: (request) => this.emitHostOpenRequest(request),
+  });
+  public hostUriRouter: HostUriRouter = new HostUriRouter({
+    openInApp: (request) => this.emitHostOpenRequest(request),
+    resolvePath: (target) => path.resolve(this.workspacePath || process.cwd(), target),
+  });
+  private activeHostUriRequests: Map<string, AbortController> = new Map();
   private activeHostToolCalls: Map<string, AbortController> = new Map();
   private sessionName: string | undefined = undefined;
   private lastContextUsage: OmpContextUsage | null = null;
@@ -1364,6 +1374,7 @@ export class OmpBridge {
   }
 
   public async setHostUriSchemes(schemes: string[]): Promise<{ success: boolean; schemes?: string[]; error?: string }> {
+    const schemeEntries = schemes.map((scheme) => ({ scheme, immutable: true }));
     if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
       return { success: false, error: 'Engine offline' };
     }
@@ -1371,7 +1382,7 @@ export class OmpBridge {
     const frame: SetHostUriSchemesCommand = {
       type: 'set_host_uri_schemes',
       id: cmdId,
-      schemes,
+      schemes: schemeEntries,
     };
     try {
       const res = await this.sendCommand(frame);
@@ -2025,6 +2036,31 @@ export class OmpBridge {
     }
   }
 
+  // Chuyển yêu cầu mở file/session từ model sang renderer, kèm thông báo nguồn gốc
+  private emitHostOpenRequest(request: HostOpenRequest) {
+    if (!this.window || this.window.isDestroyed()) return;
+    this.window.webContents.send('omp:host-open-request', request);
+    const label = request.kind === 'session' ? 'session' : 'file';
+    this.emitNotification(`Model yêu cầu mở ${label}: ${request.target}`, 'info');
+  }
+
+  private handleHostUriRequest(frame: HostUriRequestEvent) {
+    const requestId = frame.id;
+    const abortController = new AbortController();
+    this.activeHostUriRequests.set(requestId, abortController);
+
+    this.hostUriRouter
+      .handle(frame.operation, String(frame.url || ''), frame.content)
+      .catch((err) => ({ isError: true, error: err?.message || String(err) }))
+      .then((payload) => {
+        this.activeHostUriRequests.delete(requestId);
+        if (abortController.signal.aborted) return;
+        if (!this.process || !this.process.stdin?.writable) return;
+        const replyFrame: HostUriResultFrame = { type: 'host_uri_result', id: requestId, ...payload };
+        this.writeFrame(replyFrame);
+      });
+  }
+
   public emitNotification(message: string, notifyType: string = 'info') {
     const notif: OmpNotification = {
       id: this.generateId(),
@@ -2361,7 +2397,7 @@ export class OmpBridge {
             this.registerHostTools().catch((err) => {
               console.warn('[OmpBridge] set_host_tools unavailable:', err.message);
             });
-            this.setHostUriSchemes(['ompapp', 'vscode', 'cursor']).catch((err) => {
+            this.setHostUriSchemes(this.hostUriRouter.getSchemes()).catch((err) => {
               console.warn('[OmpBridge] set_host_uri_schemes unavailable:', err.message);
             });
             if (this.settingsStore) {
@@ -2469,6 +2505,20 @@ export class OmpBridge {
       if (targetId && this.activeHostToolCalls.has(targetId)) {
         this.activeHostToolCalls.get(targetId)!.abort();
         this.activeHostToolCalls.delete(targetId);
+      }
+      return;
+    }
+
+    if (frame.type === 'host_uri_request') {
+      this.handleHostUriRequest(frame as HostUriRequestEvent);
+      return;
+    }
+
+    if (frame.type === 'host_uri_cancel') {
+      const targetId = (frame as any).targetId as string;
+      if (targetId && this.activeHostUriRequests.has(targetId)) {
+        this.activeHostUriRequests.get(targetId)!.abort();
+        this.activeHostUriRequests.delete(targetId);
       }
       return;
     }

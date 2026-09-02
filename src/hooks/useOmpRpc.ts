@@ -27,6 +27,7 @@ import {
   GlobalUsageResult,
   GlobalStatsResult,
 } from '../types';
+import { reconcileFollowUpQueue, type FollowUpQueueItem } from '../utils/followUpQueue';
 import { DEMO_MESSAGES, DEMO_INITIAL_DIFF } from '../mock/demoData';
 export function useOmpRpc() {
   const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI);
@@ -57,8 +58,9 @@ export function useOmpRpc() {
   const activeUiRequest = uiRequestQueue.length > 0 ? uiRequestQueue[0] : null;
   
   // Follow-up Queue State (Phase 3)
-  const [followUpQueue, setFollowUpQueue] = useState<Array<{ id: string; content: string; files?: string[]; timestamp: number }>>([]);
-  const followUpQueueRef = useRef<Array<{ id: string; content: string; files?: string[]; timestamp: number }>>([]);
+  const [followUpQueue, setFollowUpQueue] = useState<FollowUpQueueItem[]>([]);
+  const followUpQueueRef = useRef<FollowUpQueueItem[]>([]);
+  const lastStatusRef = useRef<OmpAgentStatus>('idle');
   const [availableModels, setAvailableModels] = useState<OmpModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState<OmpModelInfo | null>(null);
   const [thinkingLevel, setThinkingLevel] = useState<OmpThinkingLevel>('off');
@@ -213,13 +215,17 @@ export function useOmpRpc() {
           setApprovalMode(res.state.approvalMode);
         }
         if (res.state.queuedMessageCount !== undefined) {
-          setFollowUpQueue((prev) => {
-            if (res.state!.queuedMessageCount === 0) return [];
-            if (res.state!.queuedMessageCount! < prev.length) {
-              return prev.slice(prev.length - res.state!.queuedMessageCount!);
-            }
-            return prev;
-          });
+          const { queue, consumedIds } = reconcileFollowUpQueue(
+            followUpQueueRef.current,
+            res.state.queuedMessageCount
+          );
+          if (consumedIds.length > 0) {
+            followUpQueueRef.current = queue;
+            setFollowUpQueue(queue);
+            setMessages((prev) =>
+              prev.map((m) => (consumedIds.includes(m.id) ? { ...m, queued: false } : m))
+            );
+          }
         }
         if (res.state.todoPhases || res.state.todos) {
           if (res.state.todoPhases) setTodoPhases(res.state.todoPhases);
@@ -597,11 +603,16 @@ export function useOmpRpc() {
     }
 
     const unsubStatus = window.electronAPI.onOmpStatusChange((newStatus) => {
+      const leftIdle = lastStatusRef.current === 'idle' && newStatus !== 'idle';
+      lastStatusRef.current = newStatus;
       setStatus(newStatus);
       if (newStatus === 'idle') {
         refreshEngineState();
         refreshSessions();
         refreshCommands();
+      } else if (leftIdle && followUpQueueRef.current.length > 0) {
+        // Engine vừa tự chạy tin follow-up trong hàng đợi, đồng bộ lại queuedMessageCount
+        refreshEngineState();
       }
     });
 
@@ -688,22 +699,6 @@ export function useOmpRpc() {
       activeToolCallsRef.current = [];
       setActiveToolCalls([]);
       refreshSessions();
-      // Tự động kích hoạt follow-up tiếp theo trong hàng đợi nếu có
-      if (followUpQueueRef.current.length > 0) {
-        const [nextFollowUp, ...remaining] = followUpQueueRef.current;
-        followUpQueueRef.current = remaining;
-        setFollowUpQueue(remaining);
-
-        setMessages((prev) =>
-          prev.map((m) => (m.id === nextFollowUp.id ? { ...m, queued: false } : m))
-        );
-
-        if (window.electronAPI) {
-          window.electronAPI.sendOmpMessage(nextFollowUp.content, { files: nextFollowUp.files }).catch((err) => {
-            console.error('[useOmpRpc] Failed to dispatch queued follow-up:', err);
-          });
-        }
-      }
     });
 
     const unsubSubagents = window.electronAPI.onOmpSubagentUpdate
@@ -1005,18 +1000,16 @@ export function useOmpRpc() {
       if (!message.trim()) return;
 
       const itemId = 'msg-queued-' + Date.now();
-      const queuedItem = {
+      const queuedItem: FollowUpQueueItem = {
         id: itemId,
         content: message,
         files: contextFiles,
         timestamp: Date.now(),
       };
 
-      setFollowUpQueue((prev) => {
-        const updated = [...prev, queuedItem];
-        followUpQueueRef.current = updated;
-        return updated;
-      });
+      const updatedQueue = [...followUpQueueRef.current, queuedItem];
+      followUpQueueRef.current = updatedQueue;
+      setFollowUpQueue(updatedQueue);
 
       const userMsg: ChatMessage = {
         id: itemId,
@@ -1042,18 +1035,21 @@ export function useOmpRpc() {
       newMessages.push(userMsg);
 
       setMessages((prev) => [...prev, ...newMessages]);
+
+      if (!window.electronAPI) return;
+      try {
+        const res = await window.electronAPI.followUpOmp(message, { files: contextFiles });
+        if (!res.success) throw new Error(res.error || 'follow_up bị engine từ chối');
+      } catch (err) {
+        console.error('[useOmpRpc] Failed to queue follow-up via Electron IPC:', err);
+        const remaining = followUpQueueRef.current.filter((item) => item.id !== itemId);
+        followUpQueueRef.current = remaining;
+        setFollowUpQueue(remaining);
+        setMessages((prev) => prev.filter((m) => m.id !== itemId));
+      }
     },
     []
   );
-
-  const cancelFollowUp = useCallback((id: string) => {
-    setFollowUpQueue((prev) => {
-      const updated = prev.filter((item) => item.id !== id);
-      followUpQueueRef.current = updated;
-      return updated;
-    });
-    setMessages((prev) => prev.filter((m) => m.id !== id));
-  }, []);
 
   const abort = useCallback(async () => {
     if (window.electronAPI) {
@@ -1390,7 +1386,6 @@ export function useOmpRpc() {
     abortAndPrompt,
     followUpQueue,
     followUp,
-    cancelFollowUp,
     abort,
     respondPermission,
     acceptDiff,

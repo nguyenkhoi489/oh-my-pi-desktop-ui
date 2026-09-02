@@ -136,7 +136,6 @@ export function App() {
     abortAndPrompt,
     followUpQueue,
     followUp,
-    cancelFollowUp,
     acceptDiff,
     rejectDiff,
     notifications,
@@ -269,6 +268,19 @@ export function App() {
     },
     [files, workspacePath, selectFile]
   );
+
+  // Nhận yêu cầu mở file/session do model gửi qua host tool
+  useEffect(() => {
+    if (!window.electronAPI?.onHostOpenRequest) return;
+    return window.electronAPI.onHostOpenRequest((request) => {
+      if (request.kind === 'file') {
+        handleOpenFileByPath(request.target);
+        return;
+      }
+      const session = sessions.find((s) => s.id === request.target || s.path === request.target);
+      if (session) switchSession(session.path);
+    });
+  }, [handleOpenFileByPath, sessions, switchSession]);
 
 
   // Keyboard shortcut listener: ⌘+K (Omnibar), ⌘+B (Left Sidebar), ⌘+J (Right Sidebar), ⌘+Enter (Accept Diff)
@@ -440,7 +452,6 @@ export function App() {
               onAbortAndPrompt={abortAndPrompt}
               onFollowUpMessage={followUp}
               followUpQueue={followUpQueue}
-              onCancelFollowUp={cancelFollowUp}
               onBranchSession={branchFromMessage}
               onCollapsePanel={collapseRightSidebar}
               onOpenFile={handleOpenFileByPath}

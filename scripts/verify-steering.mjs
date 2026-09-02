@@ -26,6 +26,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { OmpBridge } from '../electron/omp-bridge.ts';
+import { reconcileFollowUpQueue } from '../src/utils/followUpQueue.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -411,69 +412,45 @@ async function runSteeringVerification() {
     const composerSource = fs.readFileSync(path.resolve(__dirname, '../src/components/AgentPanel/PromptComposer.tsx'), 'utf-8');
     assert(composerSource.includes('onFollowUpMessage'), 'PromptComposer accepts onFollowUpMessage');
     assert(composerSource.includes('followUpQueue'), 'PromptComposer accepts followUpQueue');
-    assert(composerSource.includes('onCancelFollowUp'), 'PromptComposer accepts onCancelFollowUp');
+    assert(!composerSource.includes('onCancelFollowUp'), 'PromptComposer offers no per-item cancel (engine exposes no dequeue RPC)');
     assert(composerSource.includes('Queue follow-up'), 'PromptComposer has Queue follow-up action');
 
     const hookSource = fs.readFileSync(path.resolve(__dirname, '../src/hooks/useOmpRpc.ts'), 'utf-8');
     assert(hookSource.includes('followUpQueue'), 'useOmpRpc exports followUpQueue');
     assert(hookSource.includes('followUp,'), 'useOmpRpc exports followUp callback');
-    assert(hookSource.includes('cancelFollowUp,'), 'useOmpRpc exports cancelFollowUp callback');
 
     const settingsModalSource = fs.readFileSync(path.resolve(__dirname, '../src/components/Modals/SettingsModal.tsx'), 'utf-8');
     assert(settingsModalSource.includes('steeringMode'), 'SettingsModal contains steeringMode config');
     assert(settingsModalSource.includes('followUpMode'), 'SettingsModal contains followUpMode config');
     assert(settingsModalSource.includes('interruptMode'), 'SettingsModal contains interruptMode config');
+    assert(hookSource.includes('followUpOmp('), 'Hook sends follow-ups to the engine via followUpOmp');
+    assert(hookSource.includes('reconcileFollowUpQueue('), 'Hook reconciles local queue with engine queuedMessageCount');
+    assert(!hookSource.includes('sendOmpMessage(nextFollowUp'), 'Hook no longer dispatches queued prompts client-side');
   }
 
   // ----------------------------------------------------
-  // Test 11: Follow-up Queue simulation & cancellation
+  // Test 11: Follow-up queue reconciliation with engine queuedMessageCount
   // ----------------------------------------------------
-  console.log('\n[Test 11] Follow-up Queue enqueue & cancellation simulation...');
+  console.log('\n[Test 11] Follow-up queue reconciliation with engine queuedMessageCount...');
   {
-    let queue = [];
-    let messages = [];
-    let sentPrompts = [];
-    let counter = 0;
+    const item = (id) => ({ id, content: id, timestamp: 1 });
+    const queue = [item('q1'), item('q2'), item('q3')];
 
-    // Enqueue follow-up
-    const enqueue = (msg) => {
-      const id = 'msg-queued-' + (++counter);
-      queue.push({ id, content: msg, timestamp: Date.now() });
-      messages.push({ id, role: 'user', content: msg, queued: true });
-      return id;
-    };
+    const same = reconcileFollowUpQueue(queue, 3);
+    assert(same.queue === queue && same.consumedIds.length === 0, 'Matching count leaves queue untouched');
 
-    // Cancel follow-up
-    const cancel = (id) => {
-      queue = queue.filter((item) => item.id !== id);
-      messages = messages.filter((m) => m.id !== id);
-    };
+    const one = reconcileFollowUpQueue(queue, 2);
+    assert(one.consumedIds.length === 1 && one.consumedIds[0] === 'q1', 'Engine consumed the oldest item first');
+    assert(one.queue.map((i) => i.id).join(',') === 'q2,q3', 'Remaining queue keeps newest items in order');
 
-    // Turn completion simulation
-    const onTurnComplete = () => {
-      if (queue.length > 0) {
-        const next = queue.shift();
-        messages = messages.map((m) => (m.id === next.id ? { ...m, queued: false } : m));
-        sentPrompts.push(next.content);
-      }
-    };
+    const drained = reconcileFollowUpQueue(queue, 0);
+    assert(drained.queue.length === 0 && drained.consumedIds.join(',') === 'q1,q2,q3', 'Count 0 marks every item consumed');
 
-    const id1 = enqueue('Task 1');
-    const id2 = enqueue('Task 2');
-    assert(queue.length === 2, '2 items enqueued in follow-up queue');
-    assert(messages.filter((m) => m.queued).length === 2, '2 messages marked with queued: true');
+    const more = reconcileFollowUpQueue(queue, 5);
+    assert(more.queue === queue && more.consumedIds.length === 0, 'Engine count above local length never invents items');
 
-    // Cancel Task 1 before turn completes
-    cancel(id1);
-    assert(queue.length === 1, '1 item remains after cancellation of Task 1');
-    assert(queue[0].id === id2, 'Remaining item is Task 2');
-    assert(messages.find((m) => m.id === id1) === undefined, 'Cancelled message removed from messages');
-
-    // Turn completes -> Task 2 runs
-    onTurnComplete();
-    assert(sentPrompts.length === 1 && sentPrompts[0] === 'Task 2', 'Task 2 dispatched upon turn completion');
-    assert(queue.length === 0, 'Queue is now empty');
-    assert(messages.find((m) => m.id === id2)?.queued === false, 'Task 2 queued flag cleared upon execution');
+    const empty = reconcileFollowUpQueue([], 0);
+    assert(empty.queue.length === 0 && empty.consumedIds.length === 0, 'Empty queue stays empty');
   }
 
   console.log(`\n🎉 All ${passed} Steering, Follow-up & Engine Modes verification checks PASSED!`);

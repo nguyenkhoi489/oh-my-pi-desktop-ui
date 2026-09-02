@@ -112,6 +112,12 @@ export interface OmpNotification {
   timestamp: number;
 }
 
+export interface HostOpenRequest {
+  kind: 'file' | 'session';
+  target: string;
+  line?: number;
+}
+
 export interface OmpEngineStatusEntry {
   key: string;
   text: string;
@@ -847,6 +853,7 @@ export interface ElectronAPI {
   onOmpMessageComplete: (callback: (message: ChatMessage) => void) => () => void;
   onOmpSubagentUpdate: (callback: (subagents: OmpSubagentInfo[]) => void) => () => void;
   onOmpNotification: (callback: (notification: OmpNotification) => void) => () => void;
+  onHostOpenRequest: (callback: (request: HostOpenRequest) => void) => () => void;
   onOmpEngineStatus: (callback: (statuses: OmpEngineStatusEntry[]) => void) => () => void;
   onOmpWidgetUpdate: (callback: (widgets: OmpWidgetEntry[]) => void) => () => void;
   onOmpContextUsage: (callback: (data: OmpContextUsageUpdate) => void) => () => void;

@@ -1,4 +1,8 @@
 import electronPkg from 'electron';
+import fs from 'fs';
+import path from 'path';
+import type { HostUriResultPayload } from './omp-rpc-types.ts';
+import type { HostOpenRequest } from './types.ts';
 
 const electron = typeof electronPkg === 'object' && electronPkg !== null ? (electronPkg as any).default || electronPkg : {};
 const shell = electron.shell || { openExternal: async () => {}, showItemInFolder: () => {} };
@@ -15,16 +19,26 @@ export interface HostToolDefinition {
   parameters: Record<string, unknown>;
   hidden?: boolean;
   loadMode?: string;
+  timeoutMs?: number;
   execute: (
     args: any,
     context: { toolCallId: string; signal: AbortSignal }
   ) => Promise<{ content: Array<{ type: string; text?: string; [k: string]: any }>; details?: any } | string>;
 }
 
+export interface HostIntegrationOptions {
+  openInApp?: (request: HostOpenRequest) => void;
+}
+
+const DEFAULT_TOOL_TIMEOUT_MS = 15000;
+const PICK_FILE_TIMEOUT_MS = 10 * 60 * 1000;
+
 export class HostToolRegistry {
   private tools: Map<string, HostToolDefinition> = new Map();
+  private openInApp?: (request: HostOpenRequest) => void;
 
-  constructor() {
+  constructor(options: HostIntegrationOptions = {}) {
+    this.openInApp = options.openInApp;
     this.registerBuiltinTools();
   }
 
@@ -70,17 +84,15 @@ export class HostToolRegistry {
       };
     }
 
-    const timeoutMs = context.timeoutMs ?? 15000;
+    const timeoutMs = context.timeoutMs ?? tool.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
     let timer: NodeJS.Timeout | undefined;
-    const timeoutPromise = new Promise<{ content: Array<{ type: string; text?: string }>; isError: boolean }>((_, reject) => {
+    let onAbort: (() => void) | undefined;
+    const guardPromise = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         reject(new Error(`Host tool "${name}" timed out after ${timeoutMs}ms`));
       }, timeoutMs);
-
-      context.signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        reject(new Error(`Host tool "${name}" was aborted`));
-      });
+      onAbort = () => reject(new Error(`Host tool "${name}" was aborted`));
+      context.signal.addEventListener('abort', onAbort, { once: true });
     });
 
     try {
@@ -89,8 +101,6 @@ export class HostToolRegistry {
           toolCallId: context.toolCallId,
           signal: context.signal,
         });
-
-        clearTimeout(timer);
 
         if (typeof rawRes === 'string') {
           return {
@@ -107,14 +117,16 @@ export class HostToolRegistry {
         };
       })();
 
-      return await Promise.race([execPromise, timeoutPromise]);
+      return await Promise.race([execPromise, guardPromise]);
     } catch (err: any) {
-      clearTimeout(timer);
       return {
         content: [{ type: 'text', text: err?.message || String(err) }],
         details: {},
         isError: true,
       };
+    } finally {
+      clearTimeout(timer);
+      if (onAbort) context.signal.removeEventListener('abort', onAbort);
     }
   }
 
@@ -205,7 +217,10 @@ export class HostToolRegistry {
       execute: async (args: { filePath: string; line?: number }) => {
         const p = String(args.filePath || '').trim();
         if (!p) throw new Error('Đường dẫn filePath không được để trống');
-        return `Đã yêu cầu ứng dụng mở file: ${p}${args.line ? ` (dòng ${args.line})` : ''}`;
+        if (!this.openInApp) throw new Error('Desktop chưa sẵn sàng nhận yêu cầu mở file');
+        const line = typeof args.line === 'number' && args.line > 0 ? Math.floor(args.line) : undefined;
+        this.openInApp({ kind: 'file', target: p, line });
+        return `Đã mở file trong Desktop: ${p}${line ? ` (dòng ${line})` : ''}`;
       },
     });
 
@@ -214,6 +229,7 @@ export class HostToolRegistry {
       name: 'pick_file',
       label: 'Pick File Dialog',
       description: 'Mở hộp thoại chọn tệp của macOS để người dùng chọn một file hoặc thư mục.',
+      timeoutMs: PICK_FILE_TIMEOUT_MS,
       parameters: {
         type: 'object',
         properties: {
@@ -233,5 +249,85 @@ export class HostToolRegistry {
         return `Người dùng đã chọn tệp: ${res.filePaths[0]}`;
       },
     });
+  }
+}
+
+const HOST_URI_SCHEMES = ['ompapp', 'vscode', 'cursor'];
+const MAX_URI_FILE_BYTES = 512 * 1024;
+
+export interface HostUriRouterOptions extends HostIntegrationOptions {
+  resolvePath?: (target: string) => string;
+}
+
+// Trả lời host_uri_request của engine cho các scheme Desktop đăng ký
+export class HostUriRouter {
+  private openInApp?: (request: HostOpenRequest) => void;
+  private resolvePath: (target: string) => string;
+
+  constructor(options: HostUriRouterOptions = {}) {
+    this.openInApp = options.openInApp;
+    this.resolvePath = options.resolvePath || ((target) => path.resolve(target));
+  }
+
+  public getSchemes(): string[] {
+    return [...HOST_URI_SCHEMES];
+  }
+
+  public async handle(
+    operation: string,
+    url: string,
+    content?: string
+  ): Promise<HostUriResultPayload> {
+    try {
+      const scheme = url.split('://')[0]?.toLowerCase() || '';
+      if (operation !== 'read') {
+        return { isError: true, error: `Scheme ${scheme}:// chỉ hỗ trợ đọc, không hỗ trợ ${operation}` };
+      }
+      if (scheme === 'ompapp') return await this.handleOmpApp(url);
+      if (scheme === 'vscode' || scheme === 'cursor') {
+        await shell.openExternal(url);
+        return { content: `Đã mở ${url} bằng ${scheme}`, contentType: 'text/plain', immutable: true };
+      }
+      return { isError: true, error: `Desktop không hỗ trợ scheme ${scheme}://` };
+    } catch (err: any) {
+      return { isError: true, error: err?.message || String(err) };
+    }
+  }
+
+  private async handleOmpApp(url: string): Promise<HostUriResultPayload> {
+    const rest = url.slice('ompapp://'.length);
+    const slash = rest.indexOf('/');
+    const kind = slash === -1 ? rest : rest.slice(0, slash);
+    const target = decodeURIComponent(slash === -1 ? '' : rest.slice(slash + 1));
+    if (!target) throw new Error(`Thiếu đích trong ${url}`);
+
+    if (kind === 'session') {
+      this.requireOpenInApp()({ kind: 'session', target });
+      return { content: `Đã mở session ${target} trong Desktop`, contentType: 'text/plain', immutable: true };
+    }
+
+    if (kind === 'file') {
+      const [filePart, lineText] = target.split(':');
+      const line = lineText && /^\d+$/.test(lineText) ? Number(lineText) : undefined;
+      const absolutePath = this.resolvePath(filePart);
+      const stat = await fs.promises.stat(absolutePath);
+      if (!stat.isFile()) throw new Error(`${filePart} không phải là file`);
+      if (stat.size > MAX_URI_FILE_BYTES) throw new Error(`${filePart} vượt quá ${MAX_URI_FILE_BYTES} bytes`);
+      const fileContent = await fs.promises.readFile(absolutePath, 'utf-8');
+      this.requireOpenInApp()({ kind: 'file', target: absolutePath, line });
+      return {
+        content: fileContent,
+        contentType: 'text/plain',
+        immutable: true,
+        notes: [`Đã mở ${absolutePath} trong Desktop`],
+      };
+    }
+
+    throw new Error(`ompapp://${kind} không được hỗ trợ (chỉ session/file)`);
+  }
+
+  private requireOpenInApp(): (request: HostOpenRequest) => void {
+    if (!this.openInApp) throw new Error('Desktop chưa sẵn sàng nhận yêu cầu mở');
+    return this.openInApp;
   }
 }

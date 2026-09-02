@@ -334,7 +334,35 @@ export interface SetHostToolsCommand {
 export interface SetHostUriSchemesCommand {
   type: 'set_host_uri_schemes';
   id?: string;
-  schemes: string[];
+  schemes: Array<{ scheme: string; immutable?: boolean; write?: boolean }>;
+}
+
+export interface HostUriRequestEvent {
+  type: 'host_uri_request';
+  id: string;
+  operation: 'read' | 'write';
+  url: string;
+  content?: string;
+}
+
+export interface HostUriCancelEvent {
+  type: 'host_uri_cancel';
+  id: string;
+  targetId: string;
+}
+
+export interface HostUriResultPayload {
+  isError?: boolean;
+  error?: string;
+  content?: string;
+  contentType?: string;
+  notes?: string[];
+  immutable?: boolean;
+}
+
+export interface HostUriResultFrame extends HostUriResultPayload {
+  type: 'host_uri_result';
+  id: string;
 }
 
 export interface HostToolResultFrame {
@@ -410,7 +438,8 @@ export type OmpCommandFrame =
   | SetHostToolsCommand
   | SetHostUriSchemesCommand
   | HostToolResultFrame
-  | HostToolUpdateFrame;
+  | HostToolUpdateFrame
+  | HostUriResultFrame;
 // ==========================================
 // Message Content & Envelope Definitions
 // ==========================================
@@ -872,6 +901,8 @@ export type OmpEventFrame =
   | AutoRetryStartEvent
   | AutoRetryEndEvent
   | HostToolCallEvent
+  | HostUriRequestEvent
+  | HostUriCancelEvent
   | HostToolCancelEvent;
 // ==========================================
 // Inbound, Outbound & Overall Frame Unions
