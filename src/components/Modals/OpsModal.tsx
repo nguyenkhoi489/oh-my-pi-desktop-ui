@@ -562,7 +562,7 @@ export const OpsModal: React.FC<OpsModalProps> = ({
                     {updateInfo?.hasUpdate && (
                       <button
                         type="button"
-                        onClick={() => runTask('engine-update', ['update', '--yes'])}
+                        onClick={() => runTask('engine-update', ['update', '--force'])}
                         disabled={Boolean(activeTaskId)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors cursor-pointer disabled:opacity-50"
                       >

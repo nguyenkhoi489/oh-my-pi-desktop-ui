@@ -102,6 +102,7 @@
   "build": {
     "appId": "com.omp.agent",
     "productName": "OMP Agent",
+    "copyright": "Copyright © 2026 Nguyên Khôi - Minh Trang",
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "assets/icons/icon.icns",

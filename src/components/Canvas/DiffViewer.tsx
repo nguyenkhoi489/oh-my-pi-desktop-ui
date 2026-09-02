@@ -9,6 +9,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { FileDiffItem, ThemeMode } from '../../types';
+import { getFileInfo } from '../../utils/fileLanguage';
 
 interface DiffViewerProps {
   diff: FileDiffItem | null;
@@ -38,6 +39,10 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
       </div>
     );
   }
+
+  // Suy ra ngôn ngữ Monaco theo tên file để tô màu đúng loại (md, ts, json…)
+  const fileName = (diff.relativePath || diff.filePath || '').split('/').pop() || '';
+  const language = getFileInfo(fileName).languageId;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background overflow-hidden">
@@ -111,7 +116,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
       <div className="flex-1 min-h-0 relative">
         <DiffEditor
           height="100%"
-          language="typescript"
+          language={language}
           original={diff.originalContent}
           modified={diff.modifiedContent}
           theme={theme === 'dark' ? 'vs-dark' : 'vs'}
