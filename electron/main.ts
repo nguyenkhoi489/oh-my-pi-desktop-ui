@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { OmpBridge } from './omp-bridge.ts';
 import type { WorkspaceFile, OmpThinkingLevel, OmpApprovalMode, OmpTodoPhase } from './types.ts';
@@ -33,12 +34,18 @@ const extensionManager = new ExtensionManager();
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 function createWindow() {
+  const appIconPath = path.join(__dirname, '../assets/icons/icon-1024.png');
+  if (process.platform === 'darwin' && app.dock && existsSync(appIconPath)) {
+    app.dock.setIcon(appIconPath);
+  }
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1024,
     minHeight: 700,
     title: 'OMP Agent',
+    icon: existsSync(appIconPath) ? appIconPath : undefined,
     titleBarStyle: 'hiddenInset', // Native macOS Traffic Lights
     trafficLightPosition: { x: 16, y: 14 },
     vibrancy: 'under-window',
@@ -48,8 +55,25 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
+      devTools: isDev,
     },
   });
+
+  // Chặn phím tắt DevTools khi chạy production
+  if (!isDev) {
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12') {
+        event.preventDefault();
+      }
+      if (
+        (input.control || input.meta) &&
+        (input.shift || input.alt) &&
+        (input.key.toLowerCase() === 'i' || input.key.toLowerCase() === 'j')
+      ) {
+        event.preventDefault();
+      }
+    });
+  }
 
   const settingsStore = getSettingsStore();
   ompBridge = new OmpBridge(mainWindow, settingsStore);
