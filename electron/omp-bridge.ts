@@ -409,6 +409,26 @@ export class OmpBridge {
     }
   }
 
+  // Cập nhật tiến độ ngay khi agent gọi tool "todo", không chờ get_state cuối phiên
+  private applyTodosFromToolResult(toolName: string | undefined, result: unknown): void {
+    if (toolName !== 'todo') {
+      return;
+    }
+    const details =
+      result && typeof result === 'object' && 'details' in (result as Record<string, unknown>)
+        ? (result as Record<string, unknown>).details
+        : undefined;
+    if (!details || typeof details !== 'object') {
+      return;
+    }
+    const record = details as Record<string, unknown>;
+    const phases = Array.isArray(record.phases) ? (record.phases as OmpTodoPhase[]) : undefined;
+    const todos = Array.isArray(record.todos) ? (record.todos as OmpTodoItem[]) : undefined;
+    if (phases || todos) {
+      this.normalizeAndSetTodos(phases, todos);
+    }
+  }
+
 
   public async setSubagentSubscription(
     level: 'off' | 'progress' | 'events' = 'progress'
@@ -2774,6 +2794,9 @@ export class OmpBridge {
             partial: partialText,
             details: updateFrame.partialResult.details,
           };
+          this.applyTodosFromToolResult(updateFrame.toolName || toolCall.name, {
+            details: updateFrame.partialResult.details,
+          });
           if (this.window && !this.window.isDestroyed()) {
             this.window.webContents.send('omp:tool-call', toolCall);
           }
@@ -2806,6 +2829,10 @@ export class OmpBridge {
               : (resultContent || (endFrame.error ? JSON.stringify(endFrame.error) : 'Tool execution failed'));
         }
         toolCall.result = endFrame.result;
+
+        if (!endFrame.isError) {
+          this.applyTodosFromToolResult(endFrame.toolName || toolCall.name, endFrame.result);
+        }
 
         if (this.window && !this.window.isDestroyed()) {
           this.window.webContents.send('omp:tool-call', toolCall);
