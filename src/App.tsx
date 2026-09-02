@@ -148,6 +148,10 @@ export function App() {
     getSessionStats,
     getGlobalUsage,
     getGlobalStats,
+    getEngineConfig,
+    setEngineConfigValue,
+    resetEngineConfigValue,
+    getEngineConfigPath,
     approvalMode,
     setApprovalMode,
     compact,
@@ -541,6 +545,10 @@ export function App() {
         onSelectThinkingLevel={changeThinkingLevel}
         onRestartEngine={handleRestartEngine}
         isEngineRunning={status !== 'idle'}
+        getEngineConfig={getEngineConfig}
+        setEngineConfigValue={setEngineConfigValue}
+        resetEngineConfigValue={resetEngineConfigValue}
+        getEngineConfigPath={getEngineConfigPath}
       />
 
 

@@ -33,6 +33,7 @@ import {
   Square,
   Zap,
   User,
+  FileCode,
 } from 'lucide-react';
 import {
   ThemeMode,
@@ -49,7 +50,15 @@ import {
   OmpEffortLevel,
   LoginProviderItem,
   AuthLoginEvent,
+  FetchEngineConfigOptions,
+  SetEngineConfigOptions,
+  ResetEngineConfigOptions,
+  EngineConfigPathOptions,
+  EngineConfigListResult,
+  EngineConfigMutationResult,
+  EngineConfigPathResult,
 } from '../../types';
+import { EngineConfigEditor } from './settings/EngineConfigEditor';
 import {
   ModelRoleSpec,
   ROLE_THINKING_LEVELS,
@@ -107,6 +116,17 @@ interface SettingsModalProps {
   onSelectThinkingLevel?: (level: OmpThinkingLevel) => void;
   onRestartEngine?: () => Promise<void>;
   isEngineRunning?: boolean;
+  getEngineConfig?: (options?: FetchEngineConfigOptions) => Promise<EngineConfigListResult>;
+  setEngineConfigValue?: (
+    key: string,
+    value: string,
+    options?: SetEngineConfigOptions,
+  ) => Promise<EngineConfigMutationResult>;
+  resetEngineConfigValue?: (
+    key: string,
+    options?: ResetEngineConfigOptions,
+  ) => Promise<EngineConfigMutationResult>;
+  getEngineConfigPath?: (options?: EngineConfigPathOptions) => Promise<EngineConfigPathResult>;
 }
 
 const THINKING_LEVELS: { id: OmpThinkingLevel; label: string; desc: string }[] = [
@@ -217,9 +237,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSelectThinkingLevel,
   onRestartEngine,
   isEngineRunning = false,
+  getEngineConfig,
+  setEngineConfigValue,
+  resetEngineConfigValue,
+  getEngineConfigPath,
 }) => {
   const { locale, setLocale, t } = useI18n();
-  const [activeTab, setActiveTab] = useState<'general' | 'engine' | 'providers'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'engine' | 'providers' | 'engine-config'>('general');
   const [settings, setSettings] = useState<AppSettings>({
     theme: 'light',
     approvalMode: 'always-ask',
@@ -963,6 +987,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <Server className="w-3.5 h-3.5" />
             {t('settings.tab.providers')}
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('engine-config');
+              setIsEditingProvider(false);
+            }}
+            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'engine-config'
+                ? 'border-codex-accent text-codex-accent'
+                : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
+            }`}
+          >
+            <FileCode className="w-3.5 h-3.5" />
+            {t('settings.tab.engineConfig')}
           </button>
         </div>
 
@@ -2485,6 +2523,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* TAB 4: Engine Configuration Editor (Phase 3) */}
+          {activeTab === 'engine-config' && (
+            <EngineConfigEditor
+              getEngineConfig={getEngineConfig}
+              setEngineConfigValue={setEngineConfigValue}
+              resetEngineConfigValue={resetEngineConfigValue}
+              getEngineConfigPath={getEngineConfigPath}
+              currentProfile={settings.profile || 'default'}
+            />
           )}
         </div>
 
