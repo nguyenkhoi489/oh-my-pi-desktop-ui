@@ -104,6 +104,86 @@ await test('HostToolRegistry honors per-tool timeoutMs', async () => {
   assert(Date.now() - started < 300, 'Timeout fired from tool-level value, not the 15s default');
 });
 
+await test('HostToolRegistry rejects an already-aborted signal without running the tool', async () => {
+  const registry = new HostToolRegistry();
+  let ran = false;
+  registry.register({
+    name: 'never_runs',
+    description: 'x',
+    parameters: { type: 'object' },
+    execute: async () => { ran = true; return 'ran'; },
+  });
+  const controller = new AbortController();
+  controller.abort();
+  const res = await registry.executeTool('never_runs', {}, { toolCallId: 'c', signal: controller.signal });
+  assert(res.isError === true && res.content[0].text.includes('aborted'), 'Pre-aborted signal yields abort error');
+  assert(ran === false, 'Tool body never executes on a pre-aborted signal');
+});
+
+await test('HostUriRouter parses colon paths, absolute single-slash paths, binary files and aborted reads', async () => {
+  const opened = [];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omp-uri-edge-'));
+  const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), 'omp-uri-outside-'));
+  fs.writeFileSync(path.join(dir, 'a:b.txt'), 'colon file');
+  fs.writeFileSync(path.join(otherDir, 'outside.txt'), 'outside');
+  fs.writeFileSync(path.join(dir, 'blob.bin'), Buffer.from([0x89, 0x50, 0x00, 0x47]));
+  const router = new HostUriRouter({
+    openInApp: (req) => opened.push(req),
+    resolvePath: (target) => path.resolve(dir, target),
+  });
+
+  const colon = await router.handle('read', 'ompapp://file/a:b.txt:3');
+  assert(!colon.isError && colon.content === 'colon file', 'Colon inside file name is preserved');
+  assert(opened[0].line === 3 && opened[0].target === path.join(dir, 'a:b.txt'), 'Trailing :line still parsed');
+
+  const noLine = await router.handle('read', 'ompapp://file/a:b.txt');
+  assert(!noLine.isError && opened[1].line === undefined, 'Non-numeric suffix is not treated as a line');
+
+  const absolute = await router.handle('read', `ompapp://file${otherDir}/outside.txt`);
+  assert(!absolute.isError && absolute.content === 'outside', 'Single-slash absolute path outside workspace resolves');
+
+  const binary = await router.handle('read', 'ompapp://file/blob.bin');
+  assert(binary.isError === true && /nhị phân/.test(binary.error), 'Binary file is rejected instead of returned as mojibake');
+
+  const controller = new AbortController();
+  controller.abort();
+  const before = opened.length;
+  const aborted = await router.handle('read', 'ompapp://file/a:b.txt', undefined, controller.signal);
+  assert(aborted.isError === true && opened.length === before, 'Aborted read performs no open side effect');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(otherDir, { recursive: true, force: true });
+});
+
+await test('HostUriRouter restricts editor links to file form and notifies the user', async () => {
+  const notes = [];
+  const router = new HostUriRouter({ notify: (m) => notes.push(m) });
+  const remote = await router.handle('read', 'vscode://vscode-remote/ssh-remote+host/etc');
+  assert(remote.isError === true && notes.length === 0, 'Non-file vscode authority is rejected silently');
+  const file = await router.handle('read', 'cursor://file/Users/x/a.ts:10');
+  assert(!file.isError && notes.length === 1 && /Model yêu cầu mở/.test(notes[0]), 'file form opens and notifies');
+});
+
+await test('OmpBridge.followUp surfaces engine rejection', async () => {
+  const { bridge, written } = readyBridge();
+  const pending = bridge.followUp('queued while idle');
+  bridge.dispatchInboundFrame({ type: 'response', id: written[0].id, command: 'follow_up', success: false, error: 'no active turn' });
+  const res = await pending;
+  assert(res.success === false && res.error === 'no active turn', 'followUp returns the engine error instead of unconditional success');
+});
+
+await test('OmpBridge drops in-flight host URI replies when the process is cleaned up', async () => {
+  const { bridge, written } = readyBridge();
+  bridge.hostUriRouter.handle = () => new Promise((r) => setTimeout(() => r({ content: 'late' }), 30));
+  bridge.dispatchInboundFrame({ type: 'host_uri_request', id: 'stale-1', operation: 'read', url: 'ompapp://session/x' });
+  const staleProcess = bridge.process;
+  bridge.cleanupProcess();
+  bridge.process = staleProcess;
+  bridge.lifecycleState = 'ready';
+  await new Promise((r) => setTimeout(r, 60));
+  assert(!written.some((f) => f.type === 'host_uri_result' && f.id === 'stale-1'), 'No host_uri_result is written to the restarted process');
+});
+
 await test('HostUriRouter serves ompapp:// session and file reads', async () => {
   const opened = [];
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omp-uri-'));

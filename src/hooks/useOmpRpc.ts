@@ -61,6 +61,7 @@ export function useOmpRpc() {
   const [followUpQueue, setFollowUpQueue] = useState<FollowUpQueueItem[]>([]);
   const followUpQueueRef = useRef<FollowUpQueueItem[]>([]);
   const lastStatusRef = useRef<OmpAgentStatus>('idle');
+  const pendingFollowUpsRef = useRef(0);
   const [availableModels, setAvailableModels] = useState<OmpModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState<OmpModelInfo | null>(null);
   const [thinkingLevel, setThinkingLevel] = useState<OmpThinkingLevel>('off');
@@ -214,7 +215,8 @@ export function useOmpRpc() {
         if (res.state.approvalMode !== undefined) {
           setApprovalMode(res.state.approvalMode);
         }
-        if (res.state.queuedMessageCount !== undefined) {
+        // Bỏ qua khi còn follow_up đang gửi để get_state cũ không nuốt item vừa xếp
+        if (res.state.queuedMessageCount !== undefined && pendingFollowUpsRef.current === 0) {
           const { queue, consumedIds } = reconcileFollowUpQueue(
             followUpQueueRef.current,
             res.state.queuedMessageCount
@@ -1037,6 +1039,7 @@ export function useOmpRpc() {
       setMessages((prev) => [...prev, ...newMessages]);
 
       if (!window.electronAPI) return;
+      pendingFollowUpsRef.current += 1;
       try {
         const res = await window.electronAPI.followUpOmp(message, { files: contextFiles });
         if (!res.success) throw new Error(res.error || 'follow_up bị engine từ chối');
@@ -1046,6 +1049,8 @@ export function useOmpRpc() {
         followUpQueueRef.current = remaining;
         setFollowUpQueue(remaining);
         setMessages((prev) => prev.filter((m) => m.id !== itemId));
+      } finally {
+        pendingFollowUpsRef.current -= 1;
       }
     },
     []

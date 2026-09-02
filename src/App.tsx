@@ -257,7 +257,8 @@ export function App() {
       if (found) {
         selectFile(found);
       } else {
-        const fullPath = workspacePath ? `${workspacePath}/${targetPath}` : targetPath;
+        const isAbsolute = targetPath.startsWith('/');
+        const fullPath = !isAbsolute && workspacePath ? `${workspacePath}/${targetPath}` : targetPath;
         selectFile({
           path: fullPath,
           relativePath: targetPath,
@@ -269,6 +270,9 @@ export function App() {
     [files, workspacePath, selectFile]
   );
 
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+
   // Nhận yêu cầu mở file/session do model gửi qua host tool
   useEffect(() => {
     if (!window.electronAPI?.onHostOpenRequest) return;
@@ -277,10 +281,10 @@ export function App() {
         handleOpenFileByPath(request.target);
         return;
       }
-      const session = sessions.find((s) => s.id === request.target || s.path === request.target);
+      const session = sessionsRef.current.find((s) => s.id === request.target || s.path === request.target);
       if (session) switchSession(session.path);
     });
-  }, [handleOpenFileByPath, sessions, switchSession]);
+  }, [handleOpenFileByPath, switchSession]);
 
 
   // Keyboard shortcut listener: ⌘+K (Omnibar), ⌘+B (Left Sidebar), ⌘+J (Right Sidebar), ⌘+Enter (Accept Diff)

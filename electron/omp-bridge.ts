@@ -237,6 +237,7 @@ export class OmpBridge {
   public hostUriRouter: HostUriRouter = new HostUriRouter({
     openInApp: (request) => this.emitHostOpenRequest(request),
     resolvePath: (target) => path.resolve(this.workspacePath || process.cwd(), target),
+    notify: (message) => this.emitNotification(message, 'info'),
   });
   private activeHostUriRequests: Map<string, AbortController> = new Map();
   private activeHostToolCalls: Map<string, AbortController> = new Map();
@@ -1011,10 +1012,13 @@ export class OmpBridge {
         message,
       };
 
-      this.sendCommand(followUpCmd).catch((err) => {
-        console.error('[OmpBridge] Follow-up command error:', err.message);
-      });
-      return { success: true };
+      try {
+        const res = await this.sendCommand(followUpCmd);
+        return { success: res.success, error: res.error };
+      } catch (err: any) {
+        console.error('[OmpBridge] Follow-up command error:', err?.message);
+        return { success: false, error: err?.message || 'Follow-up command failed' };
+      }
     }
 
     this.simulateAgentFlow(message, context);
@@ -2050,7 +2054,7 @@ export class OmpBridge {
     this.activeHostUriRequests.set(requestId, abortController);
 
     this.hostUriRouter
-      .handle(frame.operation, String(frame.url || ''), frame.content)
+      .handle(frame.operation, String(frame.url || ''), frame.content, abortController.signal)
       .catch((err) => ({ isError: true, error: err?.message || String(err) }))
       .then((payload) => {
         this.activeHostUriRequests.delete(requestId);
@@ -2058,6 +2062,9 @@ export class OmpBridge {
         if (!this.process || !this.process.stdin?.writable) return;
         const replyFrame: HostUriResultFrame = { type: 'host_uri_result', id: requestId, ...payload };
         this.writeFrame(replyFrame);
+      })
+      .catch((err) => {
+        console.warn('[OmpBridge] host_uri_result write failed:', err?.message || err);
       });
   }
 
@@ -3394,6 +3401,10 @@ export class OmpBridge {
     this.rejectAllPending('OMP process terminated');
     this.thinkingAccumulator.reset();
     this.activeToolCalls.clear();
+    for (const controller of this.activeHostToolCalls.values()) controller.abort();
+    this.activeHostToolCalls.clear();
+    for (const controller of this.activeHostUriRequests.values()) controller.abort();
+    this.activeHostUriRequests.clear();
     this.writeSnapshots.clear();
     for (const id of this.pendingUiRequests.keys()) {
       if (this.window && !this.window.isDestroyed()) {

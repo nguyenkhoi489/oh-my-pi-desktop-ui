@@ -84,6 +84,10 @@ export class HostToolRegistry {
       };
     }
 
+    if (context.signal.aborted) {
+      return { content: [{ type: 'text', text: `Host tool "${name}" was aborted` }], details: {}, isError: true };
+    }
+
     const timeoutMs = context.timeoutMs ?? tool.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
     let timer: NodeJS.Timeout | undefined;
     let onAbort: (() => void) | undefined;
@@ -220,7 +224,7 @@ export class HostToolRegistry {
         if (!this.openInApp) throw new Error('Desktop chưa sẵn sàng nhận yêu cầu mở file');
         const line = typeof args.line === 'number' && args.line > 0 ? Math.floor(args.line) : undefined;
         this.openInApp({ kind: 'file', target: p, line });
-        return `Đã mở file trong Desktop: ${p}${line ? ` (dòng ${line})` : ''}`;
+        return `Đã gửi yêu cầu mở file tới Desktop: ${p}${line ? ` (dòng ${line})` : ''}`;
       },
     });
 
@@ -257,16 +261,27 @@ const MAX_URI_FILE_BYTES = 512 * 1024;
 
 export interface HostUriRouterOptions extends HostIntegrationOptions {
   resolvePath?: (target: string) => string;
+  notify?: (message: string) => void;
+}
+
+async function statOrNull(filePath: string): Promise<fs.Stats | null> {
+  try {
+    return await fs.promises.stat(filePath);
+  } catch {
+    return null;
+  }
 }
 
 // Trả lời host_uri_request của engine cho các scheme Desktop đăng ký
 export class HostUriRouter {
   private openInApp?: (request: HostOpenRequest) => void;
   private resolvePath: (target: string) => string;
+  private notify: (message: string) => void;
 
   constructor(options: HostUriRouterOptions = {}) {
     this.openInApp = options.openInApp;
     this.resolvePath = options.resolvePath || ((target) => path.resolve(target));
+    this.notify = options.notify || (() => {});
   }
 
   public getSchemes(): string[] {
@@ -276,25 +291,34 @@ export class HostUriRouter {
   public async handle(
     operation: string,
     url: string,
-    content?: string
+    content?: string,
+    signal?: AbortSignal
   ): Promise<HostUriResultPayload> {
     try {
       const scheme = url.split('://')[0]?.toLowerCase() || '';
       if (operation !== 'read') {
         return { isError: true, error: `Scheme ${scheme}:// chỉ hỗ trợ đọc, không hỗ trợ ${operation}` };
       }
-      if (scheme === 'ompapp') return await this.handleOmpApp(url);
-      if (scheme === 'vscode' || scheme === 'cursor') {
-        await shell.openExternal(url);
-        return { content: `Đã mở ${url} bằng ${scheme}`, contentType: 'text/plain', immutable: true };
-      }
+      if (scheme === 'ompapp') return await this.handleOmpApp(url, signal);
+      if (scheme === 'vscode' || scheme === 'cursor') return await this.handleEditorLink(scheme, url, signal);
       return { isError: true, error: `Desktop không hỗ trợ scheme ${scheme}://` };
     } catch (err: any) {
       return { isError: true, error: err?.message || String(err) };
     }
   }
 
-  private async handleOmpApp(url: string): Promise<HostUriResultPayload> {
+  // Chỉ cho phép dạng vscode://file/<path> để tránh deep-link lạ (ssh-remote, extension...)
+  private async handleEditorLink(scheme: string, url: string, signal?: AbortSignal): Promise<HostUriResultPayload> {
+    if (!url.startsWith(`${scheme}://file/`)) {
+      throw new Error(`Chỉ hỗ trợ dạng ${scheme}://file/<đường dẫn>`);
+    }
+    assertNotAborted(signal, url);
+    this.notify(`Model yêu cầu mở ${url}`);
+    await shell.openExternal(url);
+    return { content: `Đã mở ${url} bằng ${scheme}`, contentType: 'text/plain', immutable: true };
+  }
+
+  private async handleOmpApp(url: string, signal?: AbortSignal): Promise<HostUriResultPayload> {
     const rest = url.slice('ompapp://'.length);
     const slash = rest.indexOf('/');
     const kind = slash === -1 ? rest : rest.slice(0, slash);
@@ -302,21 +326,24 @@ export class HostUriRouter {
     if (!target) throw new Error(`Thiếu đích trong ${url}`);
 
     if (kind === 'session') {
+      assertNotAborted(signal, url);
       this.requireOpenInApp()({ kind: 'session', target });
       return { content: `Đã mở session ${target} trong Desktop`, contentType: 'text/plain', immutable: true };
     }
 
     if (kind === 'file') {
-      const [filePart, lineText] = target.split(':');
-      const line = lineText && /^\d+$/.test(lineText) ? Number(lineText) : undefined;
-      const absolutePath = this.resolvePath(filePart);
-      const stat = await fs.promises.stat(absolutePath);
+      const { filePart, line } = splitTrailingLine(target);
+      const absolutePath = await this.locateFile(filePart);
+      const stat = await statOrNull(absolutePath);
+      if (!stat) throw new Error(`Không tìm thấy file ${filePart}`);
       if (!stat.isFile()) throw new Error(`${filePart} không phải là file`);
       if (stat.size > MAX_URI_FILE_BYTES) throw new Error(`${filePart} vượt quá ${MAX_URI_FILE_BYTES} bytes`);
-      const fileContent = await fs.promises.readFile(absolutePath, 'utf-8');
+      const buffer = await fs.promises.readFile(absolutePath);
+      if (buffer.includes(0)) throw new Error(`${filePart} là file nhị phân, không đọc được dạng text`);
+      assertNotAborted(signal, url);
       this.requireOpenInApp()({ kind: 'file', target: absolutePath, line });
       return {
-        content: fileContent,
+        content: buffer.toString('utf-8'),
         contentType: 'text/plain',
         immutable: true,
         notes: [`Đã mở ${absolutePath} trong Desktop`],
@@ -326,8 +353,29 @@ export class HostUriRouter {
     throw new Error(`ompapp://${kind} không được hỗ trợ (chỉ session/file)`);
   }
 
+  // ompapp://file/Users/x/a.txt (một dấu /) vẫn là đường dẫn tuyệt đối nếu không có trong workspace
+  private async locateFile(filePart: string): Promise<string> {
+    const resolved = this.resolvePath(filePart);
+    if (filePart.startsWith('/') || (await statOrNull(resolved))) return resolved;
+    const rootCandidate = `/${filePart}`;
+    return (await statOrNull(rootCandidate)) ? rootCandidate : resolved;
+  }
+
   private requireOpenInApp(): (request: HostOpenRequest) => void {
     if (!this.openInApp) throw new Error('Desktop chưa sẵn sàng nhận yêu cầu mở');
     return this.openInApp;
   }
+}
+
+function assertNotAborted(signal: AbortSignal | undefined, url: string) {
+  if (signal?.aborted) throw new Error(`Host URI read for ${url} was aborted`);
+}
+
+// Tách hậu tố :<số dòng> ở cuối, giữ nguyên dấu ':' nằm trong tên file
+function splitTrailingLine(target: string): { filePart: string; line?: number } {
+  const colon = target.lastIndexOf(':');
+  if (colon === -1) return { filePart: target };
+  const suffix = target.slice(colon + 1);
+  if (!/^\d+$/.test(suffix)) return { filePart: target };
+  return { filePart: target.slice(0, colon), line: Number(suffix) };
 }
