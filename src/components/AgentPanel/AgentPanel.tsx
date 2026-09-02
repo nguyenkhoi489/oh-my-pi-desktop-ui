@@ -16,6 +16,7 @@ import {
   OmpRetryState,
 } from '../../types';
 import { ChatHistory } from './ChatHistory';
+import { AgentActivityIndicator } from './AgentActivityIndicator';
 import { PromptComposer } from './PromptComposer';
 import { ToolApprovalCard } from './ToolApprovalCard';
 import { EngineStatusStrip } from '../Notifications/EngineStatusStrip';
@@ -44,6 +45,7 @@ interface AgentPanelProps {
   onBranchSession?: (entryId: string) => void;
   onCollapsePanel?: () => void;
   onOpenFile?: (filePath: string) => void;
+  externalAttachment?: { path: string; nonce: number } | null;
   todoPhases?: OmpTodoPhase[];
   todos?: OmpTodoItem[];
   retryState?: OmpRetryState;
@@ -72,6 +74,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   onBranchSession,
   onCollapsePanel,
   onOpenFile,
+  externalAttachment,
   onFollowUpMessage,
   followUpQueue,
   todoPhases,
@@ -162,6 +165,9 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
       )}
 
 
+      {/* Trạng thái hoạt động của agent, hiển thị sát composer */}
+      <AgentActivityIndicator status={status} activeToolCalls={activeToolCalls} />
+
       {/* Docked Prompt Composer */}
       <PromptComposer
         onSendMessage={onSendMessage}
@@ -174,6 +180,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
         followUpQueue={followUpQueue}
         availableCommands={availableCommands}
         isToolApprovalPending={Boolean(pendingToolApproval)}
+        externalAttachment={externalAttachment}
       />
     </div>
   );

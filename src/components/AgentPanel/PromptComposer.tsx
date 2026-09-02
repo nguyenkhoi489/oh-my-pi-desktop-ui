@@ -46,6 +46,7 @@ interface PromptComposerProps {
   workspacePath?: string;
   availableCommands?: OmpCommandInfo[];
   isToolApprovalPending?: boolean;
+  externalAttachment?: { path: string; nonce: number } | null;
 }
 // Giới hạn số file hiển thị trong picker để tránh render hàng nghìn node
 const MAX_PICKER_FILES = 100;
@@ -61,6 +62,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   workspacePath,
   availableCommands,
   isToolApprovalPending = false,
+  externalAttachment,
 }) => {
   const [input, setInput] = useState<string>('');
   const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
@@ -203,6 +205,17 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     setPickerQuery('');
     setAtCursorIndex(null);
   };
+
+  // Đính kèm file khi cây thư mục gửi yêu cầu "Thêm vào chat"
+  const lastAttachNonceRef = useRef<number>(0);
+  useEffect(() => {
+    if (!externalAttachment) return;
+    if (externalAttachment.nonce === lastAttachNonceRef.current) return;
+    lastAttachNonceRef.current = externalAttachment.nonce;
+    const p = externalAttachment.path.trim();
+    if (!p) return;
+    setAttachedFiles((prev) => (prev.includes(p) ? prev : [...prev, p]));
+  }, [externalAttachment]);
 
   const removeAttachment = (file: string) => {
     setAttachedFiles((prev) => prev.filter((f) => f !== file));
@@ -967,14 +980,6 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
             </div>
           ) : (
             <div className="relative flex items-center gap-2" ref={splitMenuRef}>
-              <div className="hidden sm:flex items-center gap-2 text-[11px] text-slate-400 dark:text-zinc-500">
-                <span>↵ steer</span>
-                <span>•</span>
-                <span>⌘↵ queue</span>
-                <span>•</span>
-                <span>⌘⇧↵ stop & send</span>
-              </div>
-
               {/* Split Button Group */}
               <div className="flex items-center rounded-xl overflow-hidden shadow-sm">
                 <button

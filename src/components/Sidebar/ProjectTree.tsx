@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Folder,
   FolderOpen,
@@ -14,6 +14,10 @@ import {
   Database,
   Boxes,
   Settings,
+  MessageSquarePlus,
+  Copy,
+  FolderSymlink,
+  Trash2,
 } from 'lucide-react';
 import { WorkspaceFile } from '../../types';
 import { getFileInfo } from '../../utils/fileLanguage';
@@ -23,15 +27,72 @@ interface ProjectTreeProps {
   selectedFile: WorkspaceFile | null;
   onSelectFile: (file: WorkspaceFile) => void;
   onCollapseSidebar?: () => void;
+  onAddToChat?: (file: WorkspaceFile) => void;
+  onDeleteFile?: (file: WorkspaceFile) => void | Promise<void>;
 }
+
+const MENU_WIDTH = 210;
+const MENU_MAX_HEIGHT = 230;
 
 const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
   files,
   selectedFile,
   onSelectFile,
   onCollapseSidebar,
+  onAddToChat,
+  onDeleteFile,
 }) => {
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    file: WorkspaceFile;
+  } | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<WorkspaceFile | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const closeMenu = useCallback(() => setContextMenu(null), []);
+
+  const openContextMenu = useCallback((e: React.MouseEvent, file: WorkspaceFile) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Ghim menu trong viewport
+    const x = Math.min(e.clientX, window.innerWidth - MENU_WIDTH - 8);
+    const y = Math.min(e.clientY, window.innerHeight - MENU_MAX_HEIGHT - 8);
+    setContextMenu({ x: Math.max(8, x), y: Math.max(8, y), file });
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeMenu();
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', closeMenu);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', closeMenu);
+    };
+  }, [contextMenu, closeMenu]);
+
+  const copyToClipboard = useCallback((text: string) => {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }, []);
+
+  const revealInFinder = useCallback((file: WorkspaceFile) => {
+    window.electronAPI?.revealInFinder?.(file.path).catch(() => {});
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!fileToDelete || !onDeleteFile) return;
+    setIsDeleting(true);
+    try {
+      await onDeleteFile(fileToDelete);
+    } finally {
+      setIsDeleting(false);
+      setFileToDelete(null);
+    }
+  }, [fileToDelete, onDeleteFile]);
 
   const toggleFolder = (key: string) => {
     setExpandedFolders((prev) => ({
@@ -132,6 +193,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
               onSelectFile(file);
             }
           }}
+          onContextMenu={(e) => openContextMenu(e, file)}
           style={{ paddingLeft: `${depth * 14 + 10}px` }}
           className={`group flex items-center gap-2 py-1.5 pr-2.5 rounded-lg cursor-pointer transition-all text-[13px] ${
             isSelected
@@ -232,6 +294,130 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
           </div>
         )}
       </div>
+
+      {contextMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={closeMenu} onContextMenu={(e) => e.preventDefault()} />
+          <div
+            role="menu"
+            style={{ top: contextMenu.y, left: contextMenu.x, width: MENU_WIDTH }}
+            className="fixed z-50 bg-surface dark:bg-[#181a24] border border-border rounded-xl shadow-xl p-1 flex flex-col gap-0.5 animate-fade-in"
+          >
+            {onAddToChat && (
+              <button
+                type="button"
+                onClick={() => {
+                  onAddToChat(contextMenu.file);
+                  closeMenu();
+                }}
+                className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 hover:bg-blue-500/10 text-slate-800 dark:text-zinc-200 text-[13px] transition-colors cursor-pointer"
+              >
+                <MessageSquarePlus className="w-4 h-4 text-blue-500 shrink-0" />
+                <span>Thêm vào chat</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                copyToClipboard(contextMenu.file.path);
+                closeMenu();
+              }}
+              className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 text-[13px] transition-colors cursor-pointer"
+            >
+              <Copy className="w-4 h-4 text-slate-400 shrink-0" />
+              <span>Copy path</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                copyToClipboard(contextMenu.file.relativePath);
+                closeMenu();
+              }}
+              className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 text-[13px] transition-colors cursor-pointer"
+            >
+              <Copy className="w-4 h-4 text-slate-400 shrink-0" />
+              <span>Copy relative path</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                revealInFinder(contextMenu.file);
+                closeMenu();
+              }}
+              className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 text-[13px] transition-colors cursor-pointer"
+            >
+              <FolderSymlink className="w-4 h-4 text-slate-400 shrink-0" />
+              <span>Hiện trong Finder</span>
+            </button>
+
+            {onDeleteFile && !contextMenu.file.isDirectory && (
+              <>
+                <div className="h-px bg-border my-0.5" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFileToDelete(contextMenu.file);
+                    closeMenu();
+                  }}
+                  className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[13px] transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4 shrink-0" />
+                  <span>Xóa</span>
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {fileToDelete && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"
+          onClick={() => {
+            if (!isDeleting) setFileToDelete(null);
+          }}
+        >
+          <div
+            className="bg-surface dark:bg-[#181a24] border border-border rounded-2xl shadow-2xl w-full max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-rose-500/10 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-rose-500" />
+              </div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">Xóa file</h3>
+            </div>
+            <p className="text-[13px] text-slate-600 dark:text-zinc-400 mb-5">
+              Xóa vĩnh viễn{' '}
+              <span className="font-mono font-semibold text-slate-800 dark:text-zinc-200">
+                {fileToDelete.name}
+              </span>
+              ? Hành động này không thể hoàn tác.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setFileToDelete(null)}
+                disabled={isDeleting}
+                className="px-3 py-1.5 rounded-lg text-[13px] font-medium text-slate-600 dark:text-zinc-300 hover:bg-surface-highlight transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="px-3 py-1.5 rounded-lg text-[13px] font-semibold text-white bg-rose-500 hover:bg-rose-600 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? 'Đang xóa…' : 'Xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

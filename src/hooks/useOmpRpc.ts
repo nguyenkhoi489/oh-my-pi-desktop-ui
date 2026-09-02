@@ -1156,6 +1156,28 @@ export function useOmpRpc() {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
+  // Đẩy toast cục bộ từ renderer (không đến từ engine)
+  const pushNotification = useCallback(
+    (message: string, notifyType: OmpNotification['notifyType'] = 'info') => {
+      const notif: OmpNotification = {
+        id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        message,
+        notifyType,
+        timestamp: Date.now(),
+      };
+      setNotifications((prev) => {
+        const next = [...prev, notif];
+        return next.length > 5 ? next.slice(next.length - 5) : next;
+      });
+      if (notifyType !== 'error') {
+        setTimeout(() => {
+          setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+        }, 6000);
+      }
+    },
+    []
+  );
+
   const clearNotifications = useCallback(() => {
     setNotifications([]);
   }, []);
@@ -1397,6 +1419,7 @@ export function useOmpRpc() {
     rejectDiff,
     notifications,
     dismissNotification,
+    pushNotification,
     clearNotifications,
     engineStatuses,
     engineWidgets,

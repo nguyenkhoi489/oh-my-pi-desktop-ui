@@ -140,6 +140,7 @@ export function App() {
     rejectDiff,
     notifications,
     dismissNotification,
+    pushNotification,
     engineStatuses,
     engineWidgets,
     contextUsage,
@@ -237,6 +238,28 @@ export function App() {
       await refreshEngineState();
     }
   };
+  // Yêu cầu đính kèm file vào composer từ cây thư mục (nonce để re-trigger cùng path)
+  const [attachmentRequest, setAttachmentRequest] = useState<{ path: string; nonce: number } | null>(
+    null
+  );
+
+  const handleAddToChat = useCallback((file: WorkspaceFile) => {
+    setAttachmentRequest((prev) => ({ path: file.relativePath, nonce: (prev?.nonce ?? 0) + 1 }));
+  }, []);
+
+  const handleDeleteFile = useCallback(
+    async (file: WorkspaceFile) => {
+      if (!window.electronAPI?.deleteFile) return;
+      const ok = await window.electronAPI.deleteFile(file.path);
+      if (ok) {
+        await refreshFiles();
+      } else {
+        pushNotification(`Không thể xóa ${file.name}`, 'error');
+      }
+    },
+    [refreshFiles, pushNotification]
+  );
+
   const handleOpenFileByPath = useCallback(
     (targetPath: string) => {
       const findInTree = (tree: WorkspaceFile[]): WorkspaceFile | null => {
@@ -400,6 +423,8 @@ export function App() {
               selectedFile={selectedFile}
               onSelectFile={selectFile}
               onCollapseSidebar={collapseLeftSidebar}
+              onAddToChat={handleAddToChat}
+              onDeleteFile={handleDeleteFile}
             />
             <ThreadList
               sessions={sessions}
@@ -466,6 +491,7 @@ export function App() {
               onBranchSession={branchFromMessage}
               onCollapsePanel={collapseRightSidebar}
               onOpenFile={handleOpenFileByPath}
+              externalAttachment={attachmentRequest}
               retryState={retryState}
               onAbortRetry={abortRetry}
             />

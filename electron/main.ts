@@ -751,6 +751,17 @@ ipcMain.handle('fs:delete-file', async (_, filePath: string) => {
   }
 });
 
+// Hiện file/thư mục trong Finder
+ipcMain.handle('fs:reveal-in-finder', async (_, filePath: string) => {
+  try {
+    shell.showItemInFolder(path.resolve(filePath));
+    return true;
+  } catch (err) {
+    console.error('Error revealing in finder:', err);
+    return false;
+  }
+});
+
 ipcMain.handle(
   'fs:save-image-attachment',
   async (_, buffer: Uint8Array | ArrayBuffer, extension: string, originalName?: string) => {

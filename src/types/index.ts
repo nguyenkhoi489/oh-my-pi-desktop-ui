@@ -815,6 +815,7 @@ export interface ElectronAPI {
   readFile: (filePath: string) => Promise<string>;
   saveFile: (filePath: string, content: string) => Promise<any>;
   deleteFile: (filePath: string) => Promise<boolean>;
+  revealInFinder: (filePath: string) => Promise<boolean>;
   saveImageAttachment: (
     buffer: Uint8Array | ArrayBuffer,
     extension: string,

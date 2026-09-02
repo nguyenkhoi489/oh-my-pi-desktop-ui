@@ -271,6 +271,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteFile: (filePath: string) =>
     ipcRenderer.invoke('fs:delete-file', filePath),
 
+  revealInFinder: (filePath: string) =>
+    ipcRenderer.invoke('fs:reveal-in-finder', filePath),
+
   saveImageAttachment: (buffer: Uint8Array | ArrayBuffer, extension: string, originalName?: string) =>
     ipcRenderer.invoke('fs:save-image-attachment', buffer, extension, originalName),
 
