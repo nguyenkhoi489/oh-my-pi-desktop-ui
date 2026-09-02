@@ -16,6 +16,25 @@ Entry template:
 ```
 
 ---
+## 2026-09-02 — Phase 4: Todos Panel — hiển thị plan/tiến độ của agent
+
+- **State:** Đã hoàn thành toàn bộ Phase 4:
+  - `electron/omp-rpc-types.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung `OmpTodoPhase`, `OmpTodoItem`, `OmpTodoStatus`, `SetTodosCommand`, `TodosEvent`, `TodoReminderEvent`, và cập nhật `OmpEngineState` với `todoPhases` & `todos`.
+  - `electron/omp-bridge.ts`: Bổ sung `getTodos()`, `setTodos(phases)`, `normalizeAndSetTodos()`, `emitTodosUpdate()`, bắt event `todos` & `todo_reminder`, đồng bộ `getState()` vào todos snapshot, và dọn dẹp sạch khi đổi/tạo session mới hoặc tắt process.
+  - `electron/main.ts` & `electron/preload.ts`: Đăng ký và expose các IPC handler `omp:get-todos`, `omp:set-todos`, và listener `omp:todos-update`.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung state `todoPhases`, `todos`, `setTodos: updateTodos`, `refreshTodos`, tự động sync từ engine state/event và dọn dẹp khi đổi session.
+  - `src/components/AgentPanel/TodoPanel.tsx`: Tạo mới component `TodoPanel` (`React.memo`), collapsible, hiển thị thanh tiến độ `x/y hoàn thành`, mini progress bar, auto-scroll tới mục in-progress, phân nhóm theo phase hoặc flat list, ẩn hoàn toàn khi không có todo.
+  - `src/components/AgentPanel/AgentPanel.tsx` & `src/App.tsx`: Gắn `TodoPanel` ngay phía trên `ChatHistory` và kết nối với `useOmpRpc`.
+  - `scripts/verify-todos-panel.mjs`: Test suite 57 checks kiểm tra framing, event dispatch, snapshot replay, session clear, IPC contract, UI memo and structure. Thêm `test:todos-panel` vào `package.json` và `npm test`.
+  - Typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) và các verify suites pass 100%.
+- **In-flight:** Phase 4 hoàn thành, sẵn sàng chuyển tiếp sang Phase 5 (Subagent Transcript) hoặc Phase 6 (Retry, Fast Mode & Utils).
+- **Next:**
+  1. Thực hiện Phase 5: `phase-05-subagent-transcript.md` hoặc Phase 6: `phase-06-retry-fastmode-utils.md`.
+- **Refs:**
+  - `plans/260902-1133-omp-cli-desktop-parity/phase-04-todos-panel.md`
+  - `scripts/verify-todos-panel.mjs`
+
+---
 ## 2026-09-02 — Phase 3: Follow-up Queue & 3 chế độ engine
 
 - **State:** Đã hoàn thành toàn bộ Phase 3:

@@ -26,6 +26,9 @@ import type {
   OmpContextUsageUpdate,
   OmpApprovalMode,
   OmpCommandInfo,
+  OmpTodoPhase,
+  OmpTodoItem,
+  OmpTodoStatus,
 } from './types.ts';
 import type { SettingsStore } from './settings-store.ts';
 import { NdjsonFramer } from './ndjson-framer.ts';
@@ -91,6 +94,10 @@ import type {
   CommandOutputEvent,
   SessionInfoUpdateEvent,
   ConfigUpdateEvent,
+  SetTodosCommand,
+  SetTodosResponseData,
+  TodosEvent,
+  TodoReminderEvent,
 } from './omp-rpc-types.ts';
 
 export type BridgeLifecycleState =
@@ -195,6 +202,8 @@ export class OmpBridge {
   private pendingPermissions: Map<string, (approved: boolean) => void> = new Map();
   private pendingUiRequests: Map<string, OmpUiRequest> = new Map();
   private activeSubagents: Map<string, OmpSubagentInfo> = new Map();
+  private currentTodoPhases: OmpTodoPhase[] = [];
+  private currentTodos: OmpTodoItem[] = [];
   private currentSessionFile: string | null = null;
   private currentSessionId: string | null = null;
   private engineStatuses: Map<string, string> = new Map();
@@ -282,6 +291,87 @@ export class OmpBridge {
       lines: item.lines,
       placement: item.placement,
     }));
+  }
+
+  public getTodos(): { phases: OmpTodoPhase[]; todos: OmpTodoItem[] } {
+    return {
+      phases: this.currentTodoPhases,
+      todos: this.currentTodos,
+    };
+  }
+
+  public async setTodos(
+    phases: OmpTodoPhase[]
+  ): Promise<{ success: boolean; phases?: OmpTodoPhase[]; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      this.normalizeAndSetTodos(phases);
+      return { success: true, phases: this.currentTodoPhases };
+    }
+    try {
+      const res = await this.sendCommand<SetTodosResponseData>({
+        type: 'set_todos',
+        id: this.generateId(),
+        phases,
+      });
+      if (res.success) {
+        const respPhases = res.data?.todoPhases || res.data?.phases || phases;
+        this.normalizeAndSetTodos(respPhases, res.data?.todos);
+        return { success: true, phases: this.currentTodoPhases };
+      }
+      return { success: false, error: res.error || 'Failed to set todos' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing set_todos' };
+    }
+  }
+
+  private normalizeAndSetTodos(phases?: OmpTodoPhase[], todos?: OmpTodoItem[]): void {
+    if (Array.isArray(phases) && phases.length > 0) {
+      this.currentTodoPhases = phases;
+      const flat: OmpTodoItem[] = [];
+      for (const p of phases) {
+        if (Array.isArray(p.tasks)) {
+          for (const t of p.tasks) {
+            flat.push({
+              ...t,
+              phase: p.name,
+            });
+          }
+        }
+      }
+      this.currentTodos = flat;
+    } else if (Array.isArray(todos)) {
+      this.currentTodos = todos;
+      if (todos.length > 0) {
+        const phaseMap = new Map<string, OmpTodoItem[]>();
+        for (const t of todos) {
+          const pName = typeof t.phase === 'string' && t.phase ? t.phase : 'Plan';
+          if (!phaseMap.has(pName)) {
+            phaseMap.set(pName, []);
+          }
+          phaseMap.get(pName)!.push(t);
+        }
+        this.currentTodoPhases = Array.from(phaseMap.entries()).map(([name, tasks]) => ({
+          name,
+          tasks,
+        }));
+      } else {
+        this.currentTodoPhases = [];
+      }
+    } else {
+      this.currentTodoPhases = [];
+      this.currentTodos = [];
+    }
+    this.emitTodosUpdate();
+  }
+
+  private emitTodosUpdate(): void {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('omp:todos-update', {
+        phases: this.currentTodoPhases,
+        todos: this.currentTodos,
+      });
+    }
   }
 
 
@@ -1023,6 +1113,9 @@ export class OmpBridge {
             tokensPerSecond: res.data.tokensPerSecond ?? null,
             sessionName: res.data.sessionName,
           });
+        }
+        if (Array.isArray(res.data.todoPhases) || Array.isArray(res.data.todos)) {
+          this.normalizeAndSetTodos(res.data.todoPhases, res.data.todos);
         }
         res.data.thinkingLevel = this.currentThinkingLevel;
         res.data.approvalMode = this.currentApprovalMode;
@@ -1840,6 +1933,9 @@ export class OmpBridge {
     }
     this.pendingUiRequests.clear();
     this.clearEngineStatusesAndWidgets();
+    this.currentTodoPhases = [];
+    this.currentTodos = [];
+    this.emitTodosUpdate();
   }
 
   private clearEngineStatusesAndWidgets() {
@@ -2514,6 +2610,24 @@ export class OmpBridge {
         this.getState().catch(() => {});
         break;
       }
+
+      case 'todos': {
+        const todosFrame = frame as TodosEvent;
+        const dataRecord = typeof todosFrame.data === 'object' && todosFrame.data !== null ? (todosFrame.data as Record<string, unknown>) : undefined;
+        const rawPhases = (todosFrame.phases || todosFrame.todoPhases || (dataRecord?.phases as OmpTodoPhase[] | undefined) || (dataRecord?.todoPhases as OmpTodoPhase[] | undefined)) as OmpTodoPhase[] | undefined;
+        const rawTodos = (todosFrame.todos || todosFrame.items || (dataRecord?.todos as OmpTodoItem[] | undefined) || (dataRecord?.items as OmpTodoItem[] | undefined)) as OmpTodoItem[] | undefined;
+        this.normalizeAndSetTodos(rawPhases, rawTodos);
+        break;
+      }
+
+      case 'todo_reminder': {
+        const reminderFrame = frame as TodoReminderEvent;
+        const rawTodos = reminderFrame.todos;
+        if (Array.isArray(rawTodos)) {
+          this.normalizeAndSetTodos(undefined, rawTodos);
+        }
+        break;
+      }
     }
   }
 
@@ -2754,6 +2868,9 @@ export class OmpBridge {
     this.emitSubagentUpdate();
     this.availableCommands = [];
     this.emitCommandsUpdate();
+    this.currentTodoPhases = [];
+    this.currentTodos = [];
+    this.emitTodosUpdate();
     this.sessionName = undefined;
     this.lastContextUsage = null;
     this.lastTokensPerSecond = null;

@@ -18,6 +18,8 @@ import type {
   OmpCommandInfo,
   AppSettings,
   AuthLoginEvent,
+  OmpTodoPhase,
+  OmpTodoItem,
 } from './types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -129,6 +131,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getAvailableCommands: () =>
     ipcRenderer.invoke('omp:get-commands'),
+
+  // Todos Management (Phase 4)
+  getTodos: () =>
+    ipcRenderer.invoke('omp:get-todos'),
+
+  setTodos: (phases: OmpTodoPhase[]) =>
+    ipcRenderer.invoke('omp:set-todos', phases),
   // File System & Dialogs
   selectFolder: () =>
     ipcRenderer.invoke('fs:select-folder'),
@@ -292,5 +301,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: unknown, data: { text: string }) => callback(data);
     ipcRenderer.on('omp:command-output', handler);
     return () => ipcRenderer.removeListener('omp:command-output', handler);
+  },
+  onOmpTodosUpdate: (callback: (data: { phases: OmpTodoPhase[]; todos: OmpTodoItem[] }) => void) => {
+    const handler = (_: unknown, data: { phases: OmpTodoPhase[]; todos: OmpTodoItem[] }) => callback(data);
+    ipcRenderer.on('omp:todos-update', handler);
+    return () => ipcRenderer.removeListener('omp:todos-update', handler);
   },
 });

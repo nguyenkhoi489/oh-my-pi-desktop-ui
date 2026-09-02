@@ -241,6 +241,21 @@ export interface GetAvailableCommandsCommand {
   id?: string;
   [key: string]: unknown;
 }
+
+export interface SetTodosCommand {
+  type: 'set_todos';
+  id: string;
+  phases?: OmpTodoPhase[];
+  todos?: OmpTodoItem[];
+  [key: string]: unknown;
+}
+
+export interface SetTodosResponseData {
+  todoPhases?: OmpTodoPhase[];
+  phases?: OmpTodoPhase[];
+  todos?: OmpTodoItem[];
+  [key: string]: unknown;
+}
 export type OmpCommandFrame =
   | NegotiateProtocolCommand
   | PromptCommand
@@ -269,6 +284,7 @@ export type OmpCommandFrame =
   | ExportHtmlCommand
   | GetBranchMessagesCommand
   | GetAvailableCommandsCommand
+  | SetTodosCommand
   | SetAutoCompactionCommand;
 // ==========================================
 // Message Content & Envelope Definitions
@@ -568,6 +584,47 @@ export interface ConfigUpdateEvent {
   [key: string]: unknown;
 }
 
+export type OmpTodoStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'done'
+  | 'completed'
+  | 'cancelled'
+  | 'dropped'
+  | 'blocked'
+  | string;
+
+export interface OmpTodoItem {
+  id?: string;
+  content: string;
+  status: OmpTodoStatus;
+  phase?: string;
+  reason?: string;
+  [key: string]: unknown;
+}
+
+export interface OmpTodoPhase {
+  name: string;
+  tasks: OmpTodoItem[];
+}
+
+export interface TodosEvent {
+  type: 'todos';
+  phases?: OmpTodoPhase[];
+  todoPhases?: OmpTodoPhase[];
+  todos?: OmpTodoItem[];
+  items?: OmpTodoItem[];
+  [key: string]: unknown;
+}
+
+export interface TodoReminderEvent {
+  type: 'todo_reminder';
+  todos?: OmpTodoItem[];
+  attempt?: number;
+  maxAttempts?: number;
+  [key: string]: unknown;
+}
+
 export interface SubagentLifecyclePayload {
   id: string;
   agent: string;
@@ -666,6 +723,8 @@ export type OmpEventFrame =
   | CommandOutputEvent
   | SessionInfoUpdateEvent
   | ConfigUpdateEvent
+  | TodosEvent
+  | TodoReminderEvent
   | SubagentLifecycleEvent
   | SubagentProgressEvent
   | SubagentEvent;
@@ -831,6 +890,8 @@ export interface OmpEngineState {
   contextUsage?: OmpContextUsage;
   tools?: unknown[];
   commands?: unknown[];
+  todoPhases?: OmpTodoPhase[];
+  todos?: OmpTodoItem[];
   [key: string]: unknown;
 }
 

@@ -151,6 +151,8 @@ export function App() {
     autoCompactionEnabled,
     setAutoCompaction,
     availableCommands,
+    todoPhases,
+    todos,
   } = useOmpRpc();
 
   // Principle #1: When app loads, if OMP is not installed, open the Requirement Modal
@@ -409,6 +411,8 @@ export function App() {
               workspaceFiles={files}
               workspacePath={workspacePath || undefined}
               availableCommands={availableCommands}
+              todoPhases={todoPhases}
+              todos={todos}
               pendingToolApproval={isCurrentToolApproval ? activeUiRequest : null}
               toolApprovalQueueLength={uiRequestQueue.length}
               onApproveTool={handleApproveTool}

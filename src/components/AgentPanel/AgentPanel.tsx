@@ -11,11 +11,14 @@ import {
   WorkspaceFile,
   OmpCommandInfo,
   OmpUiRequest,
+  OmpTodoPhase,
+  OmpTodoItem,
 } from '../../types';
 import { ChatHistory } from './ChatHistory';
 import { PromptComposer } from './PromptComposer';
 import { ToolApprovalCard } from './ToolApprovalCard';
 import { EngineStatusStrip } from '../Notifications/EngineStatusStrip';
+import { TodoPanel } from './TodoPanel';
 interface AgentPanelProps {
   messages: ChatMessage[];
   currentThinking: ThinkingBlock | null;
@@ -41,6 +44,8 @@ interface AgentPanelProps {
   onBranchSession?: (entryId: string) => void;
   onCollapsePanel?: () => void;
   onOpenFile?: (filePath: string) => void;
+  todoPhases?: OmpTodoPhase[];
+  todos?: OmpTodoItem[];
 }
 
 const AgentPanelComponent: React.FC<AgentPanelProps> = ({
@@ -68,6 +73,8 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   onFollowUpMessage,
   followUpQueue,
   onCancelFollowUp,
+  todoPhases,
+  todos,
 }) => {
   return (
     <div className="w-full flex flex-col h-full bg-panel select-none">
@@ -99,6 +106,9 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
           )}
         </div>
       </div>
+
+      {/* Todo Progress & Plan Panel */}
+      <TodoPanel phases={todoPhases} todos={todos} />
 
       {/* Message & Execution Timeline */}
       <ChatHistory

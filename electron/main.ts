@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { OmpBridge } from './omp-bridge.ts';
-import type { WorkspaceFile, OmpThinkingLevel, OmpApprovalMode } from './types.ts';
+import type { WorkspaceFile, OmpThinkingLevel, OmpApprovalMode, OmpTodoPhase } from './types.ts';
 import { getSettingsStore, type AppSettings } from './settings-store.ts';
 import {
   readModelsConfig,
@@ -286,6 +286,18 @@ ipcMain.handle('omp:compact', async (_, customInstructions?: string) => {
 ipcMain.handle('omp:set-auto-compaction', async (_, enabled: boolean) => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
   return ompBridge.setAutoCompaction(enabled);
+});
+
+// IPC Handlers: Todos Management (Phase 4)
+ipcMain.handle('omp:get-todos', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  const data = ompBridge.getTodos();
+  return { success: true, phases: data.phases, todos: data.todos };
+});
+
+ipcMain.handle('omp:set-todos', async (_, phases: OmpTodoPhase[]) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.setTodos(phases);
 });
 // IPC Handlers: Sessions & Subagent Hub (Phase 1 Additions)
 ipcMain.handle('omp:list-sessions', async () => {

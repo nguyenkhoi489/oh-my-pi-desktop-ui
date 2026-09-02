@@ -21,6 +21,8 @@ import {
   OmpSessionStats,
   OmpApprovalMode,
   OmpCommandInfo,
+  OmpTodoPhase,
+  OmpTodoItem,
 } from '../types';
 import { DEMO_MESSAGES, DEMO_INITIAL_DIFF } from '../mock/demoData';
 export function useOmpRpc() {
@@ -64,6 +66,9 @@ export function useOmpRpc() {
   const [sessions, setSessions] = useState<OmpSessionInfo[]>([]);
   const [activeSessionPath, setActiveSessionPath] = useState<string | null>(null);
   const [availableCommands, setAvailableCommands] = useState<OmpCommandInfo[]>([]);
+  // Todos & Plan Progress (Phase 4)
+  const [todoPhases, setTodoPhases] = useState<OmpTodoPhase[]>([]);
+  const [todos, setTodos] = useState<OmpTodoItem[]>([]);
   // rAF token batching refs
   const tokenBufferRef = useRef<string>('');
   const rafIdRef = useRef<number | null>(null);
@@ -157,6 +162,36 @@ export function useOmpRpc() {
     return [];
   }, []);
 
+  const refreshTodos = useCallback(async () => {
+    if (window.electronAPI?.getTodos) {
+      try {
+        const res = await window.electronAPI.getTodos();
+        if (res?.success) {
+          setTodoPhases(res.phases || []);
+          setTodos(res.todos || []);
+        }
+      } catch (err) {
+        console.warn('[useOmpRpc] Failed to get todos:', err);
+      }
+    }
+  }, []);
+
+  const updateTodos = useCallback(async (phases: OmpTodoPhase[]) => {
+    if (window.electronAPI?.setTodos) {
+      try {
+        const res = await window.electronAPI.setTodos(phases);
+        if (res?.success) {
+          setTodoPhases(res.phases || phases);
+        }
+        return res;
+      } catch (err) {
+        console.error('[useOmpRpc] Failed to set todos:', err);
+        return { success: false, error: String(err) };
+      }
+    }
+    return { success: false, error: 'electronAPI.setTodos not available' };
+  }, []);
+
 
   const refreshEngineState = useCallback(async (): Promise<OmpEngineState | null> => {
     if (!window.electronAPI) return null;
@@ -181,6 +216,10 @@ export function useOmpRpc() {
             }
             return prev;
           });
+        }
+        if (res.state.todoPhases || res.state.todos) {
+          if (res.state.todoPhases) setTodoPhases(res.state.todoPhases);
+          if (res.state.todos) setTodos(res.state.todos);
         }
         return res.state;
       }
@@ -338,6 +377,8 @@ export function useOmpRpc() {
               setEngineStatuses([]);
               setEngineWidgets([]);
 
+              setTodoPhases([]);
+              setTodos([]);
               const correlated = await correlateBranchEntries(histRes.messages);
               setMessages(correlated);
               setActiveSessionPath(sessionPath);
@@ -389,6 +430,8 @@ export function useOmpRpc() {
             setEngineStatuses([]);
             setEngineWidgets([]);
             setActiveSessionPath(null);
+            setTodoPhases([]);
+            setTodos([]);
             await refreshSessions();
             await refreshEngineState();
             return true;
@@ -532,14 +575,15 @@ export function useOmpRpc() {
     }
   }, []);
 
-  // Load models, engine state, and sessions when installed
+  // Load models, engine state, sessions, and todos when installed
   useEffect(() => {
     if (installStatus?.installed && window.electronAPI) {
       refreshModels();
       refreshEngineState();
       refreshSessions();
+      refreshTodos();
     }
-  }, [installStatus?.installed, refreshModels, refreshEngineState, refreshSessions]);
+  }, [installStatus?.installed, refreshModels, refreshEngineState, refreshSessions, refreshTodos]);
 
   // Connect to Electron IPC listeners
   useEffect(() => {
@@ -716,6 +760,13 @@ export function useOmpRpc() {
         })
       : () => {};
 
+
+    const unsubTodos = window.electronAPI.onOmpTodosUpdate
+      ? window.electronAPI.onOmpTodosUpdate((data) => {
+          setTodoPhases(data?.phases || []);
+          setTodos(data?.todos || []);
+        })
+      : () => {};
     refreshCommands();
     return () => {
       if (rafIdRef.current !== null) {
@@ -739,6 +790,7 @@ export function useOmpRpc() {
       unsubContextUsage();
       unsubCommands();
       unsubCommandOutput();
+      unsubTodos();
     };
   }, [flushTokens, refreshEngineState, refreshCommands]);
 
@@ -1256,5 +1308,9 @@ export function useOmpRpc() {
     setAutoCompaction,
     availableCommands,
     refreshCommands,
+    todoPhases,
+    todos,
+    setTodos: updateTodos,
+    refreshTodos,
   };
 }

@@ -122,6 +122,30 @@ export interface OmpWidgetEntry {
 }
 
 
+export type OmpTodoStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'done'
+  | 'completed'
+  | 'cancelled'
+  | 'dropped'
+  | 'blocked'
+  | string;
+
+export interface OmpTodoItem {
+  id?: string;
+  content: string;
+  status: OmpTodoStatus;
+  phase?: string;
+  reason?: string;
+  [key: string]: unknown;
+}
+
+export interface OmpTodoPhase {
+  name: string;
+  tasks: OmpTodoItem[];
+}
+
 export type OmpThinkingLevel =
   | 'off'
   | 'minimal'
@@ -257,6 +281,8 @@ export interface OmpEngineState {
   contextUsage?: OmpContextUsage;
   tools?: unknown[];
   commands?: OmpCommandInfo[];
+  todoPhases?: OmpTodoPhase[];
+  todos?: OmpTodoItem[];
   [key: string]: unknown;
 }
 
@@ -418,6 +444,9 @@ export interface ElectronAPI {
   exportSession: () => Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }>;
   getSubagents?: () => Promise<OmpSubagentInfo[]>;
   getAvailableCommands: () => Promise<{ success: boolean; commands?: OmpCommandInfo[]; error?: string }>;
+  // Todos Management (Phase 4)
+  getTodos?: () => Promise<{ success: boolean; phases?: OmpTodoPhase[]; todos?: OmpTodoItem[]; error?: string }>;
+  setTodos?: (phases: OmpTodoPhase[]) => Promise<{ success: boolean; phases?: OmpTodoPhase[]; error?: string }>;
   selectFolder: () => Promise<string | null>;
   readDirectory: (dirPath: string) => Promise<WorkspaceFile[]>;
   readFile: (filePath: string) => Promise<string>;
@@ -463,6 +492,7 @@ export interface ElectronAPI {
   onOmpContextUsage: (callback: (data: OmpContextUsageUpdate) => void) => () => void;
   onOmpCommandsUpdate: (callback: (commands: OmpCommandInfo[]) => void) => () => void;
   onOmpCommandOutput: (callback: (data: { text: string }) => void) => () => void;
+  onOmpTodosUpdate?: (callback: (data: { phases: OmpTodoPhase[]; todos: OmpTodoItem[] }) => void) => () => void;
 }
 declare global {
   interface Window {
