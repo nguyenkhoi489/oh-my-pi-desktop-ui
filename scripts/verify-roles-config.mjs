@@ -9,6 +9,8 @@
  * 5. writeModelRolesConfig creates .bak backup before writing.
  * 6. writeModelRolesConfig with empty roles removes the modelRoles key.
  * 7. writeModelRolesConfig refuses to update a syntactically broken config.yml.
+ * 8. parseModelRoleSpec/formatModelRoleSpec handle the OMP "provider/model[:level]" syntax.
+ * 9. Thinking suffix survives the config.yml write/read round-trip.
  */
 
 import fs from 'node:fs';
@@ -19,6 +21,11 @@ import {
   readModelRolesConfig,
   writeModelRolesConfig,
 } from '../electron/roles-config.ts';
+import {
+  ROLE_THINKING_LEVELS,
+  formatModelRoleSpec,
+  parseModelRoleSpec,
+} from '../src/utils/model-role-spec.ts';
 
 let passed = 0;
 let failed = 0;
@@ -119,6 +126,55 @@ try {
   const brokenRes = await writeModelRolesConfig({ smol: 'anthropic/claude-haiku-4-5' }, brokenPath);
   assert(brokenRes.success === false, 'Write to broken file fails gracefully');
   assert(fs.readFileSync(brokenPath, 'utf-8') === brokenContent, 'Broken file content untouched');
+
+  console.log('\n--- Test 8: parseModelRoleSpec / formatModelRoleSpec ---');
+  const withLevel = parseModelRoleSpec('anthropic/claude-opus-5:high');
+  assert(
+    withLevel?.model === 'anthropic/claude-opus-5' && withLevel?.level === 'high',
+    'Parses provider/model:high'
+  );
+  const noLevel = parseModelRoleSpec('anthropic/claude-opus-5');
+  assert(noLevel?.model === 'anthropic/claude-opus-5' && noLevel.level === undefined, 'Parses model without suffix');
+  const colonInId = parseModelRoleSpec('openrouter/qwen/qwen3:free');
+  assert(
+    colonInId?.model === 'openrouter/qwen/qwen3:free' && colonInId.level === undefined,
+    'Colon suffix that is not a level stays part of the model id'
+  );
+  assert(parseModelRoleSpec('openai-codex/gpt-5.5:max')?.level === 'max', 'max suffix parsed');
+  assert(parseModelRoleSpec('openai-codex/gpt-5.5:auto')?.level === 'auto', 'auto suffix parsed');
+  assert(parseModelRoleSpec('provider/model:hi')?.level === undefined, 'Prefix level is not accepted');
+  assert(parseModelRoleSpec('@task') === null, 'Role alias returns null');
+  assert(parseModelRoleSpec('claude-opus-5') === null, 'Bare model id returns null');
+  assert(parseModelRoleSpec('') === null, 'Empty value returns null');
+  assert(parseModelRoleSpec('anthropic/*') === null, 'Glob pattern returns null');
+  assert(parseModelRoleSpec('a/b,c/d') === null, 'Fallback list returns null');
+  assert(formatModelRoleSpec('anthropic/claude-opus-5') === 'anthropic/claude-opus-5', 'Format without level omits suffix');
+  assert(formatModelRoleSpec('') === '', 'Format of empty model is empty');
+  for (const level of ROLE_THINKING_LEVELS) {
+    const roundTrip = parseModelRoleSpec(formatModelRoleSpec('anthropic/claude-opus-5', level));
+    assert(
+      roundTrip?.model === 'anthropic/claude-opus-5' && roundTrip?.level === level,
+      `Round-trip preserves level "${level}"`
+    );
+  }
+
+  console.log('\n--- Test 9: thinking suffix survives the YAML write/read round-trip ---');
+  const suffixPath = path.join(tempDir, 'suffix.yml');
+  fs.writeFileSync(suffixPath, REAL_CONFIG_YML_FIXTURE, 'utf-8');
+  const suffixWrite = await writeModelRolesConfig(
+    {
+      plan: 'openai-codex/gpt-5.5:high',
+      smol: 'openai-codex/gpt-5.4:auto',
+      task: 'anthropic/claude-haiku-4-5',
+    },
+    suffixPath
+  );
+  assert(suffixWrite.success === true, 'Write with thinking suffix succeeds');
+  const suffixRead = await readModelRolesConfig(suffixPath);
+  assert(suffixRead.roles.plan === 'openai-codex/gpt-5.5:high', 'high suffix read back unchanged');
+  assert(suffixRead.roles.smol === 'openai-codex/gpt-5.4:auto', 'auto suffix read back unchanged');
+  assert(suffixRead.roles.task === 'anthropic/claude-haiku-4-5', 'Role without suffix stays bare');
+  assert(parseModelRoleSpec(suffixRead.roles.plan)?.level === 'high', 'Round-tripped value parses back to high');
 
   console.log(`\n=== Suite complete: ${passed} passed, ${failed} failed ===`);
   process.exit(failed > 0 ? 1 : 0);

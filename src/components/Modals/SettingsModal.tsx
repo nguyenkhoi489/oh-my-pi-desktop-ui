@@ -50,6 +50,13 @@ import {
   LoginProviderItem,
   AuthLoginEvent,
 } from '../../types';
+import {
+  ModelRoleSpec,
+  ROLE_THINKING_LEVELS,
+  RoleThinkingLevel,
+  formatModelRoleSpec,
+  parseModelRoleSpec,
+} from '../../utils/model-role-spec';
 
 const EFFORT_LEVELS: OmpEffortLevel[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -242,6 +249,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // State cho Model Roles (config.yml)
   const [modelRoles, setModelRoles] = useState<Record<string, string>>({});
+  // Role đang nhập tay dạng alias/glob thay vì chọn từ danh sách model
+  const [rawRoles, setRawRoles] = useState<Set<string>>(new Set());
   const [rolesConfigPath, setRolesConfigPath] = useState<string>('~/.omp/agent/config.yml');
   const [isRolesWritable, setIsRolesWritable] = useState<boolean>(true);
   const [rolesError, setRolesError] = useState<string | null>(null);
@@ -309,26 +318,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, []);
 
+  const applyLoadedRoles = useCallback((roles: Record<string, string>) => {
+    setModelRoles(roles);
+    setRawRoles(
+      new Set(
+        Object.entries(roles)
+          .filter(([, value]) => value.trim() && !parseModelRoleSpec(value))
+          .map(([role]) => role)
+      )
+    );
+  }, []);
+
   const loadModelRoles = useCallback(async () => {
     try {
       if (window.electronAPI?.getModelRolesConfig) {
         const res = await window.electronAPI.getModelRolesConfig();
-        setModelRoles(res.roles || {});
+        applyLoadedRoles(res.roles || {});
         if (res.filePath) setRolesConfigPath(res.filePath);
         setIsRolesWritable(res.isWritable !== false);
         setRolesError(res.error || null);
       } else {
-        setModelRoles({ ...MOCK_MODEL_ROLES });
+        applyLoadedRoles({ ...MOCK_MODEL_ROLES });
         setIsRolesWritable(true);
         setRolesError(null);
       }
     } catch (err) {
       console.warn('[SettingsModal] Lỗi khi tải model roles:', err);
-      setModelRoles({ ...MOCK_MODEL_ROLES });
+      applyLoadedRoles({ ...MOCK_MODEL_ROLES });
     }
     setRolesDirty(false);
     setRolesSaveSuccess(false);
-  }, []);
+  }, [applyLoadedRoles]);
 
   const loadProfiles = useCallback(async () => {
     try {
@@ -482,16 +502,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setHasEngineChanged(true);
   };
 
-  const handleRoleModelChange = (role: string, value: string) => {
+  const setRoleValue = (role: string, value: string) => {
     setModelRoles((prev) => ({ ...prev, [role]: value }));
     setRolesDirty(true);
     setRolesSaveSuccess(false);
+  };
+
+  // Ghép model và thinking level thành "provider/model[:level]" theo cú pháp OMP
+  const handleRoleSpecChange = (role: string, model: string, level?: RoleThinkingLevel) => {
+    setRoleValue(role, formatModelRoleSpec(model, level));
+  };
+
+  const handleToggleRawRole = (role: string) => {
+    setRawRoles((prev) => {
+      const next = new Set(prev);
+      if (next.has(role)) next.delete(role);
+      else next.add(role);
+      return next;
+    });
   };
 
   const handleRemoveRole = (role: string) => {
     setModelRoles((prev) => {
       const next = { ...prev };
       delete next[role];
+      return next;
+    });
+    setRawRoles((prev) => {
+      if (!prev.has(role)) return prev;
+      const next = new Set(prev);
+      next.delete(role);
       return next;
     });
     setRolesDirty(true);
@@ -1157,9 +1197,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       if (ib === -1) return -1;
                       return ia - ib;
                     })
-                    .map(([role, model]) => {
+                    .map(([role, rawValue]) => {
                       const known = KNOWN_MODEL_ROLES.find((r) => r.id === role);
-                      const isInCatalog = availableModels.some((m) => `${m.provider}/${m.id}` === model);
+                      const isRawMode = rawRoles.has(role);
+                      const spec: ModelRoleSpec = isRawMode
+                        ? { model: rawValue }
+                        : parseModelRoleSpec(rawValue) || { model: rawValue.trim() };
+                      const catalogModel = availableModels.find((m) => `${m.provider}/${m.id}` === spec.model);
+                      const lacksReasoning = !!spec.level && catalogModel?.reasoning === false;
                       return (
                         <div key={role} className="flex items-center gap-2">
                           <div className="w-28 shrink-0">
@@ -1168,27 +1213,79 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               <div className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">{known.desc}</div>
                             )}
                           </div>
-                          <select
-                            value={model}
-                            onChange={(e) => handleRoleModelChange(role, e.target.value)}
-                            className="flex-1 min-w-0 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
-                          >
-                            <option value="">(Chưa gán model)</option>
-                            {Object.entries(groupedModels).map(([provider, models]) => (
-                              <optgroup key={provider} label={provider.toUpperCase()}>
-                                {models.map((m) => (
-                                  <option key={`${provider}/${m.id}`} value={`${provider}/${m.id}`}>
-                                    {m.name || m.id} {m.reasoning ? '🧠' : ''}
+                          {isRawMode ? (
+                            <input
+                              type="text"
+                              value={rawValue}
+                              onChange={(e) => setRoleValue(role, e.target.value)}
+                              placeholder="@task, anthropic/*, hoặc danh sách cách nhau bởi dấu phẩy"
+                              spellCheck={false}
+                              className="flex-1 min-w-0 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
+                            />
+                          ) : (
+                            <>
+                              <select
+                                value={spec.model}
+                                onChange={(e) => handleRoleSpecChange(role, e.target.value, spec.level)}
+                                className="flex-1 min-w-0 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
+                              >
+                                <option value="">(Chưa gán model)</option>
+                                {Object.entries(groupedModels).map(([provider, models]) => (
+                                  <optgroup key={provider} label={provider.toUpperCase()}>
+                                    {models.map((m) => (
+                                      <option key={`${provider}/${m.id}`} value={`${provider}/${m.id}`}>
+                                        {m.name || m.id} {m.reasoning ? '🧠' : ''}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                ))}
+                                {spec.model && !catalogModel && (
+                                  <optgroup label="NGOÀI CATALOG HIỆN TẠI">
+                                    <option value={spec.model}>{spec.model}</option>
+                                  </optgroup>
+                                )}
+                              </select>
+                              <select
+                                value={spec.level || ''}
+                                onChange={(e) =>
+                                  handleRoleSpecChange(
+                                    role,
+                                    spec.model,
+                                    e.target.value ? (e.target.value as RoleThinkingLevel) : undefined
+                                  )
+                                }
+                                disabled={!spec.model}
+                                title="Thinking level gắn vào model spec (provider/model:level)"
+                                className="w-28 shrink-0 px-2 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                <option value="">Kế thừa</option>
+                                {ROLE_THINKING_LEVELS.map((lvl) => (
+                                  <option key={lvl} value={lvl}>
+                                    {lvl}
                                   </option>
                                 ))}
-                              </optgroup>
-                            ))}
-                            {model && !isInCatalog && (
-                              <optgroup label="NGOÀI CATALOG HIỆN TẠI">
-                                <option value={model}>{model}</option>
-                              </optgroup>
-                            )}
-                          </select>
+                              </select>
+                              {lacksReasoning && (
+                                <span
+                                  className="shrink-0"
+                                  title="Model này không khai báo reasoning trong catalog, thinking level có thể bị bỏ qua"
+                                >
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                                </span>
+                              )}
+                            </>
+                          )}
+                          <button
+                            onClick={() => handleToggleRawRole(role)}
+                            className="p-1.5 text-slate-400 hover:text-codex-accent transition-colors cursor-pointer shrink-0"
+                            title={
+                              isRawMode
+                                ? 'Chọn model từ danh sách'
+                                : 'Nhập tay (alias, glob, danh sách fallback)'
+                            }
+                          >
+                            {isRawMode ? <Boxes className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+                          </button>
                           <button
                             onClick={() => handleRemoveRole(role)}
                             className="p-1.5 text-slate-400 hover:text-red-500 transition-colors cursor-pointer shrink-0"
