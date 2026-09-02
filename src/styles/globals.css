@@ -118,6 +118,28 @@ pre {
 .markdown-content {
   font-size: 13.5px;
   line-height: 1.65;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.markdown-content p,
+.markdown-content li,
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-content code:not(pre code) {
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .markdown-content > *:first-child {

@@ -21,20 +21,55 @@ interface CacheEntry<T> {
 let usageCache: CacheEntry<OmpGlobalUsageData> | null = null;
 let statsCache: CacheEntry<OmpGlobalStatsData> | null = null;
 
-// Tìm vị trí bắt đầu của JSON payload trong chuỗi output
+// Tìm vị trí bắt đầu và kết thúc của JSON payload trong chuỗi output
 export function extractJsonSubstring(text: string): string | null {
   if (!text) return null;
   const firstBrace = text.indexOf('{');
   const firstBracket = text.indexOf('[');
   let startIndex = -1;
+  let isObject = false;
+
   if (firstBrace !== -1 && firstBracket !== -1) {
-    startIndex = Math.min(firstBrace, firstBracket);
+    if (firstBrace < firstBracket) {
+      startIndex = firstBrace;
+      isObject = true;
+    } else {
+      startIndex = firstBracket;
+      isObject = false;
+    }
   } else if (firstBrace !== -1) {
     startIndex = firstBrace;
+    isObject = true;
   } else if (firstBracket !== -1) {
     startIndex = firstBracket;
+    isObject = false;
   }
+
   if (startIndex === -1) return null;
+
+  const open = isObject ? '{' : '[';
+  const close = isObject ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = startIndex; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      // Đóng cân bằng cấu trúc gốc thì cắt tới đây, bỏ qua text log phía sau
+      if (depth === 0) return text.slice(startIndex, i + 1).trim();
+    }
+  }
+
   return text.slice(startIndex).trim();
 }
 
@@ -110,6 +145,7 @@ export async function fetchGlobalUsage(
       env: { ...process.env, PATH: buildExtendedPath() },
       encoding: 'utf-8',
       timeout,
+      maxBuffer: 10 * 1024 * 1024,
     });
 
     const parsed = parseUsageJson(stdout || stderr || '');
@@ -157,6 +193,7 @@ export async function fetchGlobalStats(
       env: { ...process.env, PATH: buildExtendedPath() },
       encoding: 'utf-8',
       timeout,
+      maxBuffer: 10 * 1024 * 1024,
     });
 
     const parsed = parseStatsJson(stdout || stderr || '');

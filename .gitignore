@@ -14,6 +14,7 @@ coverage/
 # Local agent runtimes and generated manifests
 .claude/
 .agents/
+.omp/
 GEMINI.md
 release-manifest.json
 plans/

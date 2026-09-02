@@ -11,6 +11,12 @@ interface MarkdownRendererProps {
 const markedInstance = new Marked({
   gfm: true,
   breaks: true,
+  // Tắt indented code block: chỉ ```fence``` mới thành code, tránh prose thụt lề bị hiểu nhầm
+  tokenizer: {
+    code() {
+      return undefined;
+    },
+  },
   renderer: {
     heading({ text, depth }) {
       const headingStyles: Record<number, string> = {
@@ -45,7 +51,7 @@ const markedInstance = new Marked({
     },
 
     codespan({ text }) {
-      return `<code class="px-1.5 py-0.5 rounded bg-rose-500/10 dark:bg-rose-950/35 text-rose-600 dark:text-rose-400 font-mono text-[12px] border border-rose-500/20 dark:border-rose-800/40 font-medium">${text}</code>`;
+      return `<code class="px-1.5 py-0.5 rounded bg-rose-500/10 dark:bg-rose-950/35 text-rose-600 dark:text-rose-400 font-mono text-[12px] border border-rose-500/20 dark:border-rose-800/40 font-medium break-all [overflow-wrap:anywhere] whitespace-normal">${text}</code>`;
     },
 
     link({ href, title, text }) {
@@ -169,11 +175,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   return (
     <div
       onClick={handleClick}
-      className={`markdown-content select-text leading-relaxed font-sans ${className}`}
+      className={`markdown-content select-text leading-relaxed font-sans min-w-0 max-w-full break-words [overflow-wrap:anywhere] ${className}`}
     >
       <div
         dangerouslySetInnerHTML={{ __html: htmlContent }}
-        className="inline"
+        className="min-w-0 max-w-full block"
       />
       {isStreaming && (
         <span className="inline-block w-1.5 h-4 ml-1 bg-blue-500 dark:bg-blue-400 animate-pulse align-middle" />

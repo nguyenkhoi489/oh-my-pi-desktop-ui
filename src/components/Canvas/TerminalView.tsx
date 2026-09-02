@@ -246,15 +246,15 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#0c0d11] font-mono text-[12.5px] overflow-hidden text-zinc-200">
+    <div className="flex-1 flex flex-col h-full bg-background font-mono text-[12.5px] overflow-hidden text-slate-800 dark:text-zinc-200">
       {/* Top Header Bar */}
-      <div className="h-10 bg-[#12131a] border-b border-zinc-800/80 flex items-center justify-between px-3 shrink-0">
+      <div className="h-10 bg-surface border-b border-border flex items-center justify-between px-3 shrink-0">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/40 text-emerald-400 text-[11px] font-medium">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/10 dark:bg-emerald-950/60 border border-emerald-500/20 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400 text-[11px] font-medium">
             <Terminal className="w-3.5 h-3.5" />
             <span>Bash Bridge</span>
           </div>
-          <span className="text-[11px] text-zinc-500 hidden sm:inline">
+          <span className="text-[11px] text-slate-500 dark:text-zinc-500 hidden sm:inline">
             RPC command console — cwd đồng bộ với engine session
           </span>
         </div>
@@ -263,10 +263,10 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
           {isRunning && (
             <button
               onClick={handleAbort}
-              className="flex items-center gap-1 px-2 py-1 rounded bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/50 text-rose-300 text-xs transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 border border-rose-500/20 dark:border-rose-800/50 text-rose-700 dark:text-rose-300 text-xs transition-colors cursor-pointer"
               title="Huỷ lệnh đang chạy (Ctrl+C)"
             >
-              <Square className="w-3 h-3 fill-rose-400 text-rose-400" />
+              <Square className="w-3 h-3 fill-rose-600 dark:fill-rose-400 text-rose-600 dark:text-rose-400" />
               <span>Dừng (Ctrl+C)</span>
             </button>
           )}
@@ -274,7 +274,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
           <button
             onClick={() => setBlocks([])}
             disabled={blocks.length === 0}
-            className="p-1.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 disabled:opacity-40 transition-colors cursor-pointer"
+            className="p-1.5 rounded text-slate-400 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-surface-highlight disabled:opacity-40 transition-colors cursor-pointer"
             title="Xoá lịch sử console"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -289,10 +289,10 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
         className="flex-1 p-3 overflow-y-auto space-y-3 select-text leading-relaxed font-mono"
       >
         {blocks.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2 py-12 select-none">
-            <Terminal className="w-8 h-8 text-zinc-600 opacity-60" />
-            <p className="text-xs font-medium">Chưa có lệnh nào được thực thi trong phiên này.</p>
-            <p className="text-[11px] text-zinc-600 max-w-sm text-center">
+          <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500 gap-2 py-12 select-none">
+            <Terminal className="w-8 h-8 text-slate-400 dark:text-zinc-600 opacity-60" />
+            <p className="text-xs font-medium text-slate-700 dark:text-zinc-300">Chưa có lệnh nào được thực thi trong phiên này.</p>
+            <p className="text-[11px] text-slate-500 dark:text-zinc-500 max-w-sm text-center">
               Nhập lệnh shell ở ô bên dưới hoặc bấm vào các lệnh gợi ý để chạy trong ngữ cảnh engine.
             </p>
 
@@ -301,9 +301,9 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
                 <button
                   key={cmd}
                   onClick={() => executeCommand(cmd)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-800/70 hover:bg-zinc-700/80 text-zinc-300 hover:text-zinc-100 text-[11px] border border-zinc-700/50 transition-colors cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-zinc-100 text-[11px] border border-border shadow-xs transition-colors cursor-pointer"
                 >
-                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  <Sparkles className="w-3 h-3 text-amber-500 dark:text-amber-400" />
                   <span>{cmd}</span>
                 </button>
               ))}
@@ -319,47 +319,47 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
             return (
               <div
                 key={block.id}
-                className="group rounded-md bg-[#111219] border border-zinc-800/70 p-2.5 transition-colors"
+                className="group rounded-lg bg-surface border border-border p-3 transition-colors shadow-xs"
               >
                 {/* Command Header */}
-                <div className="flex items-center justify-between gap-2 pb-1.5 mb-1.5 border-b border-zinc-800/50 select-none">
+                <div className="flex items-center justify-between gap-2 pb-1.5 mb-1.5 border-b border-border/80 select-none">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-emerald-400 font-bold">$</span>
-                    <span className="text-zinc-100 font-semibold truncate text-[12px]">
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">$</span>
+                    <span className="text-slate-900 dark:text-zinc-100 font-semibold truncate text-[12px]">
                       {block.command}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0 text-[10.5px]">
                     {isBlockRunning && (
-                      <span className="flex items-center gap-1 text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-800/30">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                      <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/20 dark:border-amber-800/30">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-400 animate-ping" />
                         <span>Đang chạy...</span>
                       </span>
                     )}
 
                     {isSuccess && (
-                      <span className="flex items-center gap-1 text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/30">
+                      <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/20 dark:border-emerald-800/30">
                         <CheckCircle2 className="w-3 h-3" />
                         <span>exit 0</span>
                       </span>
                     )}
 
                     {isError && (
-                      <span className="flex items-center gap-1 text-rose-400 bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-800/30">
+                      <span className="flex items-center gap-1 text-rose-700 dark:text-rose-400 bg-rose-500/10 dark:bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-500/20 dark:border-rose-800/30">
                         <AlertCircle className="w-3 h-3" />
                         <span>exit {block.exitCode ?? 'err'}</span>
                       </span>
                     )}
 
                     {isAborted && (
-                      <span className="text-zinc-400 bg-zinc-800/50 px-1.5 py-0.5 rounded">
+                      <span className="text-slate-600 dark:text-zinc-400 bg-slate-200/60 dark:bg-zinc-800/50 px-1.5 py-0.5 rounded border border-border">
                         Đã dừng
                       </span>
                     )}
 
                     {block.durationMs !== undefined && (
-                      <span className="flex items-center gap-1 text-zinc-500">
+                      <span className="flex items-center gap-1 text-slate-500 dark:text-zinc-500">
                         <Clock className="w-3 h-3" />
                         <span>{block.durationMs < 1000 ? `${block.durationMs}ms` : `${(block.durationMs / 1000).toFixed(1)}s`}</span>
                       </span>
@@ -367,11 +367,11 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
 
                     <button
                       onClick={() => handleCopyBlockOutput(block)}
-                      className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                      className="p-1 rounded text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-surface-highlight transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
                       title="Sao chép output"
                     >
                       {copiedId === block.id ? (
-                        <Check className="w-3 h-3 text-emerald-400" />
+                        <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                       ) : (
                         <Copy className="w-3 h-3" />
                       )}
@@ -381,17 +381,17 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
 
                 {/* Output content */}
                 {block.output ? (
-                  <pre className="text-zinc-300 whitespace-pre-wrap break-all leading-relaxed max-h-[360px] overflow-y-auto text-[12px]">
+                  <pre className="text-slate-800 dark:text-zinc-200 whitespace-pre-wrap break-all leading-relaxed max-h-[360px] overflow-y-auto text-[12px] bg-background/80 dark:bg-[#0c0d12] border border-border/80 p-2.5 rounded-lg">
                     {block.output}
                   </pre>
                 ) : isBlockRunning ? (
-                  <p className="text-zinc-500 italic text-[11px]">Đang chờ output...</p>
+                  <p className="text-slate-500 dark:text-zinc-500 italic text-[11px] py-1">Đang chờ output...</p>
                 ) : (
-                  <p className="text-zinc-600 italic text-[11px]">(Lệnh không có stdout/stderr)</p>
+                  <p className="text-slate-400 dark:text-zinc-600 italic text-[11px] py-1">(Lệnh không có stdout/stderr)</p>
                 )}
 
                 {block.truncated && (
-                  <div className="mt-1.5 pt-1.5 border-t border-zinc-800/40 text-[10.5px] text-amber-400/90 italic">
+                  <div className="mt-1.5 pt-1.5 border-t border-border/60 text-[10.5px] text-amber-600 dark:text-amber-400/90 italic">
                     Output vượt quá giới hạn an toàn và đã được cắt bớt để bảo vệ giao diện.
                   </div>
                 )}
@@ -402,15 +402,15 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
       </div>
 
       {/* Input Prompt Bottom Bar */}
-      <div className="p-2.5 bg-[#12131a] border-t border-zinc-800/80 shrink-0">
+      <div className="p-2.5 bg-surface border-t border-border shrink-0">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             executeCommand(input);
           }}
-          className="flex items-center gap-2 bg-[#090a0f] border border-zinc-700/60 focus-within:border-emerald-500/80 rounded-lg px-2.5 py-1.5 transition-colors"
+          className="flex items-center gap-2 bg-background border border-border focus-within:border-emerald-500 dark:focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500/20 rounded-lg px-2.5 py-1.5 transition-colors"
         >
-          <span className="text-emerald-400 font-bold select-none">$</span>
+          <span className="text-emerald-600 dark:text-emerald-400 font-bold select-none">$</span>
           <input
             ref={inputRef}
             type="text"
@@ -419,23 +419,23 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
             onKeyDown={handleKeyDown}
             placeholder={isRunning ? "Đang chạy lệnh... (nhấn Ctrl+C để huỷ)" : "Nhập lệnh bash (e.g. git status, ls, npm test)..."}
             disabled={isRunning}
-            className="flex-1 bg-transparent border-0 outline-none text-zinc-100 placeholder:text-zinc-600 font-mono text-[12px]"
+            className="flex-1 bg-transparent border-0 outline-none text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-600 font-mono text-[12px]"
           />
 
           {isRunning ? (
             <button
               type="button"
               onClick={handleAbort}
-              className="p-1 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-800/60 text-rose-300 transition-colors cursor-pointer"
+              className="p-1 rounded bg-rose-500/10 hover:bg-rose-500/20 dark:bg-rose-950/80 dark:hover:bg-rose-900 border border-rose-500/20 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 transition-colors cursor-pointer"
               title="Huỷ lệnh (Ctrl+C)"
             >
-              <Square className="w-3.5 h-3.5 fill-rose-400 text-rose-400" />
+              <Square className="w-3.5 h-3.5 fill-rose-600 dark:fill-rose-400 text-rose-600 dark:text-rose-400" />
             </button>
           ) : (
             <button
               type="submit"
               disabled={!input.trim()}
-              className="p-1 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-800/60 text-emerald-300 disabled:opacity-40 transition-colors cursor-pointer"
+              className="p-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-emerald-950/80 dark:hover:bg-emerald-900 border border-emerald-500/20 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 disabled:opacity-40 transition-colors cursor-pointer"
               title="Chạy lệnh (Enter)"
             >
               <CornerDownLeft className="w-3.5 h-3.5" />

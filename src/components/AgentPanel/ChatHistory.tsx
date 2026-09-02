@@ -128,31 +128,43 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
     setCopiedMsgId(msgId);
     setTimeout(() => setCopiedMsgId(null), 2000);
   };
+  const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef<boolean>(true);
+
+  // Chỉ coi là "bám đáy" khi người dùng đang ở gần cuối
+  const handleScroll = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (stickToBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
   }, [messages, currentThinking, activeToolCalls, currentStreamText]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5">
+    <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-5">
       {messages.map((msg) => {
         if (msg.role === 'fileMention') {
           const files = msg.files || [];
           return (
-            <div key={msg.id} className="flex flex-col gap-2 animate-fade-in">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
-                  <Paperclip className="w-3.5 h-3.5 text-blue-500" />
-                </div>
+            <div key={msg.id} className="flex flex-col items-end gap-1.5 self-end max-w-[85%] ml-auto animate-fade-in">
+              <div className="flex items-center gap-1.5 justify-end">
                 <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
                   Attached Context
                 </span>
                 <span className="text-[11px] text-slate-400">
                   ({files.length} file{files.length > 1 ? 's' : ''})
                 </span>
+                <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
+                  <Paperclip className="w-3.5 h-3.5 text-blue-500" />
+                </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 pl-8">
+              <div className="flex flex-wrap gap-2 justify-end">
                 {files.map((file, idx) => {
                   const isImg = isImageFile(file.path);
                   if (isImg) {
@@ -264,7 +276,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
         }
 
         return (
-          <div key={msg.id} className="flex flex-col gap-2">
+          <div key={msg.id} className="flex flex-col gap-2 min-w-0 max-w-full">
             {/* Assistant Message Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -308,7 +320,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
             )}
 
             {/* Message Bubble */}
-            <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed bg-transparent text-slate-800 dark:text-zinc-200">
+            <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed bg-transparent text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
               <MarkdownRenderer content={msg.content} />
             </div>
           </div>
@@ -331,7 +343,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
 
       {/* Active Streaming Text */}
       {currentStreamText && (
-        <div className="flex flex-col gap-2 animate-fade-in">
+        <div className="flex flex-col gap-2 animate-fade-in min-w-0 max-w-full">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
               <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 animate-pulse" />
@@ -340,7 +352,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
               OMP Agent
             </span>
           </div>
-          <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed text-slate-800 dark:text-zinc-200">
+          <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
             <MarkdownRenderer content={currentStreamText} isStreaming={true} />
           </div>
         </div>

@@ -464,64 +464,64 @@ export const OpsModal: React.FC<OpsModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center px-6 border-b border-border bg-surface/20 shrink-0 gap-2 overflow-x-auto">
+        <div className="flex items-center px-4 sm:px-6 border-b border-border bg-surface/20 shrink-0 gap-1 overflow-x-auto">
           <button
             onClick={() => setActiveTab('engine')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 py-2.5 px-2.5 sm:px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'engine'
                 ? 'border-codex-accent text-codex-accent font-semibold'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
             }`}
           >
-            <Cpu className="w-4 h-4" />
+            <Cpu className="w-3.5 h-3.5" />
             <span>Engine & Cập nhật</span>
           </button>
 
           <button
             onClick={() => setActiveTab('processes')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 py-2.5 px-2.5 sm:px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'processes'
                 ? 'border-codex-accent text-codex-accent font-semibold'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
             }`}
           >
-            <Activity className="w-4 h-4" />
+            <Activity className="w-3.5 h-3.5" />
             <span>Tiến trình nền (ps)</span>
           </button>
 
           <button
             onClick={() => setActiveTab('worktrees')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 py-2.5 px-2.5 sm:px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'worktrees'
                 ? 'border-codex-accent text-codex-accent font-semibold'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
             }`}
           >
-            <FolderGit2 className="w-4 h-4" />
+            <FolderGit2 className="w-3.5 h-3.5" />
             <span>Git Worktrees</span>
           </button>
 
           <button
             onClick={() => setActiveTab('extensions')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 py-2.5 px-2.5 sm:px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'extensions'
                 ? 'border-codex-accent text-codex-accent font-semibold'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
             }`}
           >
-            <Puzzle className="w-4 h-4" />
+            <Puzzle className="w-3.5 h-3.5" />
             <span>Plugins & Tools</span>
           </button>
 
           <button
             onClick={() => setActiveTab('agents')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 py-2.5 px-2.5 sm:px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'agents'
                 ? 'border-codex-accent text-codex-accent font-semibold'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
             }`}
           >
-            <Bot className="w-4 h-4" />
+            <Bot className="w-3.5 h-3.5" />
             <span>Agents Manager</span>
           </button>
         </div>
