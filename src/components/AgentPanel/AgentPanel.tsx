@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, PanelRightClose } from 'lucide-react';
+import { Sparkles, PanelRightClose, RefreshCw } from 'lucide-react';
 import {
   ChatMessage,
   ThinkingBlock,
@@ -13,6 +13,7 @@ import {
   OmpUiRequest,
   OmpTodoPhase,
   OmpTodoItem,
+  OmpRetryState,
 } from '../../types';
 import { ChatHistory } from './ChatHistory';
 import { PromptComposer } from './PromptComposer';
@@ -46,6 +47,8 @@ interface AgentPanelProps {
   onOpenFile?: (filePath: string) => void;
   todoPhases?: OmpTodoPhase[];
   todos?: OmpTodoItem[];
+  retryState?: OmpRetryState;
+  onAbortRetry?: () => void;
 }
 
 const AgentPanelComponent: React.FC<AgentPanelProps> = ({
@@ -75,6 +78,8 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   onCancelFollowUp,
   todoPhases,
   todos,
+  retryState,
+  onAbortRetry,
 }) => {
   return (
     <div className="w-full flex flex-col h-full bg-panel select-none">
@@ -136,6 +141,28 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
           onDeny={onDenyTool}
         />
       )}
+      {/* Auto-Retry Status Banner */}
+      {retryState?.isRetrying && (
+        <div className="px-4 py-2 bg-amber-500/10 border-t border-amber-500/20 flex items-center justify-between gap-2 shrink-0 animate-fade-in">
+          <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 min-w-0">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+            <span className="truncate">
+              Đang retry{retryState.attempt ? ` (lần ${retryState.attempt}${retryState.maxAttempts ? `/${retryState.maxAttempts}` : ''})` : ''}…
+              {retryState.error ? ` - ${retryState.error}` : ''}
+            </span>
+          </div>
+          {onAbortRetry && (
+            <button
+              onClick={onAbortRetry}
+              className="px-2.5 py-1 text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 rounded-md transition-colors cursor-pointer shrink-0"
+              title="Huỷ quá trình retry hiện tại"
+            >
+              Huỷ retry
+            </button>
+          )}
+        </div>
+      )}
+
 
       {/* Docked Prompt Composer */}
       <PromptComposer

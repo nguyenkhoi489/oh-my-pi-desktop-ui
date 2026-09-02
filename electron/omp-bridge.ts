@@ -100,6 +100,13 @@ import type {
   SetTodosResponseData,
   TodosEvent,
   TodoReminderEvent,
+  SetAutoRetryCommand,
+  AbortRetryCommand,
+  SetFastModeCommand,
+  GetLastAssistantTextCommand,
+  HandoffCommand,
+  AutoRetryStartEvent,
+  AutoRetryEndEvent,
 } from './omp-rpc-types.ts';
 
 export type BridgeLifecycleState =
@@ -229,6 +236,7 @@ export class OmpBridge {
   private customPath: string | null = null;
   private commandCounter: number = 0;
   private settingsStore?: SettingsStore;
+  private retryState: { isRetrying: boolean; attempt?: number; maxAttempts?: number; delayMs?: number; error?: string; success?: boolean } = { isRetrying: false };
 
 
   constructor(window: BrowserWindow, settingsStore?: SettingsStore) {
@@ -279,6 +287,10 @@ export class OmpBridge {
     this.currentSessionFile = sessionFile;
     this.currentSessionId = sessionId;
   }
+  public getRetryState(): { isRetrying: boolean; attempt?: number; maxAttempts?: number; delayMs?: number; error?: string; success?: boolean } {
+    return { ...this.retryState };
+  }
+
 
   public getSubagents(): OmpSubagentInfo[] {
     return Array.from(this.activeSubagents.values());
@@ -1373,6 +1385,133 @@ export class OmpBridge {
     }
   }
 
+  public async setAutoRetry(
+    enabled: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      if (this.settingsStore) {
+        this.settingsStore.set({ autoRetry: enabled });
+      }
+      return { success: true };
+    }
+    try {
+      const cmd: SetAutoRetryCommand = {
+        type: 'set_auto_retry',
+        id: this.generateId(),
+        enabled,
+      };
+      const res = await this.sendCommand(cmd);
+      if (res.success) {
+        if (this.settingsStore) {
+          this.settingsStore.set({ autoRetry: enabled });
+        }
+        await this.getState().catch(() => {});
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Failed to set auto-retry' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing set_auto_retry' };
+    }
+  }
+
+  public async abortRetry(): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      this.retryState = { isRetrying: false };
+      if (this.window && !this.window.isDestroyed()) {
+        this.window.webContents.send('omp:retry-state', this.retryState);
+      }
+      return { success: true };
+    }
+    try {
+      const cmd: AbortRetryCommand = {
+        type: 'abort_retry',
+        id: this.generateId(),
+      };
+      const res = await this.sendCommand(cmd);
+      if (res.success) {
+        this.retryState = { isRetrying: false };
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:retry-state', this.retryState);
+        }
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Failed to abort retry' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing abort_retry' };
+    }
+  }
+
+  public async setFastMode(
+    enabled: boolean
+  ): Promise<{ success: boolean; data?: { enabled?: boolean }; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      if (this.settingsStore) {
+        this.settingsStore.set({ fastMode: enabled });
+      }
+      return { success: true, data: { enabled } };
+    }
+    try {
+      const cmd: SetFastModeCommand = {
+        type: 'set_fast_mode',
+        id: this.generateId(),
+        enabled,
+      };
+      const res = await this.sendCommand<{ enabled?: boolean }>(cmd);
+      if (res.success) {
+        if (this.settingsStore) {
+          this.settingsStore.set({ fastMode: enabled });
+        }
+        await this.getState().catch(() => {});
+        return { success: true, data: res.data };
+      }
+      return { success: false, error: res.error || 'Failed to set fast mode' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing set_fast_mode' };
+    }
+  }
+
+  public async getLastAssistantText(): Promise<{ success: boolean; text?: string; error?: string }> {
+    if (this.lifecycleState === 'ready' && this.process && this.process.stdin?.writable) {
+      try {
+        const cmd: GetLastAssistantTextCommand = {
+          type: 'get_last_assistant_text',
+          id: this.generateId(),
+        };
+        const res = await this.sendCommand<{ text?: string }>(cmd);
+        if (res.success) {
+          const text = typeof res.data?.text === 'string' ? res.data.text : (typeof (res.data as any) === 'string' ? (res.data as any) : '');
+          return { success: true, text };
+        }
+      } catch (err) {
+        console.warn('[OmpBridge] get_last_assistant_text RPC error, using local fallback:', err);
+      }
+    }
+    return { success: true, text: undefined };
+  }
+
+  public async handoff(): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const cmd: HandoffCommand = {
+        type: 'handoff',
+        id: this.generateId(),
+      };
+      const res = await this.sendCommand(cmd);
+      if (res.success) {
+        return { success: true, data: res.data };
+      }
+      return { success: false, error: res.error || 'Failed to execute handoff' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing handoff' };
+    }
+  }
+
   public async setInterruptMode(
     mode: string
   ): Promise<{ success: boolean; error?: string }> {
@@ -2060,6 +2199,12 @@ export class OmpBridge {
               if (s.interruptMode) {
                 this.setInterruptMode(s.interruptMode).catch(() => {});
               }
+              if (s.autoRetry !== undefined) {
+                this.setAutoRetry(s.autoRetry).catch(() => {});
+              }
+              if (s.fastMode !== undefined) {
+                this.setFastMode(s.fastMode).catch(() => {});
+              }
             }
           } else {
             console.error('[OmpBridge] Protocol negotiation failed:', res.error);
@@ -2261,6 +2406,12 @@ export class OmpBridge {
       case 'turn_start':
         this.currentTurnId = (frame as TurnStartEvent).turnId || String(Date.now());
         this.setStatus('thinking');
+        if (this.retryState.isRetrying) {
+          this.retryState = { isRetrying: false };
+          if (this.window && !this.window.isDestroyed()) {
+            this.window.webContents.send('omp:retry-state', this.retryState);
+          }
+        }
         break;
 
       case 'tool_execution_start': {
@@ -2517,6 +2668,12 @@ export class OmpBridge {
 
       case 'turn_end':
         this.setStatus('idle');
+        if (this.retryState.isRetrying) {
+          this.retryState = { isRetrying: false };
+          if (this.window && !this.window.isDestroyed()) {
+            this.window.webContents.send('omp:retry-state', this.retryState);
+          }
+        }
         break;
 
       case 'agent_end':
@@ -2680,6 +2837,38 @@ export class OmpBridge {
         const rawTodos = reminderFrame.todos;
         if (Array.isArray(rawTodos)) {
           this.normalizeAndSetTodos(undefined, rawTodos);
+        }
+        break;
+      }
+      case 'auto_retry_start': {
+        const retryFrame = frame as AutoRetryStartEvent;
+        const attempt = typeof retryFrame.attempt === 'number' ? retryFrame.attempt : 1;
+        const maxAttempts = typeof retryFrame.maxAttempts === 'number' ? retryFrame.maxAttempts : undefined;
+        const delayMs = typeof retryFrame.delayMs === 'number' ? retryFrame.delayMs : undefined;
+        const error = typeof retryFrame.error === 'string' ? retryFrame.error : undefined;
+        this.retryState = {
+          isRetrying: true,
+          attempt,
+          maxAttempts,
+          delayMs,
+          error,
+        };
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:retry-state', this.retryState);
+        }
+        break;
+      }
+
+      case 'auto_retry_end': {
+        const retryEndFrame = frame as AutoRetryEndEvent;
+        this.retryState = {
+          isRetrying: false,
+          success: retryEndFrame.success,
+          attempt: retryEndFrame.attempt,
+          error: retryEndFrame.error,
+        };
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.webContents.send('omp:retry-state', this.retryState);
         }
         break;
       }
@@ -2942,6 +3131,10 @@ export class OmpBridge {
     this.workspacePath = null;
     this.currentTurnId = null;
     this.framer.reset();
+    this.retryState = { isRetrying: false };
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('omp:retry-state', this.retryState);
+    }
   }
 
   private rejectAllPending(reason: string) {

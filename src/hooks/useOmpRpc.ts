@@ -23,6 +23,9 @@ import {
   OmpCommandInfo,
   OmpTodoPhase,
   OmpTodoItem,
+  OmpRetryState,
+  GlobalUsageResult,
+  GlobalStatsResult,
 } from '../types';
 import { DEMO_MESSAGES, DEMO_INITIAL_DIFF } from '../mock/demoData';
 export function useOmpRpc() {
@@ -69,6 +72,7 @@ export function useOmpRpc() {
   // Todos & Plan Progress (Phase 4)
   const [todoPhases, setTodoPhases] = useState<OmpTodoPhase[]>([]);
   const [todos, setTodos] = useState<OmpTodoItem[]>([]);
+  const [retryState, setRetryState] = useState<OmpRetryState>({ isRetrying: false });
   // rAF token batching refs
   const tokenBufferRef = useRef<string>('');
   const rafIdRef = useRef<number | null>(null);
@@ -767,6 +771,11 @@ export function useOmpRpc() {
           setTodos(data?.todos || []);
         })
       : () => {};
+    const unsubRetry = window.electronAPI.onOmpRetryState
+      ? window.electronAPI.onOmpRetryState((state) => {
+          setRetryState(state || { isRetrying: false });
+        })
+      : () => {};
     refreshCommands();
     return () => {
       if (rafIdRef.current !== null) {
@@ -791,6 +800,7 @@ export function useOmpRpc() {
       unsubCommands();
       unsubCommandOutput();
       unsubTodos();
+      unsubRetry();
     };
   }, [flushTokens, refreshEngineState, refreshCommands]);
 
@@ -1159,6 +1169,30 @@ export function useOmpRpc() {
       return { success: false, error: msg || 'Failed to fetch session stats' };
     }
   }, []);
+
+  const getGlobalUsage = useCallback(async (forceRefresh?: boolean): Promise<GlobalUsageResult> => {
+    if (!window.electronAPI?.getGlobalUsage) {
+      return { success: false, error: 'electronAPI.getGlobalUsage is unavailable' };
+    }
+    try {
+      return await window.electronAPI.getGlobalUsage(forceRefresh);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Failed to fetch global usage' };
+    }
+  }, []);
+
+  const getGlobalStats = useCallback(async (forceRefresh?: boolean): Promise<GlobalStatsResult> => {
+    if (!window.electronAPI?.getGlobalStats) {
+      return { success: false, error: 'electronAPI.getGlobalStats is unavailable' };
+    }
+    try {
+      return await window.electronAPI.getGlobalStats(forceRefresh);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Failed to fetch global stats' };
+    }
+  }, []);
   const changeApprovalMode = useCallback(
     async (mode: OmpApprovalMode): Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }> => {
       if (status !== 'idle') {
@@ -1241,6 +1275,76 @@ export function useOmpRpc() {
 
 
 
+  const abortRetry = useCallback(async (): Promise<boolean> => {
+    setRetryState({ isRetrying: false });
+    if (window.electronAPI?.abortRetry) {
+      try {
+        const res = await window.electronAPI.abortRetry();
+        return res.success;
+      } catch (err) {
+        console.error('[useOmpRpc] Failed to abort retry:', err);
+      }
+    }
+    return true;
+  }, []);
+
+  const setAutoRetry = useCallback(async (enabled: boolean): Promise<boolean> => {
+    if (window.electronAPI?.setAutoRetry) {
+      try {
+        const res = await window.electronAPI.setAutoRetry(enabled);
+        return res.success;
+      } catch (err) {
+        console.error('[useOmpRpc] Failed to set auto-retry:', err);
+      }
+    }
+    return false;
+  }, []);
+
+  const setFastMode = useCallback(async (enabled: boolean): Promise<boolean> => {
+    if (window.electronAPI?.setFastMode) {
+      try {
+        const res = await window.electronAPI.setFastMode(enabled);
+        return res.success;
+      } catch (err) {
+        console.error('[useOmpRpc] Failed to set fast mode:', err);
+      }
+    }
+    return false;
+  }, []);
+
+  const getLastAssistantText = useCallback(async (): Promise<string | null> => {
+    if (window.electronAPI?.getLastAssistantText) {
+      try {
+        const res = await window.electronAPI.getLastAssistantText();
+        if (res.success && typeof res.text === 'string' && res.text.trim()) {
+          return res.text;
+        }
+      } catch (err) {
+        console.warn('[useOmpRpc] getLastAssistantText failed, fallback to local message:', err);
+      }
+    }
+    if (currentStreamText.trim()) {
+      return currentStreamText;
+    }
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant' && typeof messages[i].content === 'string' && messages[i].content.trim()) {
+        return messages[i].content;
+      }
+    }
+    return null;
+  }, [currentStreamText, messages]);
+
+  const handoff = useCallback(async (): Promise<{ success: boolean; data?: unknown; error?: string }> => {
+    if (window.electronAPI?.handoff) {
+      try {
+        return await window.electronAPI.handoff();
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Lỗi gọi lệnh handoff' };
+      }
+    }
+    return { success: false, error: 'Chức năng handoff chỉ hỗ trợ khi kết nối engine OMP' };
+  }, []);
+
   return {
     status,
     installStatus,
@@ -1299,6 +1403,8 @@ export function useOmpRpc() {
     contextUsage,
     tokensPerSecond,
     getSessionStats,
+    getGlobalUsage,
+    getGlobalStats,
     approvalMode,
     setApprovalMode: changeApprovalMode,
     changeApprovalMode,
@@ -1312,5 +1418,11 @@ export function useOmpRpc() {
     todos,
     setTodos: updateTodos,
     refreshTodos,
+    retryState,
+    abortRetry,
+    setAutoRetry,
+    setFastMode,
+    getLastAssistantText,
+    handoff,
   };
 }

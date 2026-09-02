@@ -87,6 +87,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSessionStats: () =>
     ipcRenderer.invoke('omp:session-stats'),
 
+  getGlobalUsage: (forceRefresh?: boolean) =>
+    ipcRenderer.invoke('omp:global-usage', forceRefresh),
+
+  getGlobalStats: (forceRefresh?: boolean) =>
+    ipcRenderer.invoke('omp:global-stats', forceRefresh),
+
   setApprovalMode: (mode: OmpApprovalMode) =>
     ipcRenderer.invoke('omp:set-approval-mode', mode),
 
@@ -98,6 +104,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   setAutoCompaction: (enabled: boolean) =>
     ipcRenderer.invoke('omp:set-auto-compaction', enabled),
+  setAutoRetry: (enabled: boolean) =>
+    ipcRenderer.invoke('omp:set-auto-retry', enabled),
+
+  abortRetry: () =>
+    ipcRenderer.invoke('omp:abort-retry'),
+
+  setFastMode: (enabled: boolean) =>
+    ipcRenderer.invoke('omp:set-fast-mode', enabled),
+
+  getLastAssistantText: () =>
+    ipcRenderer.invoke('omp:get-last-assistant-text'),
+
+  handoff: () =>
+    ipcRenderer.invoke('omp:handoff'),
   // Sessions & Subagent Hub (Phase 1 Additions)
   listSessions: () =>
     ipcRenderer.invoke('omp:list-sessions'),
@@ -309,5 +329,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: unknown, data: { phases: OmpTodoPhase[]; todos: OmpTodoItem[] }) => callback(data);
     ipcRenderer.on('omp:todos-update', handler);
     return () => ipcRenderer.removeListener('omp:todos-update', handler);
+  },
+  onOmpRetryState: (callback: (state: any) => void) => {
+    const handler = (_: unknown, state: any) => callback(state);
+    ipcRenderer.on('omp:retry-state', handler);
+    return () => ipcRenderer.removeListener('omp:retry-state', handler);
   },
 });

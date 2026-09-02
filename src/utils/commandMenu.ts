@@ -4,6 +4,7 @@ export const DEMO_COMMANDS: OmpCommandInfo[] = [
   { name: 'model', description: 'Chọn hoặc hiển thị model đang hoạt động', inputHint: '<provider/model>' },
   { name: 'thinking', description: 'Cài đặt mức độ suy nghĩ (off/low/medium/high/max)', inputHint: '<level>' },
   { name: 'compact', description: 'Nén ngữ cảnh phiên hội thoại hiện tại', inputHint: '[instructions]' },
+  { name: 'handoff', description: 'Tạo tài liệu bàn giao ngữ cảnh phiên làm việc hiện tại', inputHint: '[instructions]' },
   { name: 'help', description: 'Hiển thị trợ giúp danh sách lệnh' },
   {
     name: 'security',

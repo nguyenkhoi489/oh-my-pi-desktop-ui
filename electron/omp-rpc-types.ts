@@ -265,6 +265,37 @@ export interface SetTodosResponseData {
   todos?: OmpTodoItem[];
   [key: string]: unknown;
 }
+export interface SetAutoRetryCommand {
+  type: 'set_auto_retry';
+  id?: string;
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+export interface AbortRetryCommand {
+  type: 'abort_retry';
+  id?: string;
+  [key: string]: unknown;
+}
+
+export interface SetFastModeCommand {
+  type: 'set_fast_mode';
+  id?: string;
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+export interface GetLastAssistantTextCommand {
+  type: 'get_last_assistant_text';
+  id?: string;
+  [key: string]: unknown;
+}
+
+export interface HandoffCommand {
+  type: 'handoff';
+  id?: string;
+  [key: string]: unknown;
+}
 export type OmpCommandFrame =
   | NegotiateProtocolCommand
   | PromptCommand
@@ -295,7 +326,12 @@ export type OmpCommandFrame =
   | GetBranchMessagesCommand
   | GetAvailableCommandsCommand
   | SetTodosCommand
-  | SetAutoCompactionCommand;
+  | SetAutoCompactionCommand
+  | SetAutoRetryCommand
+  | AbortRetryCommand
+  | SetFastModeCommand
+  | GetLastAssistantTextCommand
+  | HandoffCommand;
 // ==========================================
 // Message Content & Envelope Definitions
 // ==========================================
@@ -711,6 +747,22 @@ export interface SubagentEvent {
   payload?: unknown;
   [key: string]: unknown;
 }
+export interface AutoRetryStartEvent {
+  type: 'auto_retry_start';
+  attempt?: number;
+  maxAttempts?: number;
+  delayMs?: number;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface AutoRetryEndEvent {
+  type: 'auto_retry_end';
+  success?: boolean;
+  attempt?: number;
+  error?: string;
+  [key: string]: unknown;
+}
 
 export interface UnknownFrame {
   type: string;
@@ -737,7 +789,9 @@ export type OmpEventFrame =
   | TodoReminderEvent
   | SubagentLifecycleEvent
   | SubagentProgressEvent
-  | SubagentEvent;
+  | SubagentEvent
+  | AutoRetryStartEvent
+  | AutoRetryEndEvent;
 // ==========================================
 // Inbound, Outbound & Overall Frame Unions
 // ==========================================

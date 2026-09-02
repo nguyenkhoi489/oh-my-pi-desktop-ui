@@ -16,6 +16,49 @@ Entry template:
 ```
 
 ---
+## 2026-09-02 — Phase 7: Global Usage & Stats (omp usage / omp stats)
+
+- **State:** Đã hoàn thành toàn bộ Phase 7:
+  - `electron/usage-stats.ts`: Module spawn `omp usage --json` và `omp stats --json` qua `execFileAsync`, cơ chế cache in-memory 60s, timeout 15s, parse JSON an toàn (bóc tách banner đồng bộ như `Syncing session files...`), chuẩn hóa thành `OmpGlobalUsageData` và `OmpGlobalStatsData`, xử lý lỗi mềm và lưu `raw` output khi cần degrade.
+  - `electron/types.ts` & `src/types/index.ts`: Bổ sung toàn bộ kiểu dữ liệu cho `OmpUsageLimit`, `OmpUsageReport`, `OmpUsageCapacityItem`, `OmpGlobalUsageData`, `OmpOverallStats`, `OmpModelStats`, `OmpFolderStats`, `OmpAgentTypeStats`, `OmpGlobalStatsData`, `GlobalUsageResult`, `GlobalStatsResult`, và cập nhật `ElectronAPI` với `getGlobalUsage`, `getGlobalStats`.
+  - `electron/main.ts` & `electron/preload.ts`: Đăng ký IPC handler `omp:global-usage`, `omp:global-stats` (sử dụng `resolveOmpBinaryPath()`), và expose trong context bridge preload.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung các callback `getGlobalUsage(forceRefresh?)` và `getGlobalStats(forceRefresh?)`.
+  - `src/components/HeaderBar/SessionStatsPanel.tsx`: Cập nhật giao diện với 3 tab chuyển đổi (`Session`, `Usage Limits`, `Global Stats`), skeleton loading, nút làm mới cưỡng bức (bỏ qua cache), thanh hạn mức quota trực quan với phân loại màu sắc (emerald/amber/rose), badge cảnh báo khi quota > 80%, thời gian reset đếm ngược, bảng chi tiết theo model và top workspace.
+  - `src/components/HeaderBar.tsx` & `src/App.tsx`: Truyền các props `onGetGlobalUsage` và `onGetGlobalStats` vào `HeaderBar` và `SessionStatsPanel`.
+  - `scripts/verify-usage-stats.mjs`: Test suite (45 assertions) kiểm tra việc trích xuất JSON, parse fixture thực tế, cache 60s & forceRefresh, timeout, error fallback, và IPC/preload contract.
+  - `package.json`: Bổ sung `test:usage-stats` vào `scripts` và chuỗi `test`.
+  - Typecheck (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`), `test:usage-stats`, `test:preload`, và `build` pass 100%.
+- **In-flight:** Phase 7 hoàn thành trọn vẹn, toàn bộ 7 Phase của parity roadmap đã hoàn tất.
+- **Next:**
+  1. Review tổng thể và commit theo conventional commit (`feat(observability): add global usage limits and stats parity`).
+- **Refs:**
+  - `plans/260902-1133-omp-cli-desktop-parity/phase-07-global-usage-stats.md`
+  - `scripts/verify-usage-stats.mjs`
+
+---
+## 2026-09-02 — Phase 6: Auto-retry, Fast Mode & Tiện ích RPC nhỏ
+
+- **State:** Đã hoàn thành toàn bộ Phase 6:
+  - `electron/omp-rpc-types.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung `SetAutoRetryCommand`, `AbortRetryCommand`, `SetFastModeCommand`, `GetLastAssistantTextCommand`, `HandoffCommand`, `AutoRetryStartEvent`, `AutoRetryEndEvent`, `OmpRetryState`, và các API contracts trong `ElectronAPI`.
+  - `electron/omp-bridge.ts`: Bổ sung các RPC method `setAutoRetry(enabled)`, `abortRetry()`, `setFastMode(enabled)`, `getLastAssistantText()`, `handoff()`, bắt event `auto_retry_start` & `auto_retry_end` để cập nhật `retryState` và bắn IPC `omp:retry-state` sang renderer, tự động dọn dẹp retry khi `turn_start`, `turn_end`, hoặc kết thúc tiến trình.
+  - `electron/main.ts` & `electron/preload.ts`: Đăng ký và expose các IPC handler `omp:set-auto-retry`, `omp:abort-retry`, `omp:set-fast-mode`, `omp:get-last-assistant-text`, `omp:handoff`, cùng listener `onOmpRetryState`.
+  - `electron/settings-store.ts`: Hỗ trợ lưu trữ và sanitize 2 thiết lập `autoRetry` và `fastMode`.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung `retryState`, `abortRetry`, `setAutoRetry`, `setFastMode`, `getLastAssistantText`, `handoff`, lắng nghe `onOmpRetryState`.
+  - `src/components/AgentPanel/AgentPanel.tsx`: Thêm banner retry ("Đang retry (lần N)..." + nút "Huỷ retry") ngay phía trên PromptComposer khi `retryState.isRetrying === true`, tự động ẩn khi kết thúc và không che composer.
+  - `src/components/Modals/SettingsModal.tsx`: Thêm 2 toggle switch cho Auto-retry (`autoRetry`) và Fast Mode (`fastMode`) trong tab Engine, đồng bộ live xuống engine đang chạy và lưu vào `SettingsStore`.
+  - `src/components/HeaderBar.tsx` & `src/components/AgentPanel/ChatHistory.tsx`: Bổ sung nút sao chép câu trả lời cuối cùng (`getLastAssistantText`) với toast xác nhận.
+  - `src/utils/commandMenu.ts`: Thêm lệnh `handoff` vào danh mục `DEMO_COMMANDS` phục vụ Omnibar.
+  - `scripts/verify-retry-fastmode.mjs`: Test suite (54 checks) kiểm tra persistence, event dispatch, framing, offline fallback, IPC/preload contract.
+  - `package.json`: Thêm `test:retry-fastmode` vào `scripts` và chuỗi `npm test`.
+  - Typecheck (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) và `scripts/verify-retry-fastmode.mjs` pass 100%.
+- **In-flight:** Phase 6 hoàn thành, toàn bộ 6 Phase của parity roadmap đã sẵn sàng.
+- **Next:**
+  1. Review toàn diện codebase, chạy live verify và commit deliverables.
+- **Refs:**
+  - `plans/260902-1133-omp-cli-desktop-parity/phase-06-retry-fastmode-utils.md`
+  - `scripts/verify-retry-fastmode.mjs`
+
+---
 ## 2026-09-02 — Phase 5: Subagent Transcript Viewer
 
 - **State:** Đã hoàn thành toàn bộ Phase 5:

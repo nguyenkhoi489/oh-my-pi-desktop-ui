@@ -12,6 +12,7 @@ import {
 } from './models-config.ts';
 import { AuthLoginManager, fetchAuthenticatedProviders } from './auth-login.ts';
 import { readModelRolesConfig, writeModelRolesConfig } from './roles-config.ts';
+import { fetchGlobalUsage, fetchGlobalStats } from './usage-stats.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -268,6 +269,17 @@ ipcMain.handle('omp:session-stats', async () => {
   return ompBridge.getSessionStats();
 });
 
+// IPC Handlers: Global Usage & Stats (Phase 7 Parity)
+ipcMain.handle('omp:global-usage', async (_, forceRefresh?: boolean) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  return fetchGlobalUsage(binaryPath, { forceRefresh: Boolean(forceRefresh) });
+});
+
+ipcMain.handle('omp:global-stats', async (_, forceRefresh?: boolean) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  return fetchGlobalStats(binaryPath, { forceRefresh: Boolean(forceRefresh) });
+});
+
 ipcMain.handle('omp:get-approval-mode', async () => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
   return ompBridge.getApprovalMode();
@@ -287,6 +299,31 @@ ipcMain.handle('omp:set-auto-compaction', async (_, enabled: boolean) => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
   return ompBridge.setAutoCompaction(enabled);
 });
+ipcMain.handle('omp:set-auto-retry', async (_, enabled: boolean) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.setAutoRetry(enabled);
+});
+
+ipcMain.handle('omp:abort-retry', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.abortRetry();
+});
+
+ipcMain.handle('omp:set-fast-mode', async (_, enabled: boolean) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.setFastMode(enabled);
+});
+
+ipcMain.handle('omp:get-last-assistant-text', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.getLastAssistantText();
+});
+
+ipcMain.handle('omp:handoff', async () => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.handoff();
+});
+
 
 // IPC Handlers: Todos Management (Phase 4)
 ipcMain.handle('omp:get-todos', async () => {

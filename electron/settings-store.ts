@@ -12,6 +12,8 @@ export interface AppSettings {
   defaultThinkingLevel?: OmpThinkingLevel;
   approvalMode?: OmpApprovalMode;
   autoCompaction?: boolean;
+  autoRetry?: boolean;
+  fastMode?: boolean;
   steeringMode?: string;
   followUpMode?: string;
   interruptMode?: string;
@@ -86,6 +88,12 @@ export class SettingsStore {
     if (raw.approvalMode && VALID_APPROVAL_MODES.has(raw.approvalMode)) {
       clean.approvalMode = raw.approvalMode;
     }
+    if (typeof raw.autoRetry === 'boolean') {
+      clean.autoRetry = raw.autoRetry;
+    }
+    if (typeof raw.fastMode === 'boolean') {
+      clean.fastMode = raw.fastMode;
+    }
     if (typeof raw.autoCompaction === 'boolean') {
       clean.autoCompaction = raw.autoCompaction;
     }
@@ -144,6 +152,12 @@ export class SettingsStore {
     }
     if ('autoCompaction' in partial && typeof partial.autoCompaction === 'boolean') {
       next.autoCompaction = partial.autoCompaction;
+    }
+    if ('autoRetry' in partial && typeof partial.autoRetry === 'boolean') {
+      next.autoRetry = partial.autoRetry;
+    }
+    if ('fastMode' in partial && typeof partial.fastMode === 'boolean') {
+      next.fastMode = partial.fastMode;
     }
     if ('steeringMode' in partial) {
       next.steeringMode =

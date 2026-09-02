@@ -122,6 +122,12 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
   onOpenFile,
 }) => {
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const handleCopyMessage = (text: string, msgId: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedMsgId(msgId);
+    setTimeout(() => setCopiedMsgId(null), 2000);
+  };
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -260,13 +266,33 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
         return (
           <div key={msg.id} className="flex flex-col gap-2">
             {/* Assistant Message Header */}
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
-                <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                  OMP Agent
+                </span>
               </div>
-              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
-                OMP Agent
-              </span>
+              <button
+                type="button"
+                onClick={() => handleCopyMessage(msg.content, msg.id)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 text-[11px] flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-surface-highlight transition-colors cursor-pointer"
+                title="Sao chép phản hồi"
+              >
+                {copiedMsgId === msg.id ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-500" />
+                    <span className="text-emerald-500 text-[10.5px]">Đã chép</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    <span className="text-[10.5px]">Copy</span>
+                  </>
+                )}
+              </button>
             </div>
 
             {/* Thinking Block if attached */}

@@ -10,6 +10,7 @@ import {
   Sun,
   Moon,
   Check,
+  Copy,
   PanelLeft,
   PanelLeftClose,
   PanelRight,
@@ -28,6 +29,8 @@ import {
   OmpContextUsage,
   OmpSessionStats,
   OmpApprovalMode,
+  GlobalUsageResult,
+  GlobalStatsResult,
 } from '../types';
 import { SessionStatsPanel } from './HeaderBar/SessionStatsPanel';
 interface HeaderBarProps {
@@ -52,6 +55,8 @@ interface HeaderBarProps {
   contextUsage?: OmpContextUsage | null;
   tokensPerSecond?: number | null;
   onGetSessionStats?: () => Promise<{ success: boolean; stats?: OmpSessionStats; error?: string }>;
+  onGetGlobalUsage?: (forceRefresh?: boolean) => Promise<GlobalUsageResult>;
+  onGetGlobalStats?: (forceRefresh?: boolean) => Promise<GlobalStatsResult>;
   approvalMode?: OmpApprovalMode;
   onSelectApprovalMode?: (mode: OmpApprovalMode) => void;
   isCompacting?: boolean;
@@ -59,6 +64,7 @@ interface HeaderBarProps {
   onCompact?: (customInstructions?: string) => Promise<{ success: boolean; error?: string }>;
   onSetAutoCompaction?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onOpenSettingsModal?: () => void;
+  onCopyLastAssistantText?: () => Promise<string | null>;
 }
 
 const FALLBACK_MODELS: OmpModelInfo[] = [
@@ -119,12 +125,28 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onCompact,
   onSetAutoCompaction,
   onOpenSettingsModal,
+  onGetGlobalUsage,
+  onGetGlobalStats,
+  onCopyLastAssistantText,
 }) => {
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isApprovalDropdownOpen, setIsApprovalDropdownOpen] = useState(false);
   const [isStatsPanelOpen, setIsStatsPanelOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const approvalDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [copiedLastText, setCopiedLastText] = useState(false);
+
+  const handleCopyLastAssistantText = async () => {
+    if (onCopyLastAssistantText) {
+      const text = await onCopyLastAssistantText();
+      if (text) {
+        await navigator.clipboard.writeText(text);
+        setCopiedLastText(true);
+        setTimeout(() => setCopiedLastText(false), 2000);
+      }
+    }
+  };
 
   const isBusy = status !== 'idle';
   const modelList = availableModels.length > 0 ? availableModels : FALLBACK_MODELS;
@@ -532,6 +554,20 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             <Sun className="w-3.5 h-3.5 text-amber-400" />
           )}
         </button>
+        {onCopyLastAssistantText && (
+          <button
+            onClick={handleCopyLastAssistantText}
+            className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
+            title={copiedLastText ? 'Đã sao chép phản hồi cuối' : 'Sao chép phản hồi cuối cùng'}
+          >
+            {copiedLastText ? (
+              <Check className="w-3.5 h-3.5 text-emerald-500" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
+          </button>
+        )}
+
 
         {onOpenSettingsModal && (
           <button
@@ -560,6 +596,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           contextUsage={contextUsage}
           isCompacting={isCompacting}
           autoCompactionEnabled={autoCompactionEnabled}
+          onGetGlobalUsage={onGetGlobalUsage}
+          onGetGlobalStats={onGetGlobalStats}
           onCompact={onCompact}
           onSetAutoCompaction={onSetAutoCompaction}
         />

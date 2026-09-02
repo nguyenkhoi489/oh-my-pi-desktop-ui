@@ -154,6 +154,14 @@ export interface OmpInstallStatus {
   binaryPath?: string;
   error?: string;
 }
+export interface OmpRetryState {
+  isRetrying: boolean;
+  attempt?: number;
+  maxAttempts?: number;
+  delayMs?: number;
+  error?: string;
+  success?: boolean;
+}
 
 export type OmpThinkingLevel =
   | 'off'
@@ -268,6 +276,156 @@ export interface OmpContextUsageUpdate {
   tokensPerSecond?: number | null;
   sessionName?: string;
 }
+export interface OmpUsageLimitAmount {
+  used: number;
+  limit: number;
+  remaining: number;
+  usedFraction: number;
+  remainingFraction: number;
+  unit: string;
+}
+
+export interface OmpUsageLimitWindow {
+  id: string;
+  label: string;
+  durationMs?: number;
+  resetsAt?: number;
+}
+
+export interface OmpUsageLimit {
+  id: string;
+  label: string;
+  scope?: {
+    provider?: string;
+    windowId?: string;
+    shared?: boolean;
+    accountId?: string;
+    tier?: string;
+    modelId?: string;
+  };
+  window?: OmpUsageLimitWindow;
+  amount?: OmpUsageLimitAmount;
+  status?: string;
+}
+
+export interface OmpUsageReportMetadata {
+  planType?: string;
+  allowed?: boolean;
+  limitReached?: boolean;
+  email?: string;
+  accountId?: string;
+  orgId?: string;
+  orgName?: string;
+  meterStates?: Record<string, { allowed?: boolean; limitReached?: boolean }>;
+}
+
+export interface OmpUsageReport {
+  provider: string;
+  fetchedAt?: number;
+  limits?: OmpUsageLimit[];
+  metadata?: OmpUsageReportMetadata;
+  resetCredits?: {
+    availableCount?: number;
+  };
+}
+
+export interface OmpUsageCapacityItem {
+  window: string;
+  durationMs?: number;
+  meter?: string;
+  accounts?: number;
+  usedAccounts?: number;
+  remainingAccounts?: number;
+}
+
+export interface OmpGlobalUsageData {
+  generatedAt?: number;
+  reports?: OmpUsageReport[];
+  capacity?: Record<string, OmpUsageCapacityItem[]>;
+  accountsWithoutUsage?: any[];
+  disabledCredentials?: any[];
+}
+
+export interface OmpOverallStats {
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  errorRate: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheWriteTokens: number;
+  cacheRate: number;
+  cacheSavings: number;
+  totalCost: number;
+  unpricedRequests: number;
+  totalPremiumRequests: number;
+  avgDuration?: number | null;
+  avgTtft?: number | null;
+  avgTokensPerSecond?: number | null;
+  firstTimestamp?: number | null;
+  lastTimestamp?: number | null;
+}
+
+export interface OmpModelStats {
+  model: string;
+  provider: string;
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  errorRate: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheWriteTokens: number;
+  cacheRate: number;
+  cacheSavings: number;
+  totalCost: number;
+  avgDuration?: number | null;
+  avgTtft?: number | null;
+  avgTokensPerSecond?: number | null;
+}
+
+export interface OmpFolderStats {
+  folder: string;
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  errorRate: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCost: number;
+}
+
+export interface OmpAgentTypeStats {
+  agentType: string;
+  totalRequests: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens?: number;
+  totalCost: number;
+}
+
+export interface OmpGlobalStatsData {
+  overall?: OmpOverallStats;
+  byModel?: OmpModelStats[];
+  byFolder?: OmpFolderStats[];
+  byAgentType?: OmpAgentTypeStats[];
+}
+
+export interface GlobalUsageResult {
+  success: boolean;
+  data?: OmpGlobalUsageData;
+  raw?: string;
+  error?: string;
+}
+
+export interface GlobalStatsResult {
+  success: boolean;
+  data?: OmpGlobalStatsData;
+  raw?: string;
+  error?: string;
+}
 
 export interface OmpEngineState {
   model?: OmpModelInfo;
@@ -302,6 +460,8 @@ export interface AppSettings {
   defaultThinkingLevel?: OmpThinkingLevel;
   approvalMode?: OmpApprovalMode;
   autoCompaction?: boolean;
+  autoRetry?: boolean;
+  fastMode?: boolean;
   steeringMode?: string;
   followUpMode?: string;
   interruptMode?: string;
@@ -431,6 +591,8 @@ export interface ElectronAPI {
   getEngineState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
   getState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
   getSessionStats: () => Promise<{ success: boolean; stats?: OmpSessionStats; error?: string }>;
+  getGlobalUsage: (forceRefresh?: boolean) => Promise<GlobalUsageResult>;
+  getGlobalStats: (forceRefresh?: boolean) => Promise<GlobalStatsResult>;
   setApprovalMode: (mode: OmpApprovalMode) => Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }>;
   getApprovalMode: () => Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }>;
   compact: (customInstructions?: string) => Promise<{ success: boolean; error?: string }>;
@@ -464,6 +626,12 @@ export interface ElectronAPI {
   // Todos Management (Phase 4)
   getTodos: () => Promise<{ success: boolean; phases?: OmpTodoPhase[]; todos?: OmpTodoItem[]; error?: string }>;
   setTodos: (phases: OmpTodoPhase[]) => Promise<{ success: boolean; phases?: OmpTodoPhase[]; error?: string }>;
+  // Auto-retry, Fast Mode & Utils (Phase 6)
+  setAutoRetry: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  abortRetry: () => Promise<{ success: boolean; error?: string }>;
+  setFastMode: (enabled: boolean) => Promise<{ success: boolean; data?: { enabled?: boolean }; error?: string }>;
+  getLastAssistantText: () => Promise<{ success: boolean; text?: string; error?: string }>;
+  handoff: () => Promise<{ success: boolean; data?: unknown; error?: string }>;
   // Workspace / Filesystem
   selectFolder: () => Promise<string | null>;
   readDirectory: (dirPath: string) => Promise<WorkspaceFile[]>;
@@ -513,6 +681,7 @@ export interface ElectronAPI {
   onOmpCommandsUpdate: (callback: (commands: OmpCommandInfo[]) => void) => () => void;
   onOmpCommandOutput: (callback: (data: { text: string }) => void) => () => void;
   onOmpTodosUpdate: (callback: (data: { phases: OmpTodoPhase[]; todos: OmpTodoItem[] }) => void) => () => void;
+  onOmpRetryState: (callback: (state: OmpRetryState) => void) => () => void;
 }
 
 declare global {

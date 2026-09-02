@@ -31,6 +31,7 @@ import {
   Radio,
   Clock,
   Square,
+  Zap,
 } from 'lucide-react';
 import {
   ThemeMode,
@@ -490,6 +491,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     savePartial({ autoCompaction: nextVal });
     setHasEngineChanged(true);
   };
+  const handleAutoRetryToggle = () => {
+    const nextVal = !settings.autoRetry;
+    savePartial({ autoRetry: nextVal });
+    if (window.electronAPI?.setAutoRetry) {
+      window.electronAPI.setAutoRetry(nextVal).catch(() => {});
+    }
+  };
+
+  const handleFastModeToggle = () => {
+    const nextVal = !settings.fastMode;
+    savePartial({ fastMode: nextVal });
+    if (window.electronAPI?.setFastMode) {
+      window.electronAPI.setFastMode(nextVal).catch(() => {});
+    }
+  };
+
 
   const handleApplyCustomPath = async () => {
     const path = customPathInput.trim();
@@ -1185,6 +1202,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClick={handleAutoCompactionToggle}
                   className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
                     settings.autoCompaction ? 'bg-codex-accent justify-end' : 'bg-slate-300 dark:bg-zinc-700 justify-start'
+                  }`}
+                >
+                  <div className="w-4 h-4 rounded-full bg-white shadow-xs" />
+                </button>
+              </div>
+              {/* Auto Retry */}
+              <div className="p-3.5 bg-surface rounded-xl border border-border flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <RotateCw className="w-4 h-4 text-amber-500 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-slate-900 dark:text-zinc-100">
+                      Tự động thử lại (Auto-retry)
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-zinc-400">
+                      Tự động gửi lại yêu cầu khi gặp lỗi mạng hoặc rate-limit từ provider
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleAutoRetryToggle}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                    settings.autoRetry ? 'bg-codex-accent justify-end' : 'bg-slate-300 dark:bg-zinc-700 justify-start'
+                  }`}
+                >
+                  <div className="w-4 h-4 rounded-full bg-white shadow-xs" />
+                </button>
+              </div>
+
+              {/* Fast Mode */}
+              <div className="p-3.5 bg-surface rounded-xl border border-border flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Zap className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-slate-900 dark:text-zinc-100">
+                      Chế độ phản hồi nhanh (Fast Mode)
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-zinc-400">
+                      Giảm độ trễ suy nghĩ và stream phản hồi nhanh hơn khi tương tác
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleFastModeToggle}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                    settings.fastMode ? 'bg-codex-accent justify-end' : 'bg-slate-300 dark:bg-zinc-700 justify-start'
                   }`}
                 >
                   <div className="w-4 h-4 rounded-full bg-white shadow-xs" />

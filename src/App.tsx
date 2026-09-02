@@ -144,6 +144,8 @@ export function App() {
     contextUsage,
     tokensPerSecond,
     getSessionStats,
+    getGlobalUsage,
+    getGlobalStats,
     approvalMode,
     setApprovalMode,
     compact,
@@ -153,6 +155,9 @@ export function App() {
     availableCommands,
     todoPhases,
     todos,
+    retryState,
+    abortRetry,
+    getLastAssistantText,
   } = useOmpRpc();
 
   // Principle #1: When app loads, if OMP is not installed, open the Requirement Modal
@@ -341,6 +346,8 @@ export function App() {
         contextUsage={contextUsage}
         tokensPerSecond={tokensPerSecond}
         onGetSessionStats={getSessionStats}
+        onGetGlobalUsage={getGlobalUsage}
+        onGetGlobalStats={getGlobalStats}
         approvalMode={approvalMode}
         onSelectApprovalMode={setApprovalMode}
         isCompacting={isCompacting}
@@ -348,6 +355,7 @@ export function App() {
         onCompact={compact}
         onSetAutoCompaction={setAutoCompaction}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+        onCopyLastAssistantText={getLastAssistantText}
       />
 
       {/* 2. Main 3-Column Layout */}
@@ -426,6 +434,8 @@ export function App() {
               onBranchSession={branchFromMessage}
               onCollapsePanel={collapseRightSidebar}
               onOpenFile={handleOpenFileByPath}
+              retryState={retryState}
+              onAbortRetry={abortRetry}
             />
           </div>
         </div>
