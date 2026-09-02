@@ -16,6 +16,41 @@ Entry template:
 ```
 
 ---
+## 2026-09-02 — Image Drag-Drop & Clipboard Paste Attachment
+
+- **State:** Completed Image Drag-Drop & Paste feature across all 4 phases:
+  - Phase 1: Electron IPC `fs:save-image-attachment` in `electron/main.ts` and `electron/preload.ts`, saving image buffers to `.omp/attachments/` or temp dir asynchronously without blocking.
+  - Phase 2: Pure utility module `src/utils/imageAttachment.ts` (`isImageFile`, `getImageExtension`, `extractImageFromClipboard`, `extractFilesFromDrop`, `computeRelativePath`, `formatImageDimensions`).
+  - Phase 3: `PromptComposer.tsx` integration with `onPaste`, drag & drop (`onDragEnter`, `onDragOver`, `onDragLeave`, `onDrop`), drag overlay UI, 36x36px image thumbnail pills with zoom/delete, `ImageLightboxModal.tsx` for full-screen preview, and Object URL memory cleanup on delete/send/unmount.
+  - Phase 4: `ChatHistory.tsx` updated with thumbnail cards for image attachments and Lightbox support. Created `scripts/verify-composer-image-attachment.mjs` (61 assertions) integrated as `test:composer-image-attachment` in `npm run test`.
+  - Typechecks (`npx tsc --noEmit` and `npx tsc -p tsconfig.node.json --noEmit`) and verify suites pass with 0 errors.
+- **In-flight:** All 4 phases complete and ready for commit.
+- **Next:**
+  1. Review changes and commit.
+- **Refs:**
+  - `plans/260902-1116-image-drag-drop-paste/plan.md`
+  - `scripts/verify-composer-image-attachment.mjs`
+
+---
+## 2026-09-02 — Phase 10: Live E2E Observability & Session Control Verification
+
+- **State:** Phase 10 and entire Stage 6 (Phase 1–10) fully implemented and verified against live OMP engine:
+  - Live automated test suite `scripts/verify-observability-live.mjs` (44 assertions) created and integrated as `test:observability-live` in `npm run test`.
+  - Verified L1 (Usage & Stats), L2 (Rename & disk jsonl title line), L3 (@file attach & fileMention frame expansion), L4 (Slash command & skill parity), L5 (Approval mode switch & tool approval card), L6 (Compaction, branching, and HTML export).
+  - Generated findings report `plans/260901-1954-engine-observability-session-control/reports/observability-live-findings-260901.md` resolving all 4 technical points.
+  - All 29 verify suites in `npm run test` pass 100% (0 errors in renderer and electron tsc).
+  - `plan.md` and all 10 phase documents marked Complete.
+- **In-flight:** All 10 phases of Stage 6 are complete and ready to commit.
+- **Next:**
+  1. Review git status and stage/commit all Phase 1–10 deliverables.
+  2. Plan next stage or packaging/release work.
+- **Refs:**
+  - `plans/260901-1954-engine-observability-session-control/phase-10-live-observability-verification.md`
+  - `plans/260901-1954-engine-observability-session-control/plan.md`
+  - `plans/260901-1954-engine-observability-session-control/reports/observability-live-findings-260901.md`
+  - `plans/journals/2026-09-02-phase-10-live-observability-verification.md`
+
+---
 ## 2026-09-02 — Phase 9: Modal & Omnibar Refinement
 
 - **State:** Phase 9 implemented and fully verified (all 27 verify suites in `npm run test` passed, 0 errors in renderer and electron tsc):

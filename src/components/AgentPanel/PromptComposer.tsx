@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, KeyboardEvent, ChangeEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback, KeyboardEvent, ChangeEvent } from 'react';
 import {
   AtSign,
   CornerDownLeft,
@@ -7,6 +7,8 @@ import {
   FileCode,
   Search,
   Terminal,
+  UploadCloud,
+  ZoomIn,
 } from 'lucide-react';
 import { OmpAgentStatus, WorkspaceFile, OmpCommandInfo } from '../../types';
 import { DEMO_WORKSPACE_FILES } from '../../mock/demoData';
@@ -17,6 +19,14 @@ import {
   findRemovedInlineAttachments,
   flattenWorkspaceFiles,
 } from '../../utils/fileMention';
+import {
+  isImageFile,
+  getImageExtension,
+  extractImageFromClipboard,
+  extractFilesFromDrop,
+  computeRelativePath,
+} from '../../utils/imageAttachment';
+import { ImageLightboxModal } from './ImageLightboxModal';
 
 export { buildMessageWithFileMentions, flattenWorkspaceFiles };
 
@@ -50,13 +60,19 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   // Vị trí ký tự '/' đang mở command menu (hỗ trợ command giữa message)
   const [slashIndex, setSlashIndex] = useState<number | null>(null);
 
+  // State hỗ trợ kéo thả ảnh và preview lightbox
+  const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
+  const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const commandMenuRef = useRef<HTMLDivElement>(null);
+  const dragCounterRef = useRef<number>(0);
+  const activeBlobUrlsRef = useRef<Set<string>>(new Set());
   // Các attachment được chèn dạng @token trong text (phân biệt với attach qua nút)
   const inlineAttachmentsRef = useRef<Set<string>>(new Set());
-
   const allFiles = React.useMemo(() => {
     const sourceTree =
       workspaceFiles && workspaceFiles.length > 0
@@ -128,6 +144,15 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     };
   }, [isPickerOpen, isCommandMenuOpen]);
 
+  // Dọn dẹp các Object URL khi unmount để chống rò rỉ bộ nhớ
+  useEffect(() => {
+    const blobUrls = activeBlobUrlsRef.current;
+    return () => {
+      blobUrls.forEach((url) => URL.revokeObjectURL(url));
+      blobUrls.clear();
+    };
+  }, []);
+
   const addAttachment = (filePath: string) => {
     const trimmedPath = filePath.trim();
     if (!trimmedPath) return;
@@ -157,7 +182,20 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   };
 
   const removeAttachment = (file: string) => {
-    setAttachedFiles(attachedFiles.filter((f) => f !== file));
+    setAttachedFiles((prev) => prev.filter((f) => f !== file));
+
+    // Giải phóng blob URL preview nếu có
+    const previewUrl = imagePreviews[file];
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+      activeBlobUrlsRef.current.delete(previewUrl);
+    }
+    setImagePreviews((prev) => {
+      const next = { ...prev };
+      delete next[file];
+      return next;
+    });
+
     // Chip chèn inline: gỡ luôn token @file trong text để hai phía đồng bộ
     if (inlineAttachmentsRef.current.has(file)) {
       inlineAttachmentsRef.current.delete(file);
@@ -165,6 +203,104 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
       setInput((prev) =>
         prev.includes(`${token} `) ? prev.replace(`${token} `, '') : prev.replace(token, '')
       );
+    }
+  };
+
+  // Lưu file ảnh đính kèm vào hệ thống tập tin hoặc tạo blob preview
+  const saveAndAttachImage = useCallback(
+    async (file: File | Blob, rawBuffer?: Uint8Array, extension?: string, originalName?: string) => {
+      try {
+        let buffer = rawBuffer;
+        if (!buffer) {
+          const arrayBuffer = await file.arrayBuffer();
+          buffer = new Uint8Array(arrayBuffer);
+        }
+        const ext = extension || getImageExtension(file.type, (file as File).name);
+        const name = originalName || (file as File).name || `img_${Date.now()}.${ext}`;
+
+        if (window.electronAPI?.saveImageAttachment) {
+          const res = await window.electronAPI.saveImageAttachment(buffer, ext, name);
+          if (res && res.success) {
+            const savedPath = res.relativePath || res.filePath;
+            const blob = file instanceof Blob ? file : new Blob([buffer.buffer as ArrayBuffer]);
+            const blobUrl = URL.createObjectURL(blob);
+            activeBlobUrlsRef.current.add(blobUrl);
+            setImagePreviews((prev) => ({ ...prev, [savedPath]: blobUrl }));
+            setAttachedFiles((prev) => (prev.includes(savedPath) ? prev : [...prev, savedPath]));
+            return;
+          }
+        }
+
+        // Fallback môi trường web preview
+        const blob = file instanceof Blob ? file : new Blob([buffer.buffer as ArrayBuffer]);
+        const blobUrl = URL.createObjectURL(blob);
+        activeBlobUrlsRef.current.add(blobUrl);
+        const fallbackPath = `.omp/attachments/${name}`;
+        setImagePreviews((prev) => ({ ...prev, [fallbackPath]: blobUrl }));
+        setAttachedFiles((prev) => (prev.includes(fallbackPath) ? prev : [...prev, fallbackPath]));
+      } catch (err) {
+        console.error('Lỗi khi lưu attachment ảnh:', err);
+      }
+    },
+    []
+  );
+
+  // Xử lý dán hình ảnh từ clipboard (Cmd+V / Ctrl+V)
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const extracted = await extractImageFromClipboard(e.clipboardData);
+    if (extracted) {
+      e.preventDefault();
+      await saveAndAttachImage(extracted.blob, extracted.buffer, extracted.extension, extracted.name);
+    }
+  };
+
+  // Xử lý sự kiện kéo thả file vào ô composer
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    setIsDraggingOver(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDraggingOver(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDraggingOver(false);
+
+    const droppedFiles = extractFilesFromDrop(e.dataTransfer);
+    if (droppedFiles.length === 0) return;
+
+    for (const item of droppedFiles) {
+      if (item.isImage) {
+        await saveAndAttachImage(item.file, undefined, undefined, item.file.name);
+      } else if (item.path) {
+        const rel = computeRelativePath(item.path);
+        if (rel && !attachedFiles.includes(rel)) {
+          setAttachedFiles((prev) => [...prev, rel]);
+        }
+      } else if (item.file.name) {
+        const name = item.file.name;
+        if (!attachedFiles.includes(name)) {
+          setAttachedFiles((prev) => [...prev, name]);
+        }
+      }
     }
   };
 
@@ -222,6 +358,11 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     setIsCommandMenuOpen(false);
     setCommandQuery('');
     setSlashIndex(null);
+
+    // Giải phóng các blob URL khi gửi tin nhắn
+    activeBlobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    activeBlobUrlsRef.current.clear();
+    setImagePreviews({});
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -396,26 +537,106 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   };
 
   return (
-    <div className="p-3.5 bg-panel border-t border-border flex flex-col gap-2.5 relative">
+    <div
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className="p-3.5 bg-panel border-t border-border flex flex-col gap-2.5 relative"
+    >
+      {/* Drag & Drop Visual Overlay */}
+      {isDraggingOver && (
+        <div className="absolute inset-2 z-40 rounded-2xl border-2 border-dashed border-blue-500 bg-blue-500/10 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 p-6 pointer-events-none animate-fade-in">
+          <div className="w-11 h-11 rounded-2xl bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shadow-xs">
+            <UploadCloud className="w-6 h-6 animate-bounce" />
+          </div>
+          <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+            Thả hình ảnh hoặc file vào đây để đính kèm
+          </span>
+          <span className="text-[11px] text-slate-500 dark:text-zinc-400">
+            Hỗ trợ PNG, JPG, WebP, GIF, SVG hoặc file mã nguồn
+          </span>
+        </div>
+      )}
+
+      {/* Lightbox Xem Ảnh Phóng To */}
+      <ImageLightboxModal
+        isOpen={!!lightboxImage}
+        imageUrl={lightboxImage?.url || ''}
+        imageName={lightboxImage?.name}
+        onClose={() => setLightboxImage(null)}
+      />
+
       {/* Attached Context Pills */}
       {attachedFiles.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          {attachedFiles.map((file) => (
-            <span
-              key={file}
-              className="flex items-center gap-1.5 text-[11.5px] font-mono px-2.5 py-1 rounded-lg bg-surface border border-border text-slate-800 dark:text-zinc-200 font-medium"
-            >
-              <AtSign className="w-3.5 h-3.5 text-blue-500" />
-              <span>{file}</span>
-              <button
-                onClick={() => removeAttachment(file)}
-                className="ml-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 cursor-pointer"
-                title="Bỏ đính kèm"
+          {attachedFiles.map((file) => {
+            const isImg = isImageFile(file);
+            const previewUrl = imagePreviews[file] || file;
+
+            if (isImg) {
+              return (
+                <div
+                  key={file}
+                  className="flex items-center gap-2 p-1.5 pr-2 rounded-xl bg-surface border border-border text-xs shadow-xs hover:border-blue-500/40 transition-colors group"
+                >
+                  {/* Thumbnail 36x36px */}
+                  <button
+                    type="button"
+                    onClick={() => setLightboxImage({ url: previewUrl, name: file })}
+                    className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-surface-highlight border border-border/60 flex items-center justify-center relative cursor-pointer group-hover:scale-105 transition-transform"
+                    title="Xem ảnh phóng to"
+                  >
+                    <img
+                      src={previewUrl}
+                      alt={file}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                      <ZoomIn className="w-3.5 h-3.5 text-white drop-shadow" />
+                    </div>
+                  </button>
+
+                  {/* Tên file & định dạng */}
+                  <div className="flex flex-col min-w-0 max-w-[130px]">
+                    <span className="font-mono text-[11.5px] font-medium text-slate-800 dark:text-zinc-200 truncate" title={file}>
+                      {file.split('/').pop()}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans uppercase">
+                      {file.split('.').pop()} ảnh
+                    </span>
+                  </div>
+
+                  {/* Nút xóa attachment */}
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(file)}
+                    className="ml-0.5 p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-surface-highlight cursor-pointer"
+                    title="Bỏ đính kèm ảnh"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <span
+                key={file}
+                className="flex items-center gap-1.5 text-[11.5px] font-mono px-2.5 py-1 rounded-lg bg-surface border border-border text-slate-800 dark:text-zinc-200 font-medium"
               >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
+                <AtSign className="w-3.5 h-3.5 text-blue-500" />
+                <span>{file}</span>
+                <button
+                  onClick={() => removeAttachment(file)}
+                  className="ml-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 cursor-pointer"
+                  title="Bỏ đính kèm"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -506,6 +727,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
           value={input}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={
             isToolApprovalPending
               ? 'Vui lòng duyệt hoặc từ chối quyền thực thi công cụ trước...'

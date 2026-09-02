@@ -10,11 +10,14 @@ import {
   ChevronUp,
   Copy,
   Check,
+  ZoomIn,
 } from 'lucide-react';
 import { ChatMessage, ThinkingBlock, ToolCall, OmpAgentStatus } from '../../types';
 import { ThinkingCard } from './ThinkingCard';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRenderer } from '../Common/MarkdownRenderer';
+import { isImageFile } from '../../utils/imageAttachment';
+import { ImageLightboxModal } from './ImageLightboxModal';
 
 interface ChatHistoryProps {
   messages: ChatMessage[];
@@ -117,8 +120,8 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
   onBranchSession,
   onOpenFile,
 }) => {
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentThinking, activeToolCalls, currentStreamText]);
@@ -143,24 +146,60 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
               </div>
 
               <div className="flex flex-wrap gap-2 pl-8">
-                {files.map((file, idx) => (
-                  <button
-                    key={`${file.path}-${idx}`}
-                    onClick={() => onOpenFile?.(file.path)}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface border border-border hover:border-blue-500/50 hover:bg-surface-highlight text-xs font-mono transition-all cursor-pointer shadow-xs group text-left"
-                    title={`Xem file ${file.path} trong editor`}
-                  >
-                    <FileCode className="w-3.5 h-3.5 text-blue-500 group-hover:scale-110 transition-transform shrink-0" />
-                    <span className="text-slate-800 dark:text-zinc-200 font-medium truncate max-w-xs">
-                      {file.path}
-                    </span>
-                    {typeof file.lineCount === 'number' && (
-                      <span className="text-[10.5px] text-slate-400 dark:text-zinc-500 font-sans">
-                        ({file.lineCount} lines)
+                {files.map((file, idx) => {
+                  const isImg = isImageFile(file.path);
+                  if (isImg) {
+                    return (
+                      <button
+                        key={`${file.path}-${idx}`}
+                        type="button"
+                        onClick={() => setLightboxImage({ url: file.path, name: file.name || file.path })}
+                        className="flex items-center gap-2.5 p-1.5 pr-3 rounded-xl bg-surface border border-border hover:border-blue-500/50 hover:bg-surface-highlight text-xs transition-all cursor-pointer shadow-xs group text-left"
+                        title={`Xem ảnh ${file.path} phóng to`}
+                      >
+                        <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-surface-highlight border border-border/60 flex items-center justify-center relative">
+                          <img
+                            src={file.path}
+                            alt={file.name || file.path}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <ZoomIn className="w-3.5 h-3.5 text-white drop-shadow" />
+                          </div>
+                        </div>
+                        <div className="flex flex-col min-w-0 max-w-xs">
+                          <span className="text-slate-800 dark:text-zinc-200 font-medium font-mono text-[11.5px] truncate">
+                            {file.name || file.path}
+                          </span>
+                          <span className="text-[10px] text-slate-400 dark:text-zinc-500 uppercase font-sans">
+                            Ảnh đính kèm
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  }
+                  return (
+                    <button
+                      key={`${file.path}-${idx}`}
+                      onClick={() => onOpenFile?.(file.path)}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface border border-border hover:border-blue-500/50 hover:bg-surface-highlight text-xs font-mono transition-all cursor-pointer shadow-xs group text-left"
+                      title={`Xem file ${file.path} trong editor`}
+                    >
+                      <FileCode className="w-3.5 h-3.5 text-blue-500 group-hover:scale-110 transition-transform shrink-0" />
+                      <span className="text-slate-800 dark:text-zinc-200 font-medium truncate max-w-xs">
+                        {file.path}
                       </span>
-                    )}
-                  </button>
-                ))}
+                      {typeof file.lineCount === 'number' && (
+                        <span className="text-[10.5px] text-slate-400 dark:text-zinc-500 font-sans">
+                          ({file.lineCount} lines)
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );
@@ -170,44 +209,56 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
           return <SystemMessageCard key={msg.id} content={msg.content} timestamp={msg.timestamp} />;
         }
 
-        return (
-          <div key={msg.id} className="flex flex-col gap-2">
-            {/* Message Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {msg.role === 'user' ? (
-                  <div className="w-6 h-6 rounded-md bg-surface-highlight flex items-center justify-center shrink-0">
-                    <User className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-300" />
-                  </div>
-                ) : (
-                  <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
-                    <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  </div>
+        if (msg.role === 'user') {
+          return (
+            <div key={msg.id} className="flex flex-col items-end gap-1.5 self-end max-w-[85%] ml-auto animate-fade-in">
+              {/* User Header directly above the message bubble */}
+              <div className="flex items-center gap-1.5 justify-end">
+                {msg.entryId && (
+                  <button
+                    onClick={() => {
+                      if (status === 'idle' && onBranchSession) {
+                        onBranchSession(msg.entryId!);
+                      }
+                    }}
+                    disabled={status !== 'idle'}
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                      status !== 'idle'
+                        ? 'opacity-40 cursor-not-allowed text-slate-400'
+                        : 'text-slate-400 hover:text-blue-500 hover:bg-surface-highlight cursor-pointer'
+                    }`}
+                    title={status !== 'idle' ? 'Đang xử lý...' : 'Tạo nhánh mới từ tin nhắn này'}
+                  >
+                    <GitBranch className="w-3 h-3" />
+                    <span>Branch</span>
+                  </button>
                 )}
                 <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
-                  {msg.role === 'user' ? 'You' : 'OMP Agent'}
+                  You
                 </span>
+                <div className="w-5 h-5 rounded-md bg-surface-highlight flex items-center justify-center shrink-0">
+                  <User className="w-3 h-3 text-slate-600 dark:text-zinc-300" />
+                </div>
               </div>
 
-              {msg.role === 'user' && msg.entryId && (
-                <button
-                  onClick={() => {
-                    if (status === 'idle' && onBranchSession) {
-                      onBranchSession(msg.entryId!);
-                    }
-                  }}
-                  disabled={status !== 'idle'}
-                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                    status !== 'idle'
-                      ? 'opacity-40 cursor-not-allowed text-slate-400'
-                      : 'text-slate-400 hover:text-blue-500 hover:bg-surface-highlight cursor-pointer'
-                  }`}
-                  title={status !== 'idle' ? 'Đang xử lý...' : 'Tạo nhánh mới từ tin nhắn này'}
-                >
-                  <GitBranch className="w-3 h-3" />
-                  <span>Branch</span>
-                </button>
-              )}
+              {/* Message Bubble */}
+              <div className="w-full p-3.5 rounded-2xl text-[13.5px] leading-relaxed bg-surface-highlight text-slate-900 dark:text-zinc-100 border border-border shadow-xs">
+                <div className="whitespace-pre-wrap font-sans break-words">{msg.content}</div>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div key={msg.id} className="flex flex-col gap-2">
+            {/* Assistant Message Header */}
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center shrink-0">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                OMP Agent
+              </span>
             </div>
 
             {/* Thinking Block if attached */}
@@ -223,18 +274,8 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
             )}
 
             {/* Message Bubble */}
-            <div
-              className={`p-3.5 rounded-2xl text-[13.5px] leading-relaxed ${
-                msg.role === 'user'
-                  ? 'bg-surface-highlight text-slate-900 dark:text-zinc-100 border border-border self-end max-w-[90%] shadow-xs'
-                  : 'bg-transparent text-slate-800 dark:text-zinc-200'
-              }`}
-            >
-              {msg.role === 'user' ? (
-                <div className="whitespace-pre-wrap font-sans">{msg.content}</div>
-              ) : (
-                <MarkdownRenderer content={msg.content} />
-              )}
+            <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed bg-transparent text-slate-800 dark:text-zinc-200">
+              <MarkdownRenderer content={msg.content} />
             </div>
           </div>
         );
@@ -272,6 +313,14 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
       )}
 
       <div ref={bottomRef} />
+
+      {/* Lightbox Modal xem ảnh đính kèm */}
+      <ImageLightboxModal
+        isOpen={!!lightboxImage}
+        imageUrl={lightboxImage?.url || ''}
+        imageName={lightboxImage?.name}
+        onClose={() => setLightboxImage(null)}
+      />
     </div>
   );
 };

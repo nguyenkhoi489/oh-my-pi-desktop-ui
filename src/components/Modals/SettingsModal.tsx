@@ -140,6 +140,25 @@ const MOCK_CUSTOM_PROVIDERS: CustomProviderConfig[] = [
   },
 ];
 
+// Các role model mà OMP hỗ trợ trong ~/.omp/agent/config.yml (modelRoles)
+const KNOWN_MODEL_ROLES: { id: string; desc: string }[] = [
+  { id: 'default', desc: 'Model chính cho phiên làm việc' },
+  { id: 'smol', desc: 'Tác vụ nhẹ, cần phản hồi nhanh' },
+  { id: 'slow', desc: 'Suy luận sâu, phân tích kỹ lưỡng' },
+  { id: 'plan', desc: 'Lập kế hoạch kiến trúc' },
+  { id: 'advisor', desc: 'Cố vấn khi gặp vấn đề khó' },
+  { id: 'task', desc: 'Subagent thực thi task' },
+  { id: 'commit', desc: 'Sinh commit message' },
+  { id: 'vision', desc: 'Xử lý hình ảnh' },
+  { id: 'tiny', desc: 'Tác vụ siêu nhẹ (tóm tắt, tiêu đề)' },
+];
+
+const MOCK_MODEL_ROLES: Record<string, string> = {
+  default: 'anthropic/claude-sonnet-5',
+  smol: 'anthropic/claude-haiku-4-5',
+  plan: 'anthropic/claude-opus-5',
+};
+
 const MOCK_LOGIN_PROVIDERS: LoginProviderItem[] = [
   { id: 'openai-codex', name: 'ChatGPT Plus/Pro (Codex Subscription)' },
   { id: 'anthropic', name: 'Anthropic (Claude Pro/Max)' },
@@ -198,6 +217,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [headersText, setHeadersText] = useState<string>('');
   const [authedProviders, setAuthedProviders] = useState<string[]>([]);
 
+  // State cho Model Roles (config.yml)
+  const [modelRoles, setModelRoles] = useState<Record<string, string>>({});
+  const [rolesConfigPath, setRolesConfigPath] = useState<string>('~/.omp/agent/config.yml');
+  const [isRolesWritable, setIsRolesWritable] = useState<boolean>(true);
+  const [rolesError, setRolesError] = useState<string | null>(null);
+  const [rolesDirty, setRolesDirty] = useState<boolean>(false);
+  const [rolesSaveSuccess, setRolesSaveSuccess] = useState<boolean>(false);
+  const [newRoleName, setNewRoleName] = useState<string>('');
+
   const loadSettings = useCallback(async () => {
     try {
       if (window.electronAPI?.getSettings) {
@@ -252,6 +280,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, []);
 
+  const loadModelRoles = useCallback(async () => {
+    try {
+      if (window.electronAPI?.getModelRolesConfig) {
+        const res = await window.electronAPI.getModelRolesConfig();
+        setModelRoles(res.roles || {});
+        if (res.filePath) setRolesConfigPath(res.filePath);
+        setIsRolesWritable(res.isWritable !== false);
+        setRolesError(res.error || null);
+      } else {
+        setModelRoles({ ...MOCK_MODEL_ROLES });
+        setIsRolesWritable(true);
+        setRolesError(null);
+      }
+    } catch (err) {
+      console.warn('[SettingsModal] Lỗi khi tải model roles:', err);
+      setModelRoles({ ...MOCK_MODEL_ROLES });
+    }
+    setRolesDirty(false);
+    setRolesSaveSuccess(false);
+  }, []);
+
   // Trạng thái đã-đăng-nhập lấy từ `omp usage --json` (chạy nền, mất vài giây)
   const refreshAuthStatus = useCallback(async () => {
     try {
@@ -270,6 +319,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (isOpen) {
       loadSettings();
       loadProvidersData();
+      loadModelRoles();
       refreshAuthStatus();
       setHasEngineChanged(false);
       setSaveStatus(null);
@@ -278,7 +328,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setModelsSaveSuccess(false);
       setShowApiKey(false);
     }
-  }, [isOpen, loadSettings, loadProvidersData, refreshAuthStatus]);
+  }, [isOpen, loadSettings, loadProvidersData, loadModelRoles, refreshAuthStatus]);
 
   // Theo dõi tiến trình đăng nhập OAuth; hủy phiên dở dang khi đóng modal
   useEffect(() => {
@@ -347,6 +397,59 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const [provider, modelId] = value.split(':::');
     savePartial({ defaultProvider: provider, defaultModel: modelId });
     setHasEngineChanged(true);
+  };
+
+  const handleRoleModelChange = (role: string, value: string) => {
+    setModelRoles((prev) => ({ ...prev, [role]: value }));
+    setRolesDirty(true);
+    setRolesSaveSuccess(false);
+  };
+
+  const handleRemoveRole = (role: string) => {
+    setModelRoles((prev) => {
+      const next = { ...prev };
+      delete next[role];
+      return next;
+    });
+    setRolesDirty(true);
+    setRolesSaveSuccess(false);
+  };
+
+  const handleAddRole = () => {
+    const role = newRoleName.trim();
+    if (!role || modelRoles[role] !== undefined) return;
+    setModelRoles((prev) => ({ ...prev, [role]: '' }));
+    setNewRoleName('');
+    setRolesDirty(true);
+    setRolesSaveSuccess(false);
+  };
+
+  const handleSaveModelRoles = async () => {
+    setRolesError(null);
+    setRolesSaveSuccess(false);
+
+    const cleanRoles: Record<string, string> = {};
+    for (const [role, model] of Object.entries(modelRoles)) {
+      if (role.trim() && model.trim()) cleanRoles[role.trim()] = model.trim();
+    }
+
+    try {
+      if (window.electronAPI?.saveModelRolesConfig) {
+        const res = await window.electronAPI.saveModelRolesConfig(cleanRoles);
+        if (res.success) {
+          setRolesSaveSuccess(true);
+          setRolesDirty(false);
+          setHasEngineChanged(true);
+        } else {
+          setRolesError(res.error || 'Lỗi không xác định khi ghi config.yml');
+        }
+      } else {
+        setRolesSaveSuccess(true);
+        setRolesDirty(false);
+      }
+    } catch (err: any) {
+      setRolesError(`Lỗi lưu config.yml: ${err?.message || String(err)}`);
+    }
   };
 
   const handleThinkingLevelSelect = (level: OmpThinkingLevel) => {
@@ -860,6 +963,127 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ? `Đã tải ${availableModels.length} models từ catalog thật của Engine.`
                       : 'Chưa kết nối engine hoặc catalog rỗng. Sẽ tự động tải khi engine hoạt động.'}
                   </p>
+                </div>
+              </div>
+
+              {/* Model Roles (modelRoles trong config.yml) */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
+                  <Boxes className="w-3.5 h-3.5 text-codex-accent" />
+                  Model theo vai trò (Model Roles)
+                </label>
+                <div className="bg-surface rounded-xl border border-border p-3 space-y-2.5">
+                  {(!isRolesWritable || rolesError) && (
+                    <div className="flex items-start gap-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                      <span className="text-[11px] text-amber-600 dark:text-amber-400 break-all">
+                        {rolesError || `Không có quyền ghi vào ${rolesConfigPath}`}
+                      </span>
+                    </div>
+                  )}
+
+                  {Object.keys(modelRoles).length === 0 && (
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                      Chưa có role nào được cấu hình. Thêm role bên dưới để gán model riêng cho từng vai trò.
+                    </p>
+                  )}
+
+                  {Object.entries(modelRoles)
+                    .sort(([a], [b]) => {
+                      const ia = KNOWN_MODEL_ROLES.findIndex((r) => r.id === a);
+                      const ib = KNOWN_MODEL_ROLES.findIndex((r) => r.id === b);
+                      if (ia === -1 && ib === -1) return a.localeCompare(b);
+                      if (ia === -1) return 1;
+                      if (ib === -1) return -1;
+                      return ia - ib;
+                    })
+                    .map(([role, model]) => {
+                      const known = KNOWN_MODEL_ROLES.find((r) => r.id === role);
+                      const isInCatalog = availableModels.some((m) => `${m.provider}/${m.id}` === model);
+                      return (
+                        <div key={role} className="flex items-center gap-2">
+                          <div className="w-28 shrink-0">
+                            <div className="text-xs font-mono font-medium text-slate-900 dark:text-zinc-100">{role}</div>
+                            {known && (
+                              <div className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">{known.desc}</div>
+                            )}
+                          </div>
+                          <select
+                            value={model}
+                            onChange={(e) => handleRoleModelChange(role, e.target.value)}
+                            className="flex-1 min-w-0 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
+                          >
+                            <option value="">(Chưa gán model)</option>
+                            {Object.entries(groupedModels).map(([provider, models]) => (
+                              <optgroup key={provider} label={provider.toUpperCase()}>
+                                {models.map((m) => (
+                                  <option key={`${provider}/${m.id}`} value={`${provider}/${m.id}`}>
+                                    {m.name || m.id} {m.reasoning ? '🧠' : ''}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                            {model && !isInCatalog && (
+                              <optgroup label="NGOÀI CATALOG HIỆN TẠI">
+                                <option value={model}>{model}</option>
+                              </optgroup>
+                            )}
+                          </select>
+                          <button
+                            onClick={() => handleRemoveRole(role)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 transition-colors cursor-pointer shrink-0"
+                            title={`Xóa role "${role}"`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                  {/* Thêm role mới */}
+                  <div className="flex items-center gap-2 pt-1 border-t border-border">
+                    <select
+                      value={newRoleName}
+                      onChange={(e) => setNewRoleName(e.target.value)}
+                      className="flex-1 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
+                    >
+                      <option value="">Chọn role để thêm...</option>
+                      {KNOWN_MODEL_ROLES.filter((r) => modelRoles[r.id] === undefined).map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.id} — {r.desc}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleAddRole}
+                      disabled={!newRoleName.trim()}
+                      className="px-3 py-1.5 bg-surface hover:bg-surface-highlight border border-border rounded-lg text-xs font-medium text-slate-700 dark:text-zinc-300 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Thêm
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[10.5px] font-mono text-slate-500 dark:text-zinc-400 truncate max-w-[300px]">
+                      {rolesConfigPath}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {rolesSaveSuccess && (
+                        <span className="text-[11px] text-emerald-500 flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          Đã lưu vào config.yml
+                        </span>
+                      )}
+                      <button
+                        onClick={handleSaveModelRoles}
+                        disabled={!rolesDirty || !isRolesWritable}
+                        className="px-3 py-1.5 bg-codex-accent text-white rounded-lg text-xs font-medium hover:bg-codex-accent/90 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Lưu Roles
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 

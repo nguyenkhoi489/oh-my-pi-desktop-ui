@@ -5,6 +5,7 @@ import {
   ThinkingBlock,
   ToolCall,
   OmpAgentStatus,
+  OmpContextUsage,
   OmpEngineStatusEntry,
   OmpWidgetEntry,
   WorkspaceFile,
@@ -21,6 +22,7 @@ interface AgentPanelProps {
   activeToolCalls: ToolCall[];
   currentStreamText: string;
   status: OmpAgentStatus;
+  contextUsage?: OmpContextUsage | null;
   engineStatuses?: OmpEngineStatusEntry[];
   engineWidgets?: OmpWidgetEntry[];
   workspaceFiles?: WorkspaceFile[];
@@ -41,6 +43,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   activeToolCalls,
   currentStreamText,
   status,
+  contextUsage,
   engineStatuses,
   engineWidgets,
   workspaceFiles,
@@ -68,10 +71,11 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-surface-highlight text-slate-600 dark:text-zinc-400">
-            1.2k tokens
-          </span>
-
+          {contextUsage?.tokens != null && (
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-surface-highlight text-slate-600 dark:text-zinc-400">
+              {contextUsage.tokens >= 1000 ? `${(contextUsage.tokens / 1000).toFixed(1)}k` : contextUsage.tokens} tokens
+            </span>
+          )}
           {onCollapsePanel && (
             <button
               onClick={onCollapsePanel}

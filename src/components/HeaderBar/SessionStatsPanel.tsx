@@ -292,7 +292,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
                   </span>
                 </div>
               )}
-              <div className="p-2.5 rounded-lg bg-surface border border-border flex flex-col">
+              <div className={`p-2.5 rounded-lg bg-surface border border-border flex flex-col ${(!stats?.tokens?.reasoning || stats.tokens.reasoning <= 0) ? 'col-span-2' : ''}`}>
                 <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Total Tokens</span>
                 <span className="text-xs font-semibold font-mono text-codex-accent">
                   {formatNumber(stats?.tokens?.total)}

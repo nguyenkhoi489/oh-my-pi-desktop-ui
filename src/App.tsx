@@ -314,6 +314,7 @@ export function App() {
       {/* 1. macOS Header & Titlebar */}
       <HeaderBar
         workspaceName={workspaceName}
+        hasWorkspace={Boolean(workspacePath)}
         onOpenFolder={openFolderDialog}
         status={status}
         installStatus={installStatus}
@@ -397,6 +398,7 @@ export function App() {
               activeToolCalls={activeToolCalls}
               currentStreamText={currentStreamText}
               status={status}
+              contextUsage={contextUsage}
               engineStatuses={engineStatuses}
               engineWidgets={engineWidgets}
               workspaceFiles={files}

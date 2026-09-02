@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Plus, Edit2, Trash2, Download, Check, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { MessageSquare, Plus, Edit2, Trash2, Download, Check } from 'lucide-react';
 import { OmpSessionInfo, OmpAgentStatus } from '../../types';
 export function formatRelativeTime(dateInput?: string | number | Date): string {
   if (!dateInput) return '';
@@ -62,7 +63,18 @@ export const ThreadList: React.FC<ThreadListProps> = ({
       editInputRef.current.select();
     }
   }, [editingSessionPath]);
-
+  // Đóng modal xóa phiên bằng phím ESC
+  useEffect(() => {
+    if (!sessionToDelete) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isDeleting) {
+        e.preventDefault();
+        setSessionToDelete(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [sessionToDelete, isDeleting]);
   const demoThreads = [
     { id: '1', title: 'Hoàn thiện hàm validateUser JWT', active: true, time: '2m trước' },
     { id: '2', title: 'Refactor cấu trúc auth middleware', active: false, time: '1h trước' },
@@ -73,8 +85,11 @@ export const ThreadList: React.FC<ThreadListProps> = ({
 
   return (
     <div className="flex flex-col border-t border-border p-2.5 bg-panel shrink-0 max-h-[40%] overflow-hidden">
-      <div className="flex items-center justify-between px-1.5 py-1 mb-1.5 text-[11px] font-bold text-slate-400 dark:text-zinc-500 tracking-wider uppercase shrink-0">
-        <span>Recent Sessions</span>
+      <div className="flex items-center justify-between px-2 py-1.5 mb-1 text-[11px] font-bold text-slate-400 dark:text-zinc-500 tracking-wider uppercase shrink-0">
+        <div className="flex items-center gap-1.5">
+          <MessageSquare className="w-3.5 h-3.5" />
+          <span>Recent Sessions</span>
+        </div>
         <button
           onClick={() => {
             if (!isBusy && onNewThread) {
@@ -183,7 +198,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                 <div className="flex-1 min-w-0">
                   {isEditingThis ? (
                     <div
-                      className="flex items-center gap-1"
+                      className="flex flex-col gap-1.5 p-1 bg-surface border border-codex-accent/60 rounded-lg shadow-xs my-0.5"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <input
@@ -201,24 +216,28 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                           }
                         }}
                         disabled={isRenaming}
-                        className="w-full text-[12.5px] px-1.5 py-0.5 rounded bg-panel border border-codex-accent text-slate-900 dark:text-zinc-100 focus:outline-hidden font-medium"
+                        placeholder="Nhập tên phiên..."
+                        className="w-full text-[12px] px-2 py-1 rounded bg-panel border border-border text-slate-900 dark:text-zinc-100 focus:outline-hidden focus:border-codex-accent font-medium"
                       />
-                      <button
-                        onClick={handleSaveRename}
-                        disabled={isRenaming || !editTitle.trim()}
-                        className="p-1 rounded text-emerald-500 hover:bg-surface-highlight cursor-pointer"
-                        title="Lưu tên"
-                      >
-                        <Check className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => setEditingSessionPath(null)}
-                        disabled={isRenaming}
-                        className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-surface-highlight cursor-pointer"
-                        title="Hủy"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setEditingSessionPath(null)}
+                          disabled={isRenaming}
+                          className="px-2 py-0.5 rounded text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:hover:text-zinc-300 hover:bg-surface-highlight transition-colors cursor-pointer"
+                        >
+                          Hủy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveRename}
+                          disabled={isRenaming || !editTitle.trim()}
+                          className="flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-codex-accent hover:bg-codex-accent/90 text-white transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span>{isRenaming ? 'Đang lưu...' : 'Lưu'}</span>
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -293,59 +312,73 @@ export const ThreadList: React.FC<ThreadListProps> = ({
         )}
       </div>
 
-      {sessionToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="bg-surface dark:bg-panel border border-border rounded-xl shadow-2xl max-w-sm w-full p-4.5 space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-rose-500/10 text-rose-500 shrink-0 mt-0.5">
-                <Trash2 className="w-5 h-5" />
+      {sessionToDelete &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in select-none"
+            onClick={() => {
+              if (!isDeleting) setSessionToDelete(null);
+            }}
+          >
+            <div
+              className="bg-panel border border-border rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4 animate-scale-up"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
+                    Xác nhận xóa phiên
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-zinc-400 mt-1.5 leading-relaxed">
+                    Bạn có chắc chắn muốn xóa phiên làm việc{' '}
+                    <span className="font-semibold text-slate-900 dark:text-zinc-200">
+                      "{sessionToDelete.title || 'New Session'}"
+                    </span>{' '}
+                    không?
+                  </p>
+                  <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1.5 leading-normal">
+                    Tệp nhật ký và các nhánh subagent liên quan sẽ bị xóa vĩnh viễn khỏi đĩa.
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
-                  Xác nhận xóa phiên
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                  Bạn có chắc chắn muốn xóa phiên làm việc{' '}
-                  <span className="font-medium text-slate-700 dark:text-zinc-200">
-                    "{sessionToDelete.title || 'New Session'}"
-                  </span>{' '}
-                  không?
-                </p>
-                <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1.5">
-                  Tệp nhật ký và các phiên subagent liên quan sẽ bị xóa vĩnh viễn khỏi đĩa.
-                </p>
-              </div>
-            </div>
 
-            <div className="flex items-center justify-end gap-2 pt-1 border-t border-border">
-              <button
-                onClick={() => setSessionToDelete(null)}
-                disabled={isDeleting}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-zinc-400 hover:bg-surface-highlight transition-colors cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                onClick={async () => {
-                  if (onDeleteSession && sessionToDelete) {
-                    setIsDeleting(true);
-                    try {
-                      await onDeleteSession(sessionToDelete.path);
-                      setSessionToDelete(null);
-                    } finally {
-                      setIsDeleting(false);
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setSessionToDelete(null)}
+                  disabled={isDeleting}
+                  className="px-3.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-surface-highlight transition-colors cursor-pointer"
+                >
+                  Hủy (ESC)
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (onDeleteSession && sessionToDelete) {
+                      setIsDeleting(true);
+                      try {
+                        await onDeleteSession(sessionToDelete.path);
+                        setSessionToDelete(null);
+                      } finally {
+                        setIsDeleting(false);
+                      }
                     }
-                  }
-                }}
-                disabled={isDeleting}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-rose-600 hover:bg-rose-500 text-white transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-              >
-                {isDeleting ? 'Đang xóa...' : 'Xóa phiên'}
-              </button>
+                  }}
+                  disabled={isDeleting}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isDeleting ? 'Đang xóa...' : 'Xóa phiên'}</span>
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

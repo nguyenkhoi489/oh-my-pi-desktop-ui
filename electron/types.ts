@@ -356,6 +356,20 @@ export interface ModelsConfigWriteResult {
   error?: string;
 }
 
+export interface ModelRolesReadResult {
+  roles: Record<string, string>;
+  filePath: string;
+  isWritable: boolean;
+  error?: string;
+}
+
+export interface ModelRolesWriteResult {
+  success: boolean;
+  filePath?: string;
+  backupPath?: string;
+  error?: string;
+}
+
 export interface LoginProviderItem {
   id: string;
   name: string;
@@ -407,6 +421,11 @@ export interface ElectronAPI {
   readFile: (filePath: string) => Promise<string>;
   saveFile: (filePath: string, content: string) => Promise<boolean>;
   deleteFile: (filePath: string) => Promise<boolean>;
+  saveImageAttachment: (
+    buffer: Uint8Array | ArrayBuffer,
+    extension: string,
+    originalName?: string
+  ) => Promise<{ success: boolean; filePath: string; relativePath?: string; error?: string }>;
   
 
   // Settings & Persistence (Phase 7)
@@ -415,6 +434,8 @@ export interface ElectronAPI {
   // Provider & Custom LLM Management (Phase 8)
   getModelsConfig: () => Promise<ModelsConfigReadResult>;
   saveModelsConfig: (providers: CustomProviderConfig[]) => Promise<ModelsConfigWriteResult>;
+  getModelRolesConfig: () => Promise<ModelRolesReadResult>;
+  saveModelRolesConfig: (roles: Record<string, string>) => Promise<ModelRolesWriteResult>;
   getLoginProviders: () => Promise<{ success: boolean; providers?: LoginProviderItem[]; error?: string }>;
   startAuthLogin: (providerId: string) => Promise<{ success: boolean; error?: string }>;
   cancelAuthLogin: () => Promise<{ success: boolean }>;

@@ -32,6 +32,7 @@ import {
 import { SessionStatsPanel } from './HeaderBar/SessionStatsPanel';
 interface HeaderBarProps {
   workspaceName: string;
+  hasWorkspace?: boolean;
   onOpenFolder: () => void;
   status: OmpAgentStatus;
   installStatus?: OmpInstallStatus | null;
@@ -91,6 +92,7 @@ const APPROVAL_OPTIONS: ApprovalOption[] = [
 ];
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   workspaceName,
+  hasWorkspace = true,
   onOpenFolder,
   status,
   installStatus,
@@ -198,6 +200,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     }
   };
 
+  const formatCompactTokens = (tokens?: number | null): string => {
+    if (tokens == null || isNaN(tokens)) return '';
+    if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+    if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
+    return String(tokens);
+  };
+
   const hasContextUsage =
     contextUsage?.percent != null &&
     typeof contextUsage.percent === 'number' &&
@@ -207,12 +216,14 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     ? Math.round((contextUsage!.percent as number) * 10) / 10
     : null;
 
+  const formattedTokens = contextUsage?.tokens != null ? formatCompactTokens(contextUsage.tokens) : null;
+  const formattedWindow = contextUsage?.contextWindow != null ? formatCompactTokens(contextUsage.contextWindow) : null;
+
   const contextTooltip = hasContextUsage
     ? contextUsage!.tokens != null && contextUsage!.contextWindow != null
-      ? `Context: ${(contextUsage!.tokens as number).toLocaleString()} / ${(contextUsage!.contextWindow as number).toLocaleString()} tokens (${percent}%) - Click xem chi tiết`
-      : `Context: ${percent}% - Click xem chi tiết`
+      ? `Ngữ cảnh: ${(contextUsage!.tokens as number).toLocaleString()} / ${(contextUsage!.contextWindow as number).toLocaleString()} tokens (${percent}%) - Click xem chi tiết`
+      : `Ngữ cảnh: ${percent}% - Click xem chi tiết`
     : undefined;
-
   const getMeterColorClass = (pct: number) => {
     if (pct > 90) {
       return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 animate-pulse font-semibold';
@@ -289,17 +300,23 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => {
-              if (!isBusy) {
+              if (!isBusy && hasWorkspace) {
                 setIsModelDropdownOpen(!isModelDropdownOpen);
               }
             }}
-            disabled={isBusy}
+            disabled={isBusy || !hasWorkspace}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border border-border transition-colors font-medium ${
-              isBusy
+              isBusy || !hasWorkspace
                 ? 'bg-surface opacity-70 cursor-not-allowed text-slate-500 dark:text-zinc-400'
                 : 'bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 cursor-pointer'
             }`}
-            title={isBusy ? 'Không thể đổi model khi agent đang hoạt động' : 'Chọn Model & Thinking Level'}
+            title={
+              !hasWorkspace
+                ? 'Mở project trước khi chọn model'
+                : isBusy
+                  ? 'Không thể đổi model khi agent đang hoạt động'
+                  : 'Chọn Model & Thinking Level'
+            }
           >
             <Cpu className="w-3.5 h-3.5 text-codex-accent shrink-0" />
             <span className="font-mono text-[12px] max-w-[180px] truncate">{activeModelName}</span>
@@ -477,7 +494,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             title={contextTooltip}
           >
             <Database className="w-3.5 h-3.5 shrink-0 text-codex-accent" />
-            <span className="font-mono text-[11.5px]">{percent}%</span>
+            <span className="font-mono text-[11.5px]">
+              {formattedTokens && formattedWindow ? `${formattedTokens}/${formattedWindow} (${percent}%)` : formattedTokens ? `${formattedTokens} (${percent}%)` : `${percent}%`}
+            </span>
           </button>
         )}
       </div>

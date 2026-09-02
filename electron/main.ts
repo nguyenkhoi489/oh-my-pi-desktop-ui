@@ -11,6 +11,7 @@ import {
   fetchLoginProviders,
 } from './models-config.ts';
 import { AuthLoginManager, fetchAuthenticatedProviders } from './auth-login.ts';
+import { readModelRolesConfig, writeModelRolesConfig } from './roles-config.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -138,6 +139,15 @@ ipcMain.handle('omp:models-config-read', async () => {
 
 ipcMain.handle('omp:models-config-write', async (_, payload: { providers: any[] }) => {
   return writeModelsConfig(payload?.providers || []);
+});
+
+// IPC Handlers: Model Roles trong ~/.omp/agent/config.yml
+ipcMain.handle('omp:model-roles-read', async () => {
+  return readModelRolesConfig();
+});
+
+ipcMain.handle('omp:model-roles-write', async (_, payload: { roles: Record<string, string> }) => {
+  return writeModelRolesConfig(payload?.roles || {});
 });
 
 async function resolveOmpBinaryPath(): Promise<string | undefined> {
@@ -433,6 +443,40 @@ ipcMain.handle('fs:delete-file', async (_, filePath: string) => {
     return false;
   }
 });
+
+ipcMain.handle(
+  'fs:save-image-attachment',
+  async (_, buffer: Uint8Array | ArrayBuffer, extension: string, originalName?: string) => {
+    try {
+      const wsPath = ompBridge?.getWorkspacePath();
+      const targetDir = wsPath
+        ? path.join(wsPath, '.omp', 'attachments')
+        : path.join(app.getPath('temp'), 'omp-attachments');
+
+      await fs.mkdir(targetDir, { recursive: true });
+
+      const ext = (extension || 'png').replace(/^\./, '').toLowerCase();
+      const safeBase = originalName
+        ? path.basename(originalName, path.extname(originalName)).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32)
+        : '';
+      const prefix = safeBase ? `${safeBase}_` : 'img_';
+      const fileName = `${prefix}${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+      const targetPath = path.join(targetDir, fileName);
+
+      const data =
+        buffer instanceof Uint8Array
+          ? Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+          : Buffer.from(buffer);
+      await fs.writeFile(targetPath, data);
+      const relativePath = wsPath ? path.relative(wsPath, targetPath) : targetPath;
+
+      return { success: true, filePath: targetPath, relativePath };
+    } catch (err: any) {
+      console.error('Error saving image attachment:', err);
+      return { success: false, filePath: '', error: err?.message || 'Không thể lưu file đính kèm' };
+    }
+  }
+);
 
 app.whenReady().then(() => {
   createWindow();

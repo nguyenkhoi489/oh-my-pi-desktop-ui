@@ -125,6 +125,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteFile: (filePath: string) =>
     ipcRenderer.invoke('fs:delete-file', filePath),
 
+  saveImageAttachment: (buffer: Uint8Array | ArrayBuffer, extension: string, originalName?: string) =>
+    ipcRenderer.invoke('fs:save-image-attachment', buffer, extension, originalName),
+
   // Settings & Persistence (Phase 7)
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (settings: Partial<AppSettings>) => ipcRenderer.invoke('settings:set', settings),
@@ -135,6 +138,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   saveModelsConfig: (providers: any[]) =>
     ipcRenderer.invoke('omp:models-config-write', { providers }),
+
+  // Model Roles trong ~/.omp/agent/config.yml
+  getModelRolesConfig: () =>
+    ipcRenderer.invoke('omp:model-roles-read'),
+
+  saveModelRolesConfig: (roles: Record<string, string>) =>
+    ipcRenderer.invoke('omp:model-roles-write', { roles }),
 
   getLoginProviders: () =>
     ipcRenderer.invoke('omp:login-providers'),
