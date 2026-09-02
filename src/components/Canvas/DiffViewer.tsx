@@ -48,12 +48,15 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
     <div className="flex-1 flex flex-col h-full bg-background overflow-hidden">
       {/* Diff Top Control Bar */}
       <div className="h-11 bg-surface border-b border-border flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <FileCode className="w-4 h-4 text-codex-accent" />
-          <span className="font-mono text-xs text-slate-800 dark:text-zinc-200 font-semibold">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <FileCode className="w-4 h-4 text-codex-accent shrink-0" />
+          <span
+            className="font-mono text-xs text-slate-800 dark:text-zinc-200 font-semibold truncate"
+            title={diff.relativePath}
+          >
             {diff.relativePath}
           </span>
-          <div className="flex items-center gap-1.5 ml-1.5 text-[11px] font-mono">
+          <div className="flex items-center gap-1.5 ml-1.5 text-[11px] font-mono shrink-0">
             <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md font-semibold">
               +{diff.additions}
             </span>
@@ -63,13 +66,13 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
           </div>
 
           {diff.status === 'accepted' && (
-            <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md font-medium">
+            <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md font-medium shrink-0">
               <FileCheck2 className="w-3.5 h-3.5" />
               Đã chấp nhận
             </span>
           )}
           {diff.status === 'rejected' && (
-            <span className="flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-md font-medium">
+            <span className="flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-md font-medium shrink-0">
               <AlertCircle className="w-3.5 h-3.5" />
               Đã từ chối
             </span>
@@ -77,7 +80,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
         </div>
 
         {/* Action Buttons: Accept / Reject / Toggle View */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 ml-3">
           <button
             onClick={() => setIsSideBySide(!isSideBySide)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-700 dark:text-zinc-300 hover:bg-surface-highlight border border-border transition-colors font-medium cursor-pointer"
