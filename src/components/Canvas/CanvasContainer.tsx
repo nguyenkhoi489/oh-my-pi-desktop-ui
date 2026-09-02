@@ -5,7 +5,7 @@ import {
   BookOpen,
   Terminal as TermIcon,
 } from 'lucide-react';
-import { ActiveCanvasTab, FileDiffItem, WorkspaceFile, ThemeMode } from '../../types';
+import { ActiveCanvasTab, FileDiffItem, WorkspaceFile, ThemeMode, ArtifactDocument } from '../../types';
 import { DiffViewer } from './DiffViewer';
 import { CodeEditor } from './CodeEditor';
 import { ArtifactViewer } from './ArtifactViewer';
@@ -20,6 +20,10 @@ interface CanvasContainerProps {
   selectedFile: WorkspaceFile | null;
   fileContent: string;
   theme?: ThemeMode;
+  artifacts?: ArtifactDocument[];
+  selectedArtifactId?: string;
+  onSelectArtifact?: (id: string) => void;
+  onReloadArtifact?: (id?: string) => void;
 }
 
 export const CanvasContainer: React.FC<CanvasContainerProps> = ({
@@ -31,6 +35,10 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
   selectedFile,
   fileContent,
   theme = 'light',
+  artifacts,
+  selectedArtifactId,
+  onSelectArtifact,
+  onReloadArtifact,
 }) => {
   return (
     <div className="flex-1 flex flex-col h-full bg-background border-r border-border overflow-hidden">
@@ -73,6 +81,11 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
         >
           <BookOpen className={`w-3.5 h-3.5 ${activeTab === 'artifact' ? 'text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-zinc-400'}`} />
           <span>Artifacts & Plan</span>
+          {artifacts && artifacts.length > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400">
+              {artifacts.length}
+            </span>
+          )}
         </button>
 
         <button
@@ -108,7 +121,13 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
         )}
 
         {activeTab === 'artifact' && (
-          <ArtifactViewer theme={theme} />
+          <ArtifactViewer
+            artifacts={artifacts}
+            selectedArtifactId={selectedArtifactId}
+            onSelectArtifact={onSelectArtifact}
+            onReloadArtifact={onReloadArtifact}
+            theme={theme}
+          />
         )}
 
         {activeTab === 'terminal' && (

@@ -184,6 +184,11 @@ export function App() {
     fileContent,
     activeTab,
     setActiveTab,
+    artifacts,
+    selectedArtifactId,
+    selectArtifact,
+    reloadArtifact,
+    invalidateArtifactByPath,
     openFolderDialog,
     selectFile,
     refreshFiles,
@@ -210,18 +215,16 @@ export function App() {
     const prev = prevDiffRef.current;
     prevDiffRef.current = activeDiff;
 
-    // 1. When a new diff arrives with op 'create' or 'delete'
-    if (prev?.id !== activeDiff.id && (activeDiff.op === 'create' || activeDiff.op === 'delete')) {
+    const isNewDiff = prev?.id !== activeDiff.id;
+    const leftPending = Boolean(prev && prev.id === activeDiff.id && prev.status === 'pending' && activeDiff.status !== 'pending');
+    if (!isNewDiff && !leftPending) return;
+
+    invalidateArtifactByPath(activeDiff.filePath);
+
+    if (activeDiff.op === 'create' || activeDiff.op === 'delete') {
       refreshFiles();
     }
-
-    // 2. When activeDiff status transitions away from 'pending' for create/delete ops
-    if (prev && prev.id === activeDiff.id && prev.status === 'pending' && activeDiff.status !== 'pending') {
-      if (activeDiff.op === 'create' || activeDiff.op === 'delete') {
-        refreshFiles();
-      }
-    }
-  }, [activeDiff, refreshFiles]);
+  }, [activeDiff, refreshFiles, invalidateArtifactByPath]);
 
   const handleRestartEngine = async () => {
     if (window.electronAPI) {
@@ -424,6 +427,10 @@ export function App() {
           selectedFile={selectedFile}
           fileContent={fileContent}
           theme={theme}
+          artifacts={artifacts}
+          selectedArtifactId={selectedArtifactId}
+          onSelectArtifact={selectArtifact}
+          onReloadArtifact={reloadArtifact}
         />
 
         {/* Right Copilot Panel: Reasoning Stepper, Tool Cards & Chat */}

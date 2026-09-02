@@ -110,6 +110,8 @@ export interface ArtifactDocument {
   content: string;
   description?: string;
   language?: string;
+  path?: string;
+  isLoaded?: boolean;
 }
 export interface OmpNotification {
   id: string;

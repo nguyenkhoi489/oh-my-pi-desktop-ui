@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Eye,
   Code,
@@ -11,26 +11,46 @@ import {
   Monitor,
   ChevronDown,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { ArtifactDocument } from '../../types';
 import { DEMO_ARTIFACTS } from '../../mock/demoData';
 import { MarkdownRenderer } from '../Common/MarkdownRenderer';
+import { stripMarkdownFrontmatter } from '../../utils/artifactDiscovery';
 
 interface ArtifactViewerProps {
   artifacts?: ArtifactDocument[];
+  selectedArtifactId?: string;
+  onSelectArtifact?: (id: string) => void;
+  onReloadArtifact?: (id?: string) => void;
   theme?: string;
 }
 
 export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
   artifacts = DEMO_ARTIFACTS,
+  selectedArtifactId: controlledArtifactId,
+  onSelectArtifact,
+  onReloadArtifact,
 }) => {
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string>(artifacts[0]?.id || '');
+  const [internalArtifactId, setInternalArtifactId] = useState<string>(artifacts[0]?.id || '');
   const [viewMode, setViewMode] = useState<'preview' | 'document' | 'source'>('preview');
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [copied, setCopied] = useState<boolean>(false);
 
-  const currentArtifact = artifacts.find((a) => a.id === selectedArtifactId) || artifacts[0];
+  const activeId = controlledArtifactId !== undefined ? controlledArtifactId : internalArtifactId;
+  const currentArtifact = artifacts.find((a) => a.id === activeId) || artifacts[0];
+
+  // Đồng bộ viewMode mặc định theo loại artifact khi active artifact thay đổi
+  useEffect(() => {
+    if (currentArtifact) {
+      if (currentArtifact.type === 'markdown' || currentArtifact.type === 'plan') {
+        setViewMode('document');
+      } else {
+        setViewMode('preview');
+      }
+    }
+  }, [currentArtifact?.id, currentArtifact?.type]);
 
   const handleCopy = () => {
     if (!currentArtifact) return;
@@ -41,15 +61,25 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
 
   const handleReload = () => {
     setIframeKey((prev) => prev + 1);
+    if (currentArtifact && onReloadArtifact) {
+      onReloadArtifact(currentArtifact.id);
+    }
   };
 
-  if (!currentArtifact) {
+  if (!currentArtifact || artifacts.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-slate-400 dark:text-zinc-500 text-xs">
-        Chưa có Artifacts nào được tạo
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:text-zinc-500 text-xs">
+        <Sparkles className="w-8 h-8 text-slate-300 dark:text-zinc-600 mb-2 stroke-[1.5]" />
+        <p className="font-medium text-slate-600 dark:text-zinc-400">Chưa có Artifact nào được phát hiện</p>
+        <p className="mt-1 text-slate-400 dark:text-zinc-500 max-w-sm">
+          Tạo các file .html, .svg trong docs/ hoặc file markdown trong plans/ để tự động hiển thị tại đây.
+        </p>
       </div>
     );
   }
+
+  const isLoading = currentArtifact.isLoaded === false && !currentArtifact.content;
+  const isEmptyContent = currentArtifact.isLoaded === true && !currentArtifact.content;
 
   const getContainerWidth = () => {
     switch (deviceMode) {
@@ -67,22 +97,21 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
       {/* Top Header: Artifact Selector & View Mode Switcher */}
       <div className="h-11 bg-surface border-b border-border flex items-center justify-between px-4 shrink-0 gap-2">
         {/* Left: Artifact Dropdown / Selector */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
           <Sparkles className="w-4 h-4 text-codex-accent shrink-0" />
           
-          <div className="relative flex items-center">
+          <div className="relative flex items-center max-w-[280px] sm:max-w-[380px]">
             <select
-              value={selectedArtifactId}
+              value={currentArtifact.id}
               onChange={(e) => {
-                setSelectedArtifactId(e.target.value);
-                const art = artifacts.find((a) => a.id === e.target.value);
-                if (art?.type === 'markdown' || art?.type === 'plan') {
-                  setViewMode('document');
+                const targetId = e.target.value;
+                if (onSelectArtifact) {
+                  onSelectArtifact(targetId);
                 } else {
-                  setViewMode('preview');
+                  setInternalArtifactId(targetId);
                 }
               }}
-              className="appearance-none bg-panel hover:bg-surface-highlight border border-border rounded-lg px-3 py-1.5 pr-8 text-xs font-semibold text-slate-800 dark:text-zinc-200 outline-none cursor-pointer transition-colors"
+              className="appearance-none bg-panel hover:bg-surface-highlight border border-border rounded-lg px-3 py-1.5 pr-8 text-xs font-semibold text-slate-800 dark:text-zinc-200 outline-none cursor-pointer transition-colors truncate w-full"
             >
               {artifacts.map((art) => (
                 <option key={art.id} value={art.id}>
@@ -93,13 +122,13 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none" />
           </div>
 
-          <span className="text-[11px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-codex-500/10 text-codex-600 dark:text-codex-400 border border-codex-500/20">
+          <span className="text-[11px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-codex-500/10 text-codex-600 dark:text-codex-400 border border-codex-500/20 shrink-0">
             {currentArtifact.type}
           </span>
         </div>
 
         {/* Center: View Mode (Live Preview | Document | Source Code) */}
-        <div className="flex items-center bg-panel rounded-lg p-0.5 border border-border">
+        <div className="flex items-center bg-panel rounded-lg p-0.5 border border-border shrink-0">
           <button
             onClick={() => setViewMode('preview')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
@@ -138,7 +167,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
         </div>
 
         {/* Right: Device Switcher & Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {viewMode === 'preview' && currentArtifact.type !== 'svg' && (
             <div className="flex items-center bg-panel rounded-lg p-0.5 border border-border mr-1">
               <button
@@ -171,15 +200,13 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
             </div>
           )}
 
-          {viewMode === 'preview' && (
-            <button
-              onClick={handleReload}
-              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-zinc-200 hover:bg-surface-highlight transition-colors cursor-pointer"
-              title="Reload preview"
-            >
-              <RotateCw className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <button
+            onClick={handleReload}
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-zinc-200 hover:bg-surface-highlight transition-colors cursor-pointer"
+            title="Reload from disk"
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+          </button>
 
           <button
             onClick={handleCopy}
@@ -194,8 +221,21 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 relative flex items-center justify-center p-6 bg-background overflow-auto">
+        {isLoading && (
+          <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-zinc-500">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Đang đọc {currentArtifact.title}...</span>
+          </div>
+        )}
+
+        {isEmptyContent && (
+          <div className="text-xs text-slate-400 dark:text-zinc-500">
+            File trống hoặc không đọc được: {currentArtifact.title}
+          </div>
+        )}
+
         {/* 1. LIVE PREVIEW MODE (HTML / SVG / Widget) */}
-        {viewMode === 'preview' && (
+        {!isLoading && !isEmptyContent && viewMode === 'preview' && (
           <div className={`transition-all duration-300 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col rounded-xl border border-border ${getContainerWidth()}`}>
             {currentArtifact.type === 'svg' ? (
               <div
@@ -207,7 +247,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
                 key={iframeKey}
                 title={currentArtifact.title}
                 srcDoc={currentArtifact.content}
-                sandbox="allow-scripts allow-modals allow-forms allow-same-origin"
+                sandbox="allow-scripts allow-modals allow-forms"
                 className="w-full h-full border-0 bg-white"
               />
             )}
@@ -215,7 +255,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
         )}
 
         {/* 2. RICH DOCUMENT MODE (Markdown / Plans) */}
-        {viewMode === 'document' && (
+        {!isLoading && !isEmptyContent && viewMode === 'document' && (
           <div className="w-full h-full max-w-4xl bg-panel rounded-2xl border border-border p-8 overflow-y-auto shadow-sm">
             <h1 className="text-xl font-bold text-slate-900 dark:text-zinc-100 mb-2">
               {currentArtifact.title}
@@ -225,12 +265,12 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
                 {currentArtifact.description}
               </p>
             )}
-            <MarkdownRenderer content={currentArtifact.content} />
+            <MarkdownRenderer content={stripMarkdownFrontmatter(currentArtifact.content)} />
           </div>
         )}
 
         {/* 3. RAW SOURCE CODE MODE */}
-        {viewMode === 'source' && (
+        {!isLoading && !isEmptyContent && viewMode === 'source' && (
           <div className="w-full h-full max-w-4xl bg-panel rounded-2xl border border-border overflow-hidden flex flex-col shadow-sm">
             <div className="h-9 bg-surface border-b border-border flex items-center justify-between px-4 text-xs text-slate-500 font-mono">
               <span>{currentArtifact.title}</span>
