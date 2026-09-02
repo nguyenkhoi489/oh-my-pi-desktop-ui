@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OMP-Agent — System Architecture Overview</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-border: #1f293d;
+      --card-hover: #26334d;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      --success: #34d399;
+      --warning: #fbbf24;
+      --purple: #a78bfa;
+      --rose: #fb7185;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --card-border: #e2e8f0;
+      --card-hover: #f1f5f9;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --accent: #0284c7;
+      --accent-glow: rgba(2, 132, 199, 0.1);
+      --success: #059669;
+      --warning: #d97706;
+      --purple: #7c3aed;
+      --rose: #e11d48;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      padding: 24px;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 32px;
+    }
+
+    .title-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent-glow);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      background: var(--card-bg);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover {
+      background: var(--card-hover);
+      border-color: var(--accent);
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 8px;
+    }
+
+    .nav-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .nav-tab.active {
+      background: var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Architecture Layers Grid */
+    .arch-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .layer-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      position: relative;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .layer-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .layer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .layer-title {
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .layer-tag {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
+    .tag-renderer { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+    .tag-bridge { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+    .tag-main { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+    .tag-engine { background: rgba(251, 113, 133, 0.15); color: #fb7185; }
+
+    .components-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+
+    .comp-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .comp-name {
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 4px;
+      color: var(--text-main);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .comp-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .connector-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-family: var(--font-mono);
+      padding: 4px 0;
+    }
+
+    .flow-line {
+      height: 20px;
+      width: 2px;
+      background: var(--card-border);
+      margin: 0 auto;
+    }
+
+    /* Interactive Data Flow Section */
+    .flow-diagram {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .flow-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      position: relative;
+    }
+
+    .step-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 16px;
+      position: relative;
+    }
+
+    .step-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .step-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .step-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Key Invariants / Doctrine */
+    .invariants-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .invariant-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 16px;
+      border-left: 4px solid var(--accent);
+    }
+
+    .invariant-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text-main);
+    }
+
+    .invariant-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Code & Protocol preview */
+    .code-block {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #e6edf3;
+      overflow-x: auto;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <div class="title-badge">⚡ Architecture Specification</div>
+        <h1>OMP-Agent System Architecture</h1>
+        <p class="subtitle">Tổng quan kiến trúc phân tầng: Electron Main ↔ NDJSON stdio ↔ React Renderer ↔ OMP Engine</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn" onclick="toggleTheme()">🌓 Đổi Theme</button>
+      </div>
+    </header>
+
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchTab('overview')">Tổng quan phân tầng</button>
+      <button class="nav-tab" onclick="switchTab('dataflow')">Luồng dữ liệu (Data Flow)</button>
+      <button class="nav-tab" onclick="switchTab('components')">Chi tiết linh kiện UI & Bridge</button>
+      <button class="nav-tab" onclick="switchTab('doctrine')">Doctrine & Nguyên tắc hệ thống</button>
+    </div>
+
+    <!-- TAB 1: OVERVIEW -->
+    <div id="tab-overview" class="tab-content active">
+      <div class="arch-stack">
+
+        <!-- LAYER 1: RENDERER -->
+        <div class="layer-card">
+          <div class="layer-header">
+            <div class="layer-title">
+              <span>🖥️</span> 1. Presentation & Renderer Layer
+            </div>
+            <span class="layer-tag tag-renderer">React 18 + TS + Tailwind + Vite</span>
+          </div>
+          <div class="components-grid">
+            <div class="comp-box">
+              <div class="comp-name">AgentPanel</div>
+              <div class="comp-desc">ChatHistory, PromptComposer (@file, /slash, images), ThinkingCard, ToolCallCard, SubagentTranscript, TodoPanel.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Canvas Container</div>
+              <div class="comp-desc">Split pane chứa CodeEditor (Monaco), DiffViewer (Git diffs), ArtifactViewer (Live Preview HTML/Doc), TerminalView.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Sidebar & Navigation</div>
+              <div class="comp-desc">ThreadList (đa phiên), ProjectTree (cây thư mục dự án ảo hóa), SubagentHub (quản lý subagent peer).</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Custom Hooks</div>
+              <div class="comp-desc"><code>useOmpRpc</code> (stream frame & dispatch), <code>useWorkspace</code> (file sync), <code>useSubagentTranscript</code>.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="connector-flow">
+          <span>⬇️ window.electronAPI (ContextBridge - Bidirectional IPC) ⬆️</span>
+        </div>
+
+        <!-- LAYER 2: ELECTRON MAIN & BRIDGE -->
+        <div class="layer-card">
+          <div class="layer-header">
+            <div class="layer-title">
+              <span>🔌</span> 2. Electron Host & IPC Bridge Layer
+            </div>
+            <span class="layer-tag tag-bridge">Node.js + Electron Core</span>
+          </div>
+          <div class="components-grid">
+            <div class="comp-box">
+              <div class="comp-name">OmpBridge (<code>omp-bridge.ts</code>)</div>
+              <div class="comp-desc">Quản lý vòng đời tiến trình con <code>omp --mode rpc</code>, bộ đệm NDJSON (<code>ndjson-framer.ts</code>), log frame, bảo đảm atomic process lifecycle.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Main Process (<code>main.ts</code>)</div>
+              <div class="comp-desc">Đăng ký toàn bộ IPC handlers: <code>omp:*</code>, <code>fs:*</code>, <code>settings:*</code>, native dialogs, window lifecycle.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Supporting Modules</div>
+              <div class="comp-desc"><code>settings-store.ts</code>, <code>host-tools.ts</code>, <code>extension-manager.ts</code>, <code>roles-config.ts</code>, <code>usage-stats.ts</code>.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Preload Bridge (<code>preload.ts</code>)</div>
+              <div class="comp-desc">Expose typed methods an toàn qua <code>contextBridge</code>, đảm bảo renderer không truy cập trực tiếp Node runtime.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="connector-flow">
+          <span>⬇️ stdio (stdin / stdout) - Protocol: JSON-Lines (NDJSON) ⬆️</span>
+        </div>
+
+        <!-- LAYER 3: OMP ENGINE -->
+        <div class="layer-card">
+          <div class="layer-header">
+            <div class="layer-title">
+              <span>🧠</span> 3. OMP Engine & Core Subsystem
+            </div>
+            <span class="layer-tag tag-engine">CLI / RPC Daemon (Oh-My-Pi)</span>
+          </div>
+          <div class="components-grid">
+            <div class="comp-box">
+              <div class="comp-name">RPC Server Daemon</div>
+              <div class="comp-desc">Lắng nghe qua stdio stream với các frame: <code>ready</code>, <code>delta</code>, <code>tool_start</code>, <code>tool_end</code>, <code>approval_request</code>.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Agent & Task Loop</div>
+              <div class="comp-desc">Xử lý prompt, phân rã công việc, quản lý memory session, context window, token usage telemetry.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Tool Execution Core</div>
+              <div class="comp-desc">Thực thi tool an toàn (Read, Edit, Write, Bash, Eval, Glob, Grep, MCP, Browser, Hub peer messaging).</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Subagent & Peer Hub</div>
+              <div class="comp-desc">Spawning parallel subagents (scout, task, reviewer), DAG wave coordination, IPC messaging nội bộ giữa các agent.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 2: DATA FLOW -->
+    <div id="tab-dataflow" class="tab-content">
+      <div class="flow-diagram">
+        <h3 style="margin-bottom: 16px; font-size: 16px;">Vòng tuần hoàn xử lý Message & Tool Approval</h3>
+        <div class="flow-steps">
+          <div class="step-card">
+            <div class="step-num">1</div>
+            <div class="step-title">Prompt Composer</div>
+            <div class="step-desc">Người dùng nhập tin nhắn kèm <code>@file</code> hoặc <code>/slash</code>, ảnh paste/drop. Gọi <code>electronAPI.ompPrompt()</code>.</div>
+          </div>
+          <div class="step-card">
+            <div class="step-num">2</div>
+            <div class="step-title">NDJSON Bridge</div>
+            <div class="step-desc"><code>OmpBridge</code> format frame <code>{ type: 'prompt', text: '...' }</code> và ghi vào stdin của tiến trình <code>omp</code>.</div>
+          </div>
+          <div class="step-card">
+            <div class="step-num">3</div>
+            <div class="step-title">Streaming Tokens</div>
+            <div class="step-desc">Engine stream frame <code>delta</code> (text / thinking). Bridge chuyển qua IPC <code>omp:frame</code> → React cập nhật Markdown/Thinking real-time.</div>
+          </div>
+          <div class="step-card">
+            <div class="step-num">4</div>
+            <div class="step-title">Tool & Approval</div>
+            <div class="step-desc">Khi engine cần quyền (file write/bash), phát <code>approval_request</code>. UI hiển thị Card/Modal để người dùng duyệt (allow/deny).</div>
+          </div>
+          <div class="step-card">
+            <div class="step-num">5</div>
+            <div class="step-title">Artifacts & Diffs</div>
+            <div class="step-desc">Kết quả tool trả về: file diffs hiển thị trên <code>DiffViewer</code>, artifact HTML/Doc hiển thị trên <code>ArtifactViewer</code>.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer-card">
+        <div class="layer-header">
+          <div class="layer-title">📜 Ví dụ RPC Frame Chuẩn (NDJSON Protocol)</div>
+        </div>
+        <div class="code-block">
+// 1. Handshake Ready Frame
+{"type":"ready","version":"1.0.0","models":[{"id":"gemini-3.7-flash","name":"Gemini 3.7 Flash"}],"roles":["architect","developer"]}
+
+// 2. Client Prompt Frame
+{"type":"prompt","text":"Tạo trang landing page demo","attachments":[{"type":"file","path":"src/App.tsx"}]}
+
+// 3. Streaming Delta Frame
+{"type":"delta","messageId":"msg_123","delta":"Tôi đang thiết kế component..."}
+
+// 4. Tool Execution Request
+{"type":"tool_start","toolCallId":"tc_456","tool":"write","params":{"path":"docs/landing.html"}}
+
+// 5. Tool Approval Request (Bidirectional)
+{"type":"approval_request","requestId":"req_789","tool":"bash","command":"npm run build"}
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: COMPONENTS -->
+    <div id="tab-components" class="tab-content">
+      <div class="arch-stack">
+        <div class="layer-card">
+          <div class="layer-title" style="margin-bottom: 12px;">📁 Tổ chức Cấu trúc Codebase (Source Tree)</div>
+          <div class="components-grid">
+            <div class="comp-box">
+              <div class="comp-name"><code>electron/</code></div>
+              <div class="comp-desc"><b>main.ts</b> (lifecycle & IPC), <b>omp-bridge.ts</b> (quản lý sub-process stdio), <b>preload.ts</b> (contextBridge), <b>settings-store.ts</b>, <b>ndjson-framer.ts</b>.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name"><code>src/components/AgentPanel/</code></div>
+              <div class="comp-desc"><b>AgentPanel.tsx</b>, <b>PromptComposer.tsx</b> (mid-input mention, file chip sync), <b>ChatHistory.tsx</b>, <b>ThinkingCard.tsx</b>, <b>ToolCallCard.tsx</b>, <b>TodoPanel.tsx</b>.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name"><code>src/components/Canvas/</code></div>
+              <div class="comp-desc"><b>CanvasContainer.tsx</b> (tab split switch), <b>ArtifactViewer.tsx</b> (preview web/svg/doc với responsive viewport), <b>DiffViewer.tsx</b>, <b>CodeEditor.tsx</b>, <b>TerminalView.tsx</b>.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name"><code>src/components/Sidebar/</code></div>
+              <div class="comp-desc"><b>ThreadList.tsx</b> (danh sách hội thoại), <b>ProjectTree.tsx</b> (file tree ảo hóa với filter), <b>SubagentHub.tsx</b> (peer status).</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name"><code>src/hooks/</code></div>
+              <div class="comp-desc"><b>useOmpRpc.ts</b> (trung tâm điều khiển state engine), <b>useWorkspace.ts</b> (quản lý folder & file tree), <b>useSubagentTranscript.ts</b>.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name"><code>scripts/</code></div>
+              <div class="comp-desc">Hệ thống test không dùng test framework bên ngoài: ~24 suite <code>verify-*.mjs</code> chạy với Node native test assertion.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: DOCTRINE -->
+    <div id="tab-doctrine" class="tab-content">
+      <div class="invariants-grid">
+        <div class="invariant-card">
+          <div class="invariant-title">1. The Main Process is Sacred</div>
+          <div class="invariant-desc">Không bao giờ dùng sync child process (<code>execSync</code>/<code>spawnSync</code>) trong Electron main để tránh block event loop UI.</div>
+        </div>
+        <div class="invariant-card">
+          <div class="invariant-title">2. Contracts are Tests</div>
+          <div class="invariant-desc">Mọi IPC channel, frame shape trong <code>omp-rpc-types.ts</code> đều được khóa bằng các script <code>verify-*.mjs</code>.</div>
+        </div>
+        <div class="invariant-card">
+          <div class="invariant-title">3. The UI Never Lies</div>
+          <div class="invariant-desc">Mọi lỗi khởi động engine hoặc timeout đều phải hiển thị Toast rõ ràng cho người dùng, không bao giờ nuốt lỗi âm thầm.</div>
+        </div>
+        <div class="invariant-card">
+          <div class="invariant-title">4. Scale is the Default Input</div>
+          <div class="invariant-desc">Workspace giả định có hàng nghìn files: bắt buộc dùng <code>React.memo</code>, cap render, virtualization để tránh drop FPS.</div>
+        </div>
+        <div class="invariant-card">
+          <div class="invariant-title">5. Symmetry of State</div>
+          <div class="invariant-desc">Bất cứ menu, modal hay inline chip nào mở ra đều phải có cơ chế đóng/xóa hoàn toàn đối xứng trên mọi đường thoát.</div>
+        </div>
+        <div class="invariant-card">
+          <div class="invariant-title">6. Real Behavior Only</div>
+          <div class="invariant-desc">Không sử dụng fake mock data trong môi trường chạy thật; chỉ duy trì mock tối thiểu khi chạy trình duyệt không có Electron.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+      
+      const target = document.getElementById('tab-' + tabId);
+      if (target) target.classList.add('active');
+      
+      const btn = Array.from(document.querySelectorAll('.nav-tab')).find(b => b.getAttribute('onclick').includes(tabId));
+      if (btn) btn.classList.add('active');
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', current === 'light' ? 'dark' : 'light');
+    }
+  </script>
+</body>
+</html>
