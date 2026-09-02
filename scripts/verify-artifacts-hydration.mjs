@@ -117,6 +117,40 @@ async function runVerification() {
       ],
     },
     {
+      name: '.agents',
+      path: '/workspace/.agents',
+      relativePath: '.agents',
+      isDirectory: true,
+      children: [
+        {
+          name: 'SKILL.md',
+          path: '/workspace/.agents/skills/git/SKILL.md',
+          relativePath: '.agents/skills/git/SKILL.md',
+          isDirectory: false,
+        },
+        {
+          name: 'plan.md',
+          path: '/workspace/.agents/plan.md',
+          relativePath: '.agents/plan.md',
+          isDirectory: false,
+        },
+      ],
+    },
+    {
+      name: '.claude',
+      path: '/workspace/.claude',
+      relativePath: '.claude',
+      isDirectory: true,
+      children: [
+        {
+          name: 'notes.md',
+          path: '/workspace/.claude/notes.md',
+          relativePath: '.claude/notes.md',
+          isDirectory: false,
+        },
+      ],
+    },
+    {
       name: 'README.md',
       path: '/workspace/README.md',
       relativePath: 'README.md',
@@ -136,6 +170,10 @@ async function runVerification() {
 
   // Check that node_modules files were ignored
   assert(!artifacts.some((a) => a.title.includes('node_modules')), 'node_modules files must be ignored');
+
+  // Check that tooling dot-folders were ignored
+  assert(!artifacts.some((a) => a.title.startsWith('.agents/')), '.agents files must be ignored');
+  assert(!artifacts.some((a) => a.title.startsWith('.claude/')), '.claude files must be ignored');
 
   // Check priority sorting: docs/ before plans/ before root
   const firstDocIndex = artifacts.findIndex((a) => a.title.startsWith('docs/'));

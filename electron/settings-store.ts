@@ -6,6 +6,7 @@ import type { OmpThinkingLevel, OmpApprovalMode } from './types.ts';
 
 export interface AppSettings {
   theme?: 'light' | 'dark';
+  language?: 'vi' | 'en';
   customBinaryPath?: string;
   defaultProvider?: string;
   defaultModel?: string;
@@ -23,6 +24,7 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light',
+  language: 'vi',
   approvalMode: 'always-ask',
   defaultThinkingLevel: 'off',
   autoCompaction: false,
@@ -75,6 +77,9 @@ export class SettingsStore {
     if (raw.theme === 'light' || raw.theme === 'dark') {
       clean.theme = raw.theme;
     }
+    if (raw.language === 'vi' || raw.language === 'en') {
+      clean.language = raw.language;
+    }
     if (typeof raw.customBinaryPath === 'string' && raw.customBinaryPath.trim()) {
       clean.customBinaryPath = raw.customBinaryPath.trim();
     }
@@ -108,6 +113,12 @@ export class SettingsStore {
     if (typeof raw.interruptMode === 'string' && raw.interruptMode.trim()) {
       clean.interruptMode = raw.interruptMode.trim();
     }
+    if (typeof raw.profile === 'string' && raw.profile.trim()) {
+      clean.profile = raw.profile.trim();
+    }
+    if (typeof raw.hostToolsEnabled === 'boolean') {
+      clean.hostToolsEnabled = raw.hostToolsEnabled;
+    }
     return clean;
   }
 
@@ -123,6 +134,9 @@ export class SettingsStore {
 
     if ('theme' in partial && (partial.theme === 'light' || partial.theme === 'dark')) {
       next.theme = partial.theme;
+    }
+    if ('language' in partial && (partial.language === 'vi' || partial.language === 'en')) {
+      next.language = partial.language;
     }
     if ('customBinaryPath' in partial) {
       next.customBinaryPath =
@@ -178,6 +192,15 @@ export class SettingsStore {
         typeof partial.interruptMode === 'string' && partial.interruptMode.trim()
           ? partial.interruptMode.trim()
           : undefined;
+    }
+    if ('profile' in partial) {
+      next.profile =
+        typeof partial.profile === 'string' && partial.profile.trim()
+          ? partial.profile.trim()
+          : undefined;
+    }
+    if ('hostToolsEnabled' in partial && typeof partial.hostToolsEnabled === 'boolean') {
+      next.hostToolsEnabled = partial.hostToolsEnabled;
     }
 
     this.settings = next;

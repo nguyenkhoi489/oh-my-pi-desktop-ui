@@ -20,6 +20,7 @@ import { shareSession, joinCollabSession, type ShareSessionOptions } from './col
 import { OpsManager } from './ops-manager.ts';
 import { ExtensionManager } from './extension-manager.ts';
 import { listProfiles, createProfile, deleteProfile } from './profile-paths.ts';
+import { setCurrentLocale } from '../shared/i18n/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,6 +79,9 @@ function createWindow() {
   const settingsStore = getSettingsStore();
   ompBridge = new OmpBridge(mainWindow, settingsStore);
   const initialSettings = settingsStore.get();
+  if (initialSettings.language) {
+    setCurrentLocale(initialSettings.language);
+  }
   if (initialSettings.customBinaryPath) {
     ompBridge.setCustomBinaryPath(initialSettings.customBinaryPath);
   }
@@ -207,6 +211,9 @@ ipcMain.handle('settings:set', async (_, partial: Partial<AppSettings>) => {
     if ('interruptMode' in partial && partial.interruptMode) {
       ompBridge.setInterruptMode(partial.interruptMode).catch(() => {});
     }
+  }
+  if ('language' in partial && updated.language) {
+    setCurrentLocale(updated.language);
   }
   return updated;
 });

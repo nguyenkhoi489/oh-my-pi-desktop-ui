@@ -57,6 +57,7 @@ import {
   formatModelRoleSpec,
   parseModelRoleSpec,
 } from '../../utils/model-role-spec';
+import { useI18n } from '../../i18n/I18nProvider';
 
 const EFFORT_LEVELS: OmpEffortLevel[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -217,6 +218,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onRestartEngine,
   isEngineRunning = false,
 }) => {
+  const { locale, setLocale, t } = useI18n();
   const [activeTab, setActiveTab] = useState<'general' | 'engine' | 'providers'>('general');
   const [settings, setSettings] = useState<AppSettings>({
     theme: 'light',
@@ -900,8 +902,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <Settings className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">Cài đặt</h2>
-              <p className="text-xs text-slate-500 dark:text-zinc-400">Tùy chỉnh giao diện, engine và quản lý LLM Providers</p>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">{t('settings.title')}</h2>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">{t('settings.desc')}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -914,7 +916,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg hover:bg-surface-highlight text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-              title="Đóng (ESC)"
+              title={t('settings.close')}
             >
               <X className="w-4 h-4" />
             </button>
@@ -935,7 +937,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }`}
           >
             <Sliders className="w-3.5 h-3.5" />
-            Giao diện
+            {t('settings.tab.general')}
           </button>
           <button
             onClick={() => {
@@ -949,7 +951,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            Engine & Khởi động
+            {t('settings.tab.engine')}
           </button>
           <button
             onClick={() => setActiveTab('providers')}
@@ -960,7 +962,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }`}
           >
             <Server className="w-3.5 h-3.5" />
-            Providers & Custom LLM
+            {t('settings.tab.providers')}
           </button>
         </div>
 
@@ -971,7 +973,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="space-y-6">
               <div>
                 <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 block mb-2">
-                  Chủ đề giao diện (Theme)
+                  {t('settings.theme.title')}
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -986,8 +988,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <Sun className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-xs font-medium text-slate-900 dark:text-zinc-100">Giao diện Sáng (Light)</div>
-                      <div className="text-[11px] text-slate-500 dark:text-zinc-400">Tone trắng thanh lịch, tương phản cao</div>
+                      <div className="text-xs font-medium text-slate-900 dark:text-zinc-100">{t('settings.theme.light')}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-zinc-400">{t('settings.theme.light.desc')}</div>
                     </div>
                   </button>
 
@@ -1003,8 +1005,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <Moon className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-xs font-medium text-slate-900 dark:text-zinc-100">Giao diện Tối (Dark)</div>
-                      <div className="text-[11px] text-slate-500 dark:text-zinc-400">Tone đen xám dịu mắt, phong cách Codex</div>
+                      <div className="text-xs font-medium text-slate-900 dark:text-zinc-100">{t('settings.theme.dark')}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-zinc-400">{t('settings.theme.dark.desc')}</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Language Switcher */}
+              <div>
+                <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 block mb-2">
+                  {t('settings.language.title')}
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setLocale('vi')}
+                    className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all cursor-pointer text-left ${
+                      locale === 'vi'
+                        ? 'bg-surface-highlight border-codex-accent ring-2 ring-codex-accent/20'
+                        : 'bg-surface border-border hover:border-slate-300 dark:hover:border-zinc-700'
+                    }`}
+                  >
+                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0">
+                      <Globe className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-medium text-slate-900 dark:text-zinc-100">{t('settings.language.vi')}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-zinc-400">{t('settings.language.vi.desc')}</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setLocale('en')}
+                    className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all cursor-pointer text-left ${
+                      locale === 'en'
+                        ? 'bg-surface-highlight border-codex-accent ring-2 ring-codex-accent/20'
+                        : 'bg-surface border-border hover:border-slate-300 dark:hover:border-zinc-700'
+                    }`}
+                  >
+                    <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 shrink-0">
+                      <Globe className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-medium text-slate-900 dark:text-zinc-100">{t('settings.language.en')}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-zinc-400">{t('settings.language.en.desc')}</div>
                     </div>
                   </button>
                 </div>

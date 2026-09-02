@@ -78,7 +78,7 @@ Live suites (`test:handshake`, `test:*-live`) spawn a real `omp` binary.
 - TypeScript everywhere; keep types in `src/types/index.ts` or `electron/types.ts`.
 - Comments: sparse, **one short line in Vietnamese**, only where purpose isn't
   obvious. No doc blocks, no commented-out code, no plan/ticket IDs in code.
-- UI strings are Vietnamese. Identifiers and commits are English.
+- UI strings đi qua `t()` (`shared/i18n`), key tiếng Anh, `vi` mặc định. Identifiers and commits are English.
 - Follow the surrounding file's naming and structure; extract pure functions into
   `src/utils/` when logic needs a test.
 - KISS/DRY; add nothing beyond the requested scope.

@@ -586,6 +586,7 @@ export interface OmpEngineState {
 
 export interface AppSettings {
   theme?: 'light' | 'dark';
+  language?: 'vi' | 'en';
   customBinaryPath?: string;
   defaultProvider?: string;
   defaultModel?: string;
