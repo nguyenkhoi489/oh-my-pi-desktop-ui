@@ -102,6 +102,41 @@ ipcMain.handle('omp:send-message', async (_, prompt: string, context?: { files?:
   return ompBridge.sendMessage(prompt, context);
 });
 
+ipcMain.handle('omp:steer', async (_, message: string, context?: { files?: string[] }) => {
+  if (!ompBridge) return { success: false };
+  return ompBridge.steer(message, context);
+});
+
+ipcMain.handle('omp:abort-and-prompt', async (_, prompt: string, context?: { files?: string[] }) => {
+  if (!ompBridge) return { success: false };
+  return ompBridge.abortAndPrompt(prompt, context);
+});
+
+ipcMain.handle('omp:follow-up', async (_, message: string, context?: { files?: string[] }) => {
+  if (!ompBridge) return { success: false };
+  return ompBridge.followUp(message, context);
+});
+
+ipcMain.handle('omp:set-steering-mode', async (_, mode: string) => {
+  if (!ompBridge) return { success: false };
+  return ompBridge.setSteeringMode(mode);
+});
+
+ipcMain.handle('omp:set-follow-up-mode', async (_, mode: string) => {
+  if (!ompBridge) return { success: false };
+  return ompBridge.setFollowUpMode(mode);
+});
+
+ipcMain.handle('omp:set-interrupt-mode', async (_, mode: string) => {
+  if (!ompBridge) return { success: false };
+  return ompBridge.setInterruptMode(mode);
+});
+
+ipcMain.handle('omp:abort', async () => {
+  if (!ompBridge) return { success: false };
+  return ompBridge.abort();
+});
+
 ipcMain.handle('omp:respond-permission', async (_, requestId: string, approved: boolean) => {
   if (!ompBridge) return;
   ompBridge.respondPermission(requestId, approved);
@@ -127,6 +162,15 @@ ipcMain.handle('settings:set', async (_, partial: Partial<AppSettings>) => {
     }
     if ('defaultThinkingLevel' in partial && partial.defaultThinkingLevel) {
       ompBridge.setThinkingLevel(partial.defaultThinkingLevel).catch(() => {});
+    }
+    if ('steeringMode' in partial && partial.steeringMode) {
+      ompBridge.setSteeringMode(partial.steeringMode).catch(() => {});
+    }
+    if ('followUpMode' in partial && partial.followUpMode) {
+      ompBridge.setFollowUpMode(partial.followUpMode).catch(() => {});
+    }
+    if ('interruptMode' in partial && partial.interruptMode) {
+      ompBridge.setInterruptMode(partial.interruptMode).catch(() => {});
     }
   }
   return updated;
@@ -477,6 +521,41 @@ ipcMain.handle(
     }
   }
 );
+
+const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  avif: 'image/avif',
+};
+
+// Đọc file ảnh trên đĩa thành data URL để renderer hiển thị thumbnail
+ipcMain.handle('fs:read-image-base64', async (_, filePath: string) => {
+  try {
+    if (!filePath) {
+      return { success: false, error: 'Thiếu đường dẫn file ảnh' };
+    }
+    const wsPath = ompBridge?.getWorkspacePath();
+    if (!path.isAbsolute(filePath) && !wsPath) {
+      return { success: false, error: 'Chưa mở workspace để phân giải đường dẫn tương đối' };
+    }
+    const absPath = path.isAbsolute(filePath) ? filePath : path.join(wsPath!, filePath);
+    const ext = path.extname(absPath).replace(/^\./, '').toLowerCase();
+    const mime = IMAGE_MIME_BY_EXTENSION[ext];
+    if (!mime) {
+      return { success: false, error: `Định dạng ảnh không được hỗ trợ: .${ext}` };
+    }
+    const data = await fs.readFile(absPath);
+    return { success: true, dataUrl: `data:${mime};base64,${data.toString('base64')}` };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Không thể đọc file ảnh' };
+  }
+});
 
 app.whenReady().then(() => {
   createWindow();

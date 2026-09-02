@@ -130,6 +130,11 @@ export function App() {
     engineState,
     subagents,
     sendMessage,
+    steer,
+    abortAndPrompt,
+    followUpQueue,
+    followUp,
+    cancelFollowUp,
     acceptDiff,
     rejectDiff,
     notifications,
@@ -402,12 +407,18 @@ export function App() {
               engineStatuses={engineStatuses}
               engineWidgets={engineWidgets}
               workspaceFiles={files}
+              workspacePath={workspacePath || undefined}
               availableCommands={availableCommands}
               pendingToolApproval={isCurrentToolApproval ? activeUiRequest : null}
               toolApprovalQueueLength={uiRequestQueue.length}
               onApproveTool={handleApproveTool}
               onDenyTool={handleDenyTool}
               onSendMessage={sendMessage}
+              onSteerMessage={steer}
+              onAbortAndPrompt={abortAndPrompt}
+              onFollowUpMessage={followUp}
+              followUpQueue={followUpQueue}
+              onCancelFollowUp={cancelFollowUp}
               onBranchSession={branchFromMessage}
               onCollapsePanel={collapseRightSidebar}
               onOpenFile={handleOpenFileByPath}

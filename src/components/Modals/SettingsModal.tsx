@@ -28,6 +28,9 @@ import {
   XCircle,
   Eye,
   EyeOff,
+  Radio,
+  Clock,
+  Square,
 } from 'lucide-react';
 import {
   ThemeMode,
@@ -111,6 +114,24 @@ const APPROVAL_OPTIONS: { id: OmpApprovalMode; label: string; desc: string }[] =
   { id: 'always-ask', label: 'Luôn hỏi (Always Ask)', desc: 'Hỏi xác nhận trước mọi thao tác đọc/ghi file hoặc chạy lệnh' },
   { id: 'write', label: 'Chỉ hỏi khi ghi (Write)', desc: 'Tự động cấp quyền đọc, chỉ hỏi khi sửa file hoặc chạy lệnh' },
   { id: 'yolo', label: 'Tự động toàn bộ (Yolo)', desc: 'Tự động cấp tất cả quyền thực thi mà không cần hỏi lại' },
+];
+
+const STEERING_MODES: { id: string; label: string; desc: string }[] = [
+  { id: 'default', label: 'Mặc định (Default)', desc: 'Xử lý chỉ đạo theo cấu hình tiêu chuẩn của engine' },
+  { id: 'immediate', label: 'Tức thời (Immediate)', desc: 'Can thiệp trực tiếp ngay khi đang sinh phản hồi' },
+  { id: 'next_turn', label: 'Lượt tiếp theo (Next Turn)', desc: 'Chèn chỉ đạo vào đầu lượt tiếp theo' },
+];
+
+const FOLLOW_UP_MODES: { id: string; label: string; desc: string }[] = [
+  { id: 'default', label: 'Mặc định (Default)', desc: 'Đưa câu hỏi vào hàng đợi xử lý sau khi turn kết thúc' },
+  { id: 'immediate', label: 'Tức thời (Immediate)', desc: 'Ưu tiên kích hoạt ngay khi turn hiện tại sẵn sàng' },
+  { id: 'next_turn', label: 'Lượt tiếp theo (Next Turn)', desc: 'Chờ engine chuyển lượt tuần tự' },
+];
+
+const INTERRUPT_MODES: { id: string; label: string; desc: string }[] = [
+  { id: 'default', label: 'Mặc định (Default)', desc: 'Ngắt tiến trình an toàn và giải phóng tài nguyên' },
+  { id: 'immediate', label: 'Tức thời (Immediate)', desc: 'Dừng luồng phản hồi ngay lập tức' },
+  { id: 'next_turn', label: 'Lượt tiếp theo (Next Turn)', desc: 'Đợi hoàn tất bước phụ hiện tại trước khi ngắt' },
 ];
 
 const MOCK_CUSTOM_PROVIDERS: CustomProviderConfig[] = [
@@ -1168,6 +1189,87 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 >
                   <div className="w-4 h-4 rounded-full bg-white shadow-xs" />
                 </button>
+              </div>
+
+              {/* Engine Behavior Modes */}
+              <div className="space-y-4 pt-2 border-t border-border">
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5 text-blue-500" />
+                    Hành vi Engine (Engine Behavior Modes)
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                    Tùy chỉnh chế độ can thiệp chỉ đạo, xếp hàng follow-up và ngắt turn
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Steering Mode */}
+                  <div className="p-3 bg-surface rounded-xl border border-border space-y-2">
+                    <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                      <Radio className="w-3.5 h-3.5 text-amber-500" />
+                      Steering Mode
+                    </label>
+                    <select
+                      value={settings.steeringMode || 'default'}
+                      onChange={(e) => savePartial({ steeringMode: e.target.value })}
+                      className="w-full text-xs bg-surface-highlight border border-border rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-codex-accent cursor-pointer"
+                    >
+                      {STEERING_MODES.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="text-[10.5px] text-slate-500 dark:text-zinc-400 leading-tight">
+                      {STEERING_MODES.find((m) => m.id === (settings.steeringMode || 'default'))?.desc}
+                    </div>
+                  </div>
+
+                  {/* Follow-up Mode */}
+                  <div className="p-3 bg-surface rounded-xl border border-border space-y-2">
+                    <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-500" />
+                      Follow-up Mode
+                    </label>
+                    <select
+                      value={settings.followUpMode || 'default'}
+                      onChange={(e) => savePartial({ followUpMode: e.target.value })}
+                      className="w-full text-xs bg-surface-highlight border border-border rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-codex-accent cursor-pointer"
+                    >
+                      {FOLLOW_UP_MODES.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="text-[10.5px] text-slate-500 dark:text-zinc-400 leading-tight">
+                      {FOLLOW_UP_MODES.find((m) => m.id === (settings.followUpMode || 'default'))?.desc}
+                    </div>
+                  </div>
+
+                  {/* Interrupt Mode */}
+                  <div className="p-3 bg-surface rounded-xl border border-border space-y-2">
+                    <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                      <Square className="w-3.5 h-3.5 text-rose-500" />
+                      Interrupt Mode
+                    </label>
+                    <select
+                      value={settings.interruptMode || 'default'}
+                      onChange={(e) => savePartial({ interruptMode: e.target.value })}
+                      className="w-full text-xs bg-surface-highlight border border-border rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-codex-accent cursor-pointer"
+                    >
+                      {INTERRUPT_MODES.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="text-[10.5px] text-slate-500 dark:text-zinc-400 leading-tight">
+                      {INTERRUPT_MODES.find((m) => m.id === (settings.interruptMode || 'default'))?.desc}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

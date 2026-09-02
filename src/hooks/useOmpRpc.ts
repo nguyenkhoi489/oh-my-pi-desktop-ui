@@ -51,7 +51,9 @@ export function useOmpRpc() {
   const uiRequestQueueRef = useRef<OmpUiRequest[]>([]);
   const activeUiRequest = uiRequestQueue.length > 0 ? uiRequestQueue[0] : null;
   
-  // Model catalog & engine state
+  // Follow-up Queue State (Phase 3)
+  const [followUpQueue, setFollowUpQueue] = useState<Array<{ id: string; content: string; files?: string[]; timestamp: number }>>([]);
+  const followUpQueueRef = useRef<Array<{ id: string; content: string; files?: string[]; timestamp: number }>>([]);
   const [availableModels, setAvailableModels] = useState<OmpModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState<OmpModelInfo | null>(null);
   const [thinkingLevel, setThinkingLevel] = useState<OmpThinkingLevel>('off');
@@ -170,6 +172,15 @@ export function useOmpRpc() {
         }
         if (res.state.approvalMode !== undefined) {
           setApprovalMode(res.state.approvalMode);
+        }
+        if (res.state.queuedMessageCount !== undefined) {
+          setFollowUpQueue((prev) => {
+            if (res.state!.queuedMessageCount === 0) return [];
+            if (res.state!.queuedMessageCount! < prev.length) {
+              return prev.slice(prev.length - res.state!.queuedMessageCount!);
+            }
+            return prev;
+          });
         }
         return res.state;
       }
@@ -372,6 +383,7 @@ export function useOmpRpc() {
             setActiveToolCalls([]);
             setActiveDiff(null);
             setUiRequestQueue([]);
+            setFollowUpQueue([]);
             uiRequestQueueRef.current = [];
             setNotifications([]);
             setEngineStatuses([]);
@@ -388,6 +400,7 @@ export function useOmpRpc() {
       } else {
         setMessages([]);
         setActiveDiff(null);
+        setFollowUpQueue([]);
         return true;
       }
     },
@@ -490,6 +503,7 @@ export function useOmpRpc() {
               setMessages(correlated);
               await refreshSessions();
               await refreshEngineState();
+              setFollowUpQueue([]);
               return true;
             }
           }
@@ -626,6 +640,22 @@ export function useOmpRpc() {
       activeToolCallsRef.current = [];
       setActiveToolCalls([]);
       refreshSessions();
+      // Tự động kích hoạt follow-up tiếp theo trong hàng đợi nếu có
+      if (followUpQueueRef.current.length > 0) {
+        const [nextFollowUp, ...remaining] = followUpQueueRef.current;
+        followUpQueueRef.current = remaining;
+        setFollowUpQueue(remaining);
+
+        setMessages((prev) =>
+          prev.map((m) => (m.id === nextFollowUp.id ? { ...m, queued: false } : m))
+        );
+
+        if (window.electronAPI) {
+          window.electronAPI.sendOmpMessage(nextFollowUp.content, { files: nextFollowUp.files }).catch((err) => {
+            console.error('[useOmpRpc] Failed to dispatch queued follow-up:', err);
+          });
+        }
+      }
     });
 
     const unsubSubagents = window.electronAPI.onOmpSubagentUpdate
@@ -729,7 +759,23 @@ export function useOmpRpc() {
         timestamp: Date.now(),
       };
 
-      setMessages((prev) => [...prev, userMsg]);
+      // Hiển thị card đính kèm (kèm thumbnail ảnh) ngay trước tin nhắn người dùng
+      const newMessages: ChatMessage[] = [];
+      if (contextFiles && contextFiles.length > 0) {
+        newMessages.push({
+          id: 'files-' + Date.now(),
+          role: 'fileMention',
+          content: '',
+          timestamp: Date.now(),
+          files: contextFiles.map((p) => ({
+            path: p,
+            name: p.split('/').pop() || p,
+          })),
+        });
+      }
+      newMessages.push(userMsg);
+
+      setMessages((prev) => [...prev, ...newMessages]);
       setCurrentStreamText('');
       setCurrentThinking(null);
       activeToolCallsRef.current = [];
@@ -801,6 +847,162 @@ export function useOmpRpc() {
     },
     []
   );
+
+  const steer = useCallback(
+    async (message: string, contextFiles?: string[]) => {
+      if (!message.trim()) return;
+
+      const userMsg: ChatMessage = {
+        id: 'msg-steer-' + Date.now(),
+        role: 'user',
+        content: message,
+        timestamp: Date.now(),
+        steering: true,
+      };
+
+      const newMessages: ChatMessage[] = [];
+      if (contextFiles && contextFiles.length > 0) {
+        newMessages.push({
+          id: 'files-' + Date.now(),
+          role: 'fileMention',
+          content: '',
+          timestamp: Date.now(),
+          files: contextFiles.map((p) => ({
+            path: p,
+            name: p.split('/').pop() || p,
+          })),
+        });
+      }
+      newMessages.push(userMsg);
+
+      setMessages((prev) => [...prev, ...newMessages]);
+
+      if (window.electronAPI) {
+        try {
+          await window.electronAPI.steerOmp(message, { files: contextFiles });
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to send steer command via Electron IPC:', err);
+        }
+      }
+    },
+    []
+  );
+
+  const abortAndPrompt = useCallback(
+    async (prompt: string, contextFiles?: string[]) => {
+      if (!prompt.trim()) return;
+
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      tokenBufferRef.current = '';
+
+      const userMsg: ChatMessage = {
+        id: 'msg-' + Date.now(),
+        role: 'user',
+        content: prompt,
+        timestamp: Date.now(),
+      };
+
+      const newMessages: ChatMessage[] = [];
+      if (contextFiles && contextFiles.length > 0) {
+        newMessages.push({
+          id: 'files-' + Date.now(),
+          role: 'fileMention',
+          content: '',
+          timestamp: Date.now(),
+          files: contextFiles.map((p) => ({
+            path: p,
+            name: p.split('/').pop() || p,
+          })),
+        });
+      }
+      newMessages.push(userMsg);
+
+      setMessages((prev) => [...prev, ...newMessages]);
+      setCurrentStreamText('');
+      setCurrentThinking(null);
+      activeToolCallsRef.current = [];
+      setActiveToolCalls([]);
+      setStatus('thinking');
+
+      if (window.electronAPI) {
+        try {
+          await window.electronAPI.abortAndPromptOmp(prompt, { files: contextFiles });
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to send abortAndPrompt command via Electron IPC:', err);
+          setStatus('idle');
+        }
+      }
+    },
+    []
+  );
+  const followUp = useCallback(
+    async (message: string, contextFiles?: string[]) => {
+      if (!message.trim()) return;
+
+      const itemId = 'msg-queued-' + Date.now();
+      const queuedItem = {
+        id: itemId,
+        content: message,
+        files: contextFiles,
+        timestamp: Date.now(),
+      };
+
+      setFollowUpQueue((prev) => {
+        const updated = [...prev, queuedItem];
+        followUpQueueRef.current = updated;
+        return updated;
+      });
+
+      const userMsg: ChatMessage = {
+        id: itemId,
+        role: 'user',
+        content: message,
+        timestamp: Date.now(),
+        queued: true,
+      };
+
+      const newMessages: ChatMessage[] = [];
+      if (contextFiles && contextFiles.length > 0) {
+        newMessages.push({
+          id: 'files-' + Date.now(),
+          role: 'fileMention',
+          content: '',
+          timestamp: Date.now(),
+          files: contextFiles.map((p) => ({
+            path: p,
+            name: p.split('/').pop() || p,
+          })),
+        });
+      }
+      newMessages.push(userMsg);
+
+      setMessages((prev) => [...prev, ...newMessages]);
+    },
+    []
+  );
+
+  const cancelFollowUp = useCallback((id: string) => {
+    setFollowUpQueue((prev) => {
+      const updated = prev.filter((item) => item.id !== id);
+      followUpQueueRef.current = updated;
+      return updated;
+    });
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
+  const abort = useCallback(async () => {
+    if (window.electronAPI) {
+      try {
+        await window.electronAPI.abortOmp();
+      } catch (err) {
+        console.error('[useOmpRpc] Failed to abort via Electron IPC:', err);
+      }
+    }
+    setStatus('idle');
+  }, []);
 
   const respondPermission = useCallback(
     async (approved: boolean) => {
@@ -1028,6 +1230,12 @@ export function useOmpRpc() {
     exportSession,
     subagents,
     sendMessage,
+    steer,
+    abortAndPrompt,
+    followUpQueue,
+    followUp,
+    cancelFollowUp,
+    abort,
     respondPermission,
     acceptDiff,
     rejectDiff,

@@ -16,8 +16,47 @@ Entry template:
 ```
 
 ---
-## 2026-09-02 — Image Drag-Drop & Clipboard Paste Attachment
+## 2026-09-02 — Phase 3: Follow-up Queue & 3 chế độ engine
 
+- **State:** Đã hoàn thành toàn bộ Phase 3:
+  - `electron/omp-bridge.ts`: Bổ sung `followUp(message, context)`, `setSteeringMode(mode)`, `setFollowUpMode(mode)`, `setInterruptMode(mode)`, và tự động đồng bộ 3 chế độ từ `settingsStore` sau handshake.
+  - `electron/omp-rpc-types.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung `FollowUpCommand`, `SetSteeringModeCommand`, `SetFollowUpModeCommand`, `SetInterruptModeCommand`, `queued?: boolean` trong `ChatMessage`, các trường `steeringMode/followUpMode/interruptMode` trong `AppSettings` và engine state `queuedMessageCount`.
+  - `electron/main.ts` & `electron/preload.ts`: Đăng ký và expose các IPC handler `omp:follow-up`, `omp:set-steering-mode`, `omp:set-follow-up-mode`, `omp:set-interrupt-mode`. Cập nhật `settings:set` đồng bộ live xuống bridge khi engine đang chạy.
+  - `electron/settings-store.ts`: Hỗ trợ lưu trữ và sanitize 3 chế độ `steeringMode`, `followUpMode`, `interruptMode`.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung state `followUpQueue`, `followUp` callback, `cancelFollowUp` callback, tự động kích hoạt turn tiếp theo từ hàng đợi khi turn hiện tại kết thúc (`onOmpMessageComplete`), huỷ triệt để trước khi turn chạy.
+  - `src/components/AgentPanel/PromptComposer.tsx`: Kích hoạt slot Queue follow-up (phím tắt `⌘Enter`), thêm nút trong split menu dropdown, thanh hiển thị hàng đợi follow-up phía trên composer kèm nút huỷ từng item.
+  - `src/components/AgentPanel/ChatHistory.tsx`: Hiển thị badge `queued` (màu xanh dương) cho tin nhắn follow-up đang xếp hàng.
+  - `src/components/Modals/SettingsModal.tsx`: Thêm mục "Hành vi Engine (Engine Behavior Modes)" trong tab Engine với 3 dropdown (`steeringMode`, `followUpMode`, `interruptMode`).
+  - `scripts/verify-steering.mjs`: Mở rộng verify suite lên 81 checks (framing, offline fallback, settings persistence, renderer contract audit, queue enqueue & cancellation simulation).
+  - Typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) và các verify suites pass 100%.
+- **In-flight:** Phase 3 hoàn thành, sẵn sàng chuyển tiếp sang Phase 4 (Todos Panel).
+- **Next:**
+  1. Thực hiện Phase 4: `phase-04-todos-panel.md` (Todos Panel collapsible phía trên ChatHistory, RPC `set_todos`, event `todos`/`todo_reminder`).
+- **Refs:**
+  - `plans/260902-1133-omp-cli-desktop-parity/phase-03-follow-up-queue-modes.md`
+  - `scripts/verify-steering.mjs`
+
+---
+## 2026-09-02 — Phase 2: Steering & Stop-and-Send khi agent đang chạy
+
+- **State:** Đã hoàn thành toàn bộ Phase 2:
+  - `electron/omp-bridge.ts`: Thêm các method `steer(message, context)`, `abortAndPrompt(prompt, context)`, `abort()`, cập nhật `translateHistoryMessages` giữ cờ `steering: true`.
+  - `electron/omp-rpc-types.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung `AbortAndPromptCommand`, `steering?: boolean` trong `ChatMessage`, và các API contracts trong `ElectronAPI`.
+  - `electron/main.ts` & `electron/preload.ts`: Đăng ký và expose các IPC handler `omp:steer`, `omp:abort-and-prompt`, `omp:abort`.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung callbacks `steer`, `abortAndPrompt`, `abort`.
+  - `src/components/AgentPanel/PromptComposer.tsx`: Mở khoá composer khi agent đang chạy (`status !== 'idle'`), chỉ chặn khi `isToolApprovalPending`. Thêm split-button (Steer mặc định khi streaming, Stop & send ⌘⇧Enter, slot Queue follow-up ⌘Enter disabled Phase sau).
+  - `src/components/AgentPanel/ChatHistory.tsx`: Hiển thị badge `steered` cho tin nhắn người dùng can thiệp tức thời.
+  - `scripts/verify-steering.mjs`: Verify suite (28 checks) kiểm tra bridge command framing, offline fallback, IPC contract, session translation. Thêm `test:steering` vào `package.json` và chuỗi `npm test`.
+  - Typecheck (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) và toàn bộ test suites pass 100%.
+- **In-flight:** Phase 2 hoàn thành, sẵn sàng chuyển tiếp sang Phase 3 (Follow-up Queue & Engine Modes).
+- **Next:**
+  1. Thực hiện Phase 3: `phase-03-follow-up-queue-modes.md` (Queue follow-up ⌘Enter, `set_steering_mode`, `set_follow_up_mode`, `set_interrupt_mode`).
+- **Refs:**
+  - `plans/260902-1133-omp-cli-desktop-parity/phase-02-steering-stop-send.md`
+  - `scripts/verify-steering.mjs`
+
+---
+## 2026-09-02 — Image Drag-Drop & Clipboard Paste Attachment
 - **State:** Completed Image Drag-Drop & Paste feature across all 4 phases:
   - Phase 1: Electron IPC `fs:save-image-attachment` in `electron/main.ts` and `electron/preload.ts`, saving image buffers to `.omp/attachments/` or temp dir asynchronously without blocking.
   - Phase 2: Pure utility module `src/utils/imageAttachment.ts` (`isImageFile`, `getImageExtension`, `extractImageFromClipboard`, `extractFilesFromDrop`, `computeRelativePath`, `formatImageDimensions`).

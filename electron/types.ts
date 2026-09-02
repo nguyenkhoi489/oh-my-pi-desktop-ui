@@ -52,6 +52,8 @@ export interface ChatMessage {
   toolCalls?: ToolCall[];
   entryId?: string;
   files?: ChatFileAttachment[];
+  steering?: boolean;
+  queued?: boolean;
 }
 
 export interface FileDiffItem {
@@ -274,6 +276,9 @@ export interface AppSettings {
   defaultThinkingLevel?: OmpThinkingLevel;
   approvalMode?: OmpApprovalMode;
   autoCompaction?: boolean;
+  steeringMode?: string;
+  followUpMode?: string;
+  interruptMode?: string;
 }
 
 export interface CustomModelCost {
@@ -426,7 +431,11 @@ export interface ElectronAPI {
     extension: string,
     originalName?: string
   ) => Promise<{ success: boolean; filePath: string; relativePath?: string; error?: string }>;
-  
+  readImageAsDataUrl: (
+    filePath: string
+  ) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
+  getPathForFile: (file: any) => string | undefined;
+
 
   // Settings & Persistence (Phase 7)
   getSettings: () => Promise<AppSettings>;

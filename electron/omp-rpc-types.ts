@@ -68,10 +68,45 @@ export interface SteerCommand {
   prompt?: string;
   [key: string]: unknown;
 }
-
 export interface AbortCommand {
   type: 'abort';
   id?: string;
+  [key: string]: unknown;
+}
+
+export interface AbortAndPromptCommand {
+  type: 'abort_and_prompt';
+  id?: string;
+  prompt?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface FollowUpCommand {
+  type: 'follow_up';
+  id?: string;
+  message: string;
+  [key: string]: unknown;
+}
+
+export interface SetSteeringModeCommand {
+  type: 'set_steering_mode';
+  id?: string;
+  mode: string;
+  [key: string]: unknown;
+}
+
+export interface SetFollowUpModeCommand {
+  type: 'set_follow_up_mode';
+  id?: string;
+  mode: string;
+  [key: string]: unknown;
+}
+
+export interface SetInterruptModeCommand {
+  type: 'set_interrupt_mode';
+  id?: string;
+  mode: string;
   [key: string]: unknown;
 }
 
@@ -211,6 +246,11 @@ export type OmpCommandFrame =
   | PromptCommand
   | SteerCommand
   | AbortCommand
+  | AbortAndPromptCommand
+  | FollowUpCommand
+  | SetSteeringModeCommand
+  | SetFollowUpModeCommand
+  | SetInterruptModeCommand
   | GetStateCommand
   | GetSessionStatsCommand
   | GetAvailableModelsCommand

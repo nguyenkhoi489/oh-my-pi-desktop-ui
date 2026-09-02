@@ -123,8 +123,10 @@ export interface ExtractedDropFile {
 }
 
 // Bóc tách danh sách tệp từ sự kiện kéo thả
+// resolvePath: lấy đường dẫn thật của File (Electron >= 32 đã bỏ File.path)
 export function extractFilesFromDrop(
-  dataTransfer: DataTransfer | null | undefined
+  dataTransfer: DataTransfer | null | undefined,
+  resolvePath?: (file: File) => string | undefined
 ): ExtractedDropFile[] {
   if (!dataTransfer || !dataTransfer.files) return [];
   const result: ExtractedDropFile[] = [];
@@ -132,7 +134,7 @@ export function extractFilesFromDrop(
   for (let i = 0; i < dataTransfer.files.length; i++) {
     const file = dataTransfer.files[i];
     const isImage = isImageFile(file.name) || file.type.startsWith('image/');
-    const filePath = (file as any).path || undefined;
+    const filePath = resolvePath?.(file) || (file as any).path || undefined;
     result.push({
       file,
       isImage,

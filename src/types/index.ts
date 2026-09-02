@@ -36,6 +36,8 @@ export interface ChatMessage {
   toolCalls?: ToolCall[];
   entryId?: string;
   files?: ChatFileAttachment[];
+  steering?: boolean;
+  queued?: boolean;
 }
 
 export interface FileDiffItem {
@@ -245,6 +247,7 @@ export interface OmpEngineState {
   sessionFile?: string;
   sessionName?: string;
   autoCompactionEnabled?: boolean;
+  queuedMessageCount?: number;
   approvalMode?: OmpApprovalMode;
   thinkingLevel?: OmpThinkingLevel;
   fastModeEnabled?: boolean;
@@ -265,6 +268,9 @@ export interface AppSettings {
   defaultThinkingLevel?: OmpThinkingLevel;
   approvalMode?: OmpApprovalMode;
   autoCompaction?: boolean;
+  steeringMode?: string;
+  followUpMode?: string;
+  interruptMode?: string;
 }
 
 export interface CustomModelCost {
@@ -380,6 +386,13 @@ export interface ElectronAPI {
   startOmpProcess: (workspacePath: string, model?: string, options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode }) => Promise<any>;
   stopOmpProcess: () => Promise<any>;
   sendOmpMessage: (prompt: string, context?: { files?: string[] }) => Promise<any>;
+  steerOmp: (message: string, context?: { files?: string[] }) => Promise<{ success: boolean; error?: string }>;
+  abortAndPromptOmp: (prompt: string, context?: { files?: string[] }) => Promise<{ success: boolean; error?: string }>;
+  followUpOmp: (message: string, context?: { files?: string[] }) => Promise<{ success: boolean; error?: string }>;
+  setSteeringMode: (mode: string) => Promise<{ success: boolean; error?: string }>;
+  setFollowUpMode: (mode: string) => Promise<{ success: boolean; error?: string }>;
+  setInterruptMode: (mode: string) => Promise<{ success: boolean; error?: string }>;
+  abortOmp: () => Promise<{ success: boolean; error?: string }>;
   respondToPermission: (requestId: string, approved: boolean) => Promise<any>;
   respondUiRequest: (id: string, payload: { value?: unknown; confirmed?: boolean; cancelled?: boolean }) => Promise<any>;
 
@@ -415,6 +428,10 @@ export interface ElectronAPI {
     extension: string,
     originalName?: string
   ) => Promise<{ success: boolean; filePath: string; relativePath?: string; error?: string }>;
+  readImageAsDataUrl: (
+    filePath: string
+  ) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
+  getPathForFile: (file: File) => string | undefined;
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => () => void;
   onOmpStreamToken: (callback: (token: string) => void) => () => void;
   onOmpThinking: (callback: (thinking: ThinkingBlock) => void) => () => void;

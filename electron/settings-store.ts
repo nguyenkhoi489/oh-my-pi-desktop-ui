@@ -12,6 +12,9 @@ export interface AppSettings {
   defaultThinkingLevel?: OmpThinkingLevel;
   approvalMode?: OmpApprovalMode;
   autoCompaction?: boolean;
+  steeringMode?: string;
+  followUpMode?: string;
+  interruptMode?: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -86,6 +89,15 @@ export class SettingsStore {
     if (typeof raw.autoCompaction === 'boolean') {
       clean.autoCompaction = raw.autoCompaction;
     }
+    if (typeof raw.steeringMode === 'string' && raw.steeringMode.trim()) {
+      clean.steeringMode = raw.steeringMode.trim();
+    }
+    if (typeof raw.followUpMode === 'string' && raw.followUpMode.trim()) {
+      clean.followUpMode = raw.followUpMode.trim();
+    }
+    if (typeof raw.interruptMode === 'string' && raw.interruptMode.trim()) {
+      clean.interruptMode = raw.interruptMode.trim();
+    }
     return clean;
   }
 
@@ -132,6 +144,24 @@ export class SettingsStore {
     }
     if ('autoCompaction' in partial && typeof partial.autoCompaction === 'boolean') {
       next.autoCompaction = partial.autoCompaction;
+    }
+    if ('steeringMode' in partial) {
+      next.steeringMode =
+        typeof partial.steeringMode === 'string' && partial.steeringMode.trim()
+          ? partial.steeringMode.trim()
+          : undefined;
+    }
+    if ('followUpMode' in partial) {
+      next.followUpMode =
+        typeof partial.followUpMode === 'string' && partial.followUpMode.trim()
+          ? partial.followUpMode.trim()
+          : undefined;
+    }
+    if ('interruptMode' in partial) {
+      next.interruptMode =
+        typeof partial.interruptMode === 'string' && partial.interruptMode.trim()
+          ? partial.interruptMode.trim()
+          : undefined;
     }
 
     this.settings = next;

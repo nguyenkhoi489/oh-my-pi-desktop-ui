@@ -38,6 +38,13 @@ import type {
   ResponseFrame,
   NegotiateProtocolCommand,
   PromptCommand,
+  SteerCommand,
+  AbortCommand,
+  AbortAndPromptCommand,
+  FollowUpCommand,
+  SetSteeringModeCommand,
+  SetFollowUpModeCommand,
+  SetInterruptModeCommand,
   NewSessionCommand,
   SwitchSessionCommand,
   BranchCommand,
@@ -307,6 +314,7 @@ export class OmpBridge {
       });
       if (res.success && res.data && Array.isArray(res.data.subagents)) {
         let changed = false;
+        const incomingIds = new Set<string>();
         for (const s of res.data.subagents) {
           if (s && s.id) {
             const status = String(s.status || '').toLowerCase();
@@ -317,6 +325,7 @@ export class OmpBridge {
                 changed = true;
               }
             } else {
+              incomingIds.add(s.id);
               const prev = this.activeSubagents.get(s.id);
               this.activeSubagents.set(s.id, {
                 id: s.id,
@@ -331,6 +340,12 @@ export class OmpBridge {
               });
               changed = true;
             }
+          }
+        }
+        for (const currentId of Array.from(this.activeSubagents.keys())) {
+          if (!incomingIds.has(currentId)) {
+            this.activeSubagents.delete(currentId);
+            changed = true;
           }
         }
         if (changed) {
@@ -766,6 +781,80 @@ export class OmpBridge {
     return { success: true };
   }
 
+  public async steer(message: string, context?: { files?: string[] }): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState === 'ready' && this.process && this.process.stdin?.writable) {
+      const steerCmd: SteerCommand = {
+        type: 'steer',
+        id: this.generateId(),
+        message,
+      };
+
+      this.sendCommand(steerCmd).catch((err) => {
+        console.error('[OmpBridge] Steer command error:', err.message);
+      });
+      return { success: true };
+    }
+
+    this.simulateAgentFlow(message, context);
+    return { success: true };
+  }
+
+  public async abortAndPrompt(prompt: string, context?: { files?: string[] }): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState === 'ready' && this.process && this.process.stdin?.writable) {
+      const abortPromptCmd: AbortAndPromptCommand = {
+        type: 'abort_and_prompt',
+        id: this.generateId(),
+        prompt,
+        message: prompt,
+      };
+
+      this.setStatus('thinking');
+      this.sendCommand(abortPromptCmd).catch((err) => {
+        console.error('[OmpBridge] Abort and prompt command error:', err.message);
+      });
+      return { success: true };
+    }
+
+    this.thinkingAccumulator.reset();
+    this.activeToolCalls.clear();
+    this.simulateAgentFlow(prompt, context);
+    return { success: true };
+  }
+
+  public async followUp(message: string, context?: { files?: string[] }): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState === 'ready' && this.process && this.process.stdin?.writable) {
+      const followUpCmd: FollowUpCommand = {
+        type: 'follow_up',
+        id: this.generateId(),
+        message,
+      };
+
+      this.sendCommand(followUpCmd).catch((err) => {
+        console.error('[OmpBridge] Follow-up command error:', err.message);
+      });
+      return { success: true };
+    }
+
+    this.simulateAgentFlow(message, context);
+    return { success: true };
+  }
+
+  public async abort(): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState === 'ready' && this.process && this.process.stdin?.writable) {
+      const abortCmd: AbortCommand = {
+        type: 'abort',
+        id: this.generateId(),
+      };
+
+      this.sendCommand(abortCmd).catch((err) => {
+        console.error('[OmpBridge] Abort command error:', err.message);
+      });
+      return { success: true };
+    }
+
+    this.setStatus('idle');
+    return { success: true };
+  }
   public respondPermission(requestId: string, approved: boolean) {
     const resolver = this.pendingPermissions.get(requestId);
     if (resolver) {
@@ -1073,6 +1162,96 @@ export class OmpBridge {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg || 'Error executing set_auto_compaction' };
+    }
+  }
+
+  public async setSteeringMode(
+    mode: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      if (this.settingsStore) {
+        this.settingsStore.set({ steeringMode: mode });
+      }
+      return { success: true };
+    }
+    try {
+      const cmd: SetSteeringModeCommand = {
+        type: 'set_steering_mode',
+        id: this.generateId(),
+        mode,
+      };
+      const res = await this.sendCommand(cmd);
+      if (res.success) {
+        if (this.settingsStore) {
+          this.settingsStore.set({ steeringMode: mode });
+        }
+        await this.getState().catch(() => {});
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Failed to set steering mode' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing set_steering_mode' };
+    }
+  }
+
+  public async setFollowUpMode(
+    mode: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      if (this.settingsStore) {
+        this.settingsStore.set({ followUpMode: mode });
+      }
+      return { success: true };
+    }
+    try {
+      const cmd: SetFollowUpModeCommand = {
+        type: 'set_follow_up_mode',
+        id: this.generateId(),
+        mode,
+      };
+      const res = await this.sendCommand(cmd);
+      if (res.success) {
+        if (this.settingsStore) {
+          this.settingsStore.set({ followUpMode: mode });
+        }
+        await this.getState().catch(() => {});
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Failed to set follow-up mode' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing set_follow_up_mode' };
+    }
+  }
+
+  public async setInterruptMode(
+    mode: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      if (this.settingsStore) {
+        this.settingsStore.set({ interruptMode: mode });
+      }
+      return { success: true };
+    }
+    try {
+      const cmd: SetInterruptModeCommand = {
+        type: 'set_interrupt_mode',
+        id: this.generateId(),
+        mode,
+      };
+      const res = await this.sendCommand(cmd);
+      if (res.success) {
+        if (this.settingsStore) {
+          this.settingsStore.set({ interruptMode: mode });
+        }
+        await this.getState().catch(() => {});
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Failed to set interrupt mode' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing set_interrupt_mode' };
     }
   }
 
@@ -1485,6 +1664,7 @@ export class OmpBridge {
           role: 'user',
           content: userText,
           timestamp,
+          steering: Boolean(msg && typeof msg === 'object' && 'steering' in msg && msg.steering) || undefined,
         });
       } else if (role === 'assistant') {
         const textParts: string[] = [];
@@ -1719,6 +1899,15 @@ export class OmpBridge {
               }
               if (s.autoCompaction !== undefined && s.autoCompaction === true) {
                 this.setAutoCompaction(s.autoCompaction).catch(() => {});
+              }
+              if (s.steeringMode) {
+                this.setSteeringMode(s.steeringMode).catch(() => {});
+              }
+              if (s.followUpMode) {
+                this.setFollowUpMode(s.followUpMode).catch(() => {});
+              }
+              if (s.interruptMode) {
+                this.setInterruptMode(s.interruptMode).catch(() => {});
               }
             }
           } else {

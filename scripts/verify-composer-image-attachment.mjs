@@ -238,6 +238,31 @@ console.log('\n[Test 4] extractImageFromClipboard and extractFilesFromDrop');
   assert(dropResults[0].isImage === true, 'First dropped file is identified as image');
   assert(dropResults[0].path === '/workspace/photo.jpg', 'First file path captured');
   assert(dropResults[1].isImage === false, 'Second dropped file is identified as code');
+
+  // 4.4 Electron >= 32 đã bỏ File.path: resolver (webUtils.getPathForFile) phải được ưu tiên
+  const mockDropNoPath = {
+    files: [new MockFile([50, 60], 'screenshot.png', 'image/png', undefined)],
+  };
+  const resolvedResults = extractFilesFromDrop(
+    mockDropNoPath,
+    (file) => (file.name === 'screenshot.png' ? '/real/path/screenshot.png' : undefined)
+  );
+  assert(
+    resolvedResults[0].path === '/real/path/screenshot.png',
+    'resolvePath resolver supplies real path when File.path is absent'
+  );
+
+  const unresolvedResults = extractFilesFromDrop(mockDropNoPath, () => undefined);
+  assert(
+    unresolvedResults[0].path === undefined,
+    'Path stays undefined when resolver returns nothing and File.path is absent'
+  );
+
+  // 4.5 File trong workspace phải được nhận diện qua computeRelativePath để attach trực tiếp
+  const wsRel = computeRelativePath('/ws/project/assets/logo.png', '/ws/project');
+  assert(wsRel === 'assets/logo.png', 'Workspace image resolves to relative path (attach directly)');
+  const outsideRel = computeRelativePath('/elsewhere/pic.png', '/ws/project');
+  assert(outsideRel === '/elsewhere/pic.png', 'Outside-workspace image keeps absolute path (needs IPC copy)');
 }
 
 // ----------------------------------------------------

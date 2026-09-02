@@ -9,6 +9,10 @@ import {
   Terminal,
   UploadCloud,
   ZoomIn,
+  ChevronDown,
+  Radio,
+  Square,
+  Clock,
 } from 'lucide-react';
 import { OmpAgentStatus, WorkspaceFile, OmpCommandInfo } from '../../types';
 import { DEMO_WORKSPACE_FILES } from '../../mock/demoData';
@@ -27,13 +31,20 @@ import {
   computeRelativePath,
 } from '../../utils/imageAttachment';
 import { ImageLightboxModal } from './ImageLightboxModal';
+import { AttachmentImage } from '../Common/AttachmentImage';
 
 export { buildMessageWithFileMentions, flattenWorkspaceFiles };
 
 interface PromptComposerProps {
   onSendMessage: (prompt: string, contextFiles?: string[]) => void;
+  onSteerMessage?: (prompt: string, contextFiles?: string[]) => void;
+  onAbortAndPrompt?: (prompt: string, contextFiles?: string[]) => void;
+  onFollowUpMessage?: (prompt: string, contextFiles?: string[]) => void;
+  followUpQueue?: Array<{ id: string; content: string; files?: string[]; timestamp: number }>;
+  onCancelFollowUp?: (id: string) => void;
   status: OmpAgentStatus;
   workspaceFiles?: WorkspaceFile[];
+  workspacePath?: string;
   availableCommands?: OmpCommandInfo[];
   isToolApprovalPending?: boolean;
 }
@@ -42,8 +53,14 @@ const MAX_PICKER_FILES = 100;
 
 const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   onSendMessage,
+  onSteerMessage,
+  onAbortAndPrompt,
+  onFollowUpMessage,
+  followUpQueue,
+  onCancelFollowUp,
   status,
   workspaceFiles,
+  workspacePath,
   availableCommands,
   isToolApprovalPending = false,
 }) => {
@@ -59,8 +76,10 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   const [commandSelectedIndex, setCommandSelectedIndex] = useState<number>(0);
   // Vị trí ký tự '/' đang mở command menu (hỗ trợ command giữa message)
   const [slashIndex, setSlashIndex] = useState<number | null>(null);
+  // State menu split-button khi agent đang chạy
+  const [isSplitMenuOpen, setIsSplitMenuOpen] = useState<boolean>(false);
+  const splitMenuRef = useRef<HTMLDivElement>(null);
 
-  // State hỗ trợ kéo thả ảnh và preview lightbox
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
@@ -135,14 +154,20 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
         setIsCommandMenuOpen(false);
         setSlashIndex(null);
       }
+      if (
+        splitMenuRef.current &&
+        !splitMenuRef.current.contains(target)
+      ) {
+        setIsSplitMenuOpen(false);
+      }
     };
-    if (isPickerOpen || isCommandMenuOpen) {
+    if (isPickerOpen || isCommandMenuOpen || isSplitMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isPickerOpen, isCommandMenuOpen]);
+  }, [isPickerOpen, isCommandMenuOpen, isSplitMenuOpen]);
 
   // Dọn dẹp các Object URL khi unmount để chống rò rỉ bộ nhớ
   useEffect(() => {
@@ -220,18 +245,21 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
 
         if (window.electronAPI?.saveImageAttachment) {
           const res = await window.electronAPI.saveImageAttachment(buffer, ext, name);
-          if (res && res.success) {
-            const savedPath = res.relativePath || res.filePath;
-            const blob = file instanceof Blob ? file : new Blob([buffer.buffer as ArrayBuffer]);
-            const blobUrl = URL.createObjectURL(blob);
-            activeBlobUrlsRef.current.add(blobUrl);
-            setImagePreviews((prev) => ({ ...prev, [savedPath]: blobUrl }));
-            setAttachedFiles((prev) => (prev.includes(savedPath) ? prev : [...prev, savedPath]));
+          if (!res || !res.success) {
+            // Không attach đường dẫn giả khi lưu thất bại — engine sẽ trỏ file không tồn tại
+            console.error('Lưu attachment ảnh thất bại:', res?.error || 'unknown error');
             return;
           }
+          const savedPath = res.relativePath || res.filePath;
+          const blob = file instanceof Blob ? file : new Blob([buffer.buffer as ArrayBuffer]);
+          const blobUrl = URL.createObjectURL(blob);
+          activeBlobUrlsRef.current.add(blobUrl);
+          setImagePreviews((prev) => ({ ...prev, [savedPath]: blobUrl }));
+          setAttachedFiles((prev) => (prev.includes(savedPath) ? prev : [...prev, savedPath]));
+          return;
         }
 
-        // Fallback môi trường web preview
+        // Fallback môi trường web preview (không có Electron)
         const blob = file instanceof Blob ? file : new Blob([buffer.buffer as ArrayBuffer]);
         const blobUrl = URL.createObjectURL(blob);
         activeBlobUrlsRef.current.add(blobUrl);
@@ -246,12 +274,28 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   );
 
   // Xử lý dán hình ảnh từ clipboard (Cmd+V / Ctrl+V)
-  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const extracted = await extractImageFromClipboard(e.clipboardData);
-    if (extracted) {
-      e.preventDefault();
-      await saveAndAttachImage(extracted.blob, extracted.buffer, extracted.extension, extracted.name);
-    }
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const clipboardData = e.clipboardData;
+    // preventDefault phải gọi đồng bộ trước mọi await, nếu không default paste vẫn chạy
+    const hasImage =
+      Array.from(clipboardData?.items || []).some((item) => item.type.startsWith('image/')) ||
+      Array.from(clipboardData?.files || []).some(
+        (f) => f.type.startsWith('image/') || isImageFile(f.name)
+      );
+    if (!hasImage) return;
+
+    e.preventDefault();
+    // Phần đồng bộ của extract (getAsFile) chạy ngay trong event handler
+    void extractImageFromClipboard(clipboardData).then((extracted) => {
+      if (extracted) {
+        return saveAndAttachImage(
+          extracted.blob,
+          extracted.buffer,
+          extracted.extension,
+          extracted.name
+        );
+      }
+    });
   };
 
   // Xử lý sự kiện kéo thả file vào ô composer
@@ -284,22 +328,26 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     dragCounterRef.current = 0;
     setIsDraggingOver(false);
 
-    const droppedFiles = extractFilesFromDrop(e.dataTransfer);
+    const droppedFiles = extractFilesFromDrop(e.dataTransfer, (file) =>
+      window.electronAPI?.getPathForFile?.(file)
+    );
     if (droppedFiles.length === 0) return;
 
+    const attachPath = (p: string) =>
+      setAttachedFiles((prev) => (prev.includes(p) ? prev : [...prev, p]));
+
     for (const item of droppedFiles) {
-      if (item.isImage) {
+      const rel = item.path ? computeRelativePath(item.path, workspacePath) : undefined;
+      const isInWorkspace = !!item.path && !!rel && rel !== item.path;
+
+      if (item.isImage && !isInWorkspace) {
+        // Ảnh ngoài workspace hoặc kéo từ ứng dụng khác: lưu bản sao vào .omp/attachments
         await saveAndAttachImage(item.file, undefined, undefined, item.file.name);
-      } else if (item.path) {
-        const rel = computeRelativePath(item.path);
-        if (rel && !attachedFiles.includes(rel)) {
-          setAttachedFiles((prev) => [...prev, rel]);
-        }
+      } else if (rel) {
+        // File trong workspace (kể cả ảnh) attach trực tiếp, không copy trùng
+        attachPath(rel);
       } else if (item.file.name) {
-        const name = item.file.name;
-        if (!attachedFiles.includes(name)) {
-          setAttachedFiles((prev) => [...prev, name]);
-        }
+        attachPath(item.file.name);
       }
     }
   };
@@ -346,10 +394,10 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     }, 0);
   };
 
-  const handleSend = () => {
-    const finalMessage = buildMessageWithFileMentions(input, attachedFiles);
-    if (!finalMessage.trim() || status !== 'idle' || isToolApprovalPending) return;
-    onSendMessage(finalMessage, attachedFiles);
+  const isSendDisabled =
+    (!input.trim() && attachedFiles.length === 0) || isToolApprovalPending;
+
+  const resetComposer = () => {
     setInput('');
     setAttachedFiles([]);
     inlineAttachmentsRef.current.clear();
@@ -358,6 +406,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     setIsCommandMenuOpen(false);
     setCommandQuery('');
     setSlashIndex(null);
+    setIsSplitMenuOpen(false);
 
     // Giải phóng các blob URL khi gửi tin nhắn
     activeBlobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -365,6 +414,53 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     setImagePreviews({});
   };
 
+  const handleSend = () => {
+    const finalMessage = buildMessageWithFileMentions(input, attachedFiles);
+    if (!finalMessage.trim() || isSendDisabled) return;
+    if (status === 'idle') {
+      onSendMessage(finalMessage, attachedFiles.length > 0 ? attachedFiles : undefined);
+    } else if (onSteerMessage) {
+      onSteerMessage(finalMessage, attachedFiles.length > 0 ? attachedFiles : undefined);
+    } else {
+      onSendMessage(finalMessage, attachedFiles.length > 0 ? attachedFiles : undefined);
+    }
+    resetComposer();
+  };
+
+  const handleSteer = () => {
+    const finalMessage = buildMessageWithFileMentions(input, attachedFiles);
+    if (!finalMessage.trim() || isSendDisabled) return;
+    if (onSteerMessage) {
+      onSteerMessage(finalMessage, attachedFiles.length > 0 ? attachedFiles : undefined);
+    } else {
+      onSendMessage(finalMessage, attachedFiles.length > 0 ? attachedFiles : undefined);
+    }
+    resetComposer();
+  };
+
+  const handleAbortAndPrompt = () => {
+    const finalMessage = buildMessageWithFileMentions(input, attachedFiles);
+    if (!finalMessage.trim() || isSendDisabled) return;
+    if (onAbortAndPrompt) {
+      onAbortAndPrompt(finalMessage, attachedFiles.length > 0 ? attachedFiles : undefined);
+    } else {
+      onSendMessage(finalMessage, attachedFiles.length > 0 ? attachedFiles : undefined);
+    }
+    resetComposer();
+  };
+
+  const handleFollowUp = () => {
+    const finalMessage = buildMessageWithFileMentions(input, attachedFiles);
+    if (!finalMessage.trim() || isSendDisabled) return;
+    if (onFollowUpMessage) {
+      onFollowUpMessage(finalMessage, attachedFiles.length > 0 ? attachedFiles : undefined);
+    } else if (onSteerMessage) {
+      onSteerMessage(finalMessage, attachedFiles.length > 0 ? attachedFiles : undefined);
+    } else {
+      onSendMessage(finalMessage, attachedFiles.length > 0 ? attachedFiles : undefined);
+    }
+    resetComposer();
+  };
   const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     const cursorPos = e.target.selectionStart;
@@ -504,12 +600,46 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
       }
     }
 
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Enter') {
       e.preventDefault();
-      handleSend();
+      if (!isSendDisabled) {
+        handleAbortAndPrompt();
+      }
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'Enter') {
+      e.preventDefault();
+      if (!isSendDisabled) {
+        if (status === 'idle') {
+          handleSend();
+        } else {
+          handleFollowUp();
+        }
+      }
+      return;
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      if (!isSendDisabled) {
+        if (status === 'idle') {
+          handleSend();
+        } else {
+          handleSteer();
+        }
+      }
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      if (isSplitMenuOpen) {
+        e.preventDefault();
+        setIsSplitMenuOpen(false);
+        return;
+      }
     }
   };
-
   const handlePickerSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -544,6 +674,53 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
       onDrop={handleDrop}
       className="p-3.5 bg-panel border-t border-border flex flex-col gap-2.5 relative"
     >
+      {/* Hàng đợi follow-up phía trên composer */}
+      {followUpQueue && followUpQueue.length > 0 && (
+        <div className="p-2 bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/20 rounded-xl flex flex-col gap-1.5">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              Hàng đợi follow-up ({followUpQueue.length})
+            </span>
+            <span className="text-[10px] text-slate-400 dark:text-zinc-500">
+              Tự động chạy sau turn hiện tại
+            </span>
+          </div>
+          <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
+            {followUpQueue.map((item, idx) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-800 dark:text-zinc-200"
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="text-[10px] font-mono text-slate-400 dark:text-zinc-500 shrink-0">
+                    #{idx + 1}
+                  </span>
+                  <span className="truncate text-xs font-medium">
+                    {item.content}
+                  </span>
+                  {item.files && item.files.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-surface-highlight text-slate-500 dark:text-zinc-400 shrink-0">
+                      +{item.files.length} file
+                    </span>
+                  )}
+                </div>
+                {onCancelFollowUp && (
+                  <button
+                    type="button"
+                    onClick={() => onCancelFollowUp(item.id)}
+                    className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors cursor-pointer shrink-0"
+                    title="Huỷ tin nhắn follow-up này"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Drag & Drop Visual Overlay */}
       {isDraggingOver && (
         <div className="absolute inset-2 z-40 rounded-2xl border-2 border-dashed border-blue-500 bg-blue-500/10 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 p-6 pointer-events-none animate-fade-in">
@@ -587,7 +764,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                     className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-surface-highlight border border-border/60 flex items-center justify-center relative cursor-pointer group-hover:scale-105 transition-transform"
                     title="Xem ảnh phóng to"
                   >
-                    <img
+                    <AttachmentImage
                       src={previewUrl}
                       alt={file}
                       className="w-full h-full object-cover"
@@ -731,6 +908,8 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
           placeholder={
             isToolApprovalPending
               ? 'Vui lòng duyệt hoặc từ chối quyền thực thi công cụ trước...'
+              : status !== 'idle'
+              ? 'Gõ chỉ đạo tức thời (Enter: Steer, ⌘⇧Enter: Dừng & gửi mới, @file để đính kèm)...'
               : 'Yêu cầu OMP Agent xử lý code, gõ @file để đính kèm, hoặc / để mở lệnh...'
           }
           rows={3}
@@ -779,24 +958,121 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-400 dark:text-zinc-500 hidden sm:inline">
-              ↵ send
-            </span>
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!input.trim() || status !== 'idle' || isToolApprovalPending}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                input.trim() && status === 'idle' && !isToolApprovalPending
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
-                  : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 cursor-not-allowed'
-              }`}
-            >
-              <span>Send</span>
-              <CornerDownLeft className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          {status === 'idle' ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-400 dark:text-zinc-500 hidden sm:inline">
+                ↵ send
+              </span>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={isSendDisabled}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  !isSendDisabled
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                    : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 cursor-not-allowed'
+                }`}
+              >
+                <span>Send</span>
+                <CornerDownLeft className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="relative flex items-center gap-2" ref={splitMenuRef}>
+              <div className="hidden sm:flex items-center gap-2 text-[11px] text-slate-400 dark:text-zinc-500">
+                <span>↵ steer</span>
+                <span>•</span>
+                <span>⌘↵ queue</span>
+                <span>•</span>
+                <span>⌘⇧↵ stop & send</span>
+              </div>
+
+              {/* Split Button Group */}
+              <div className="flex items-center rounded-xl overflow-hidden shadow-sm">
+                <button
+                  type="button"
+                  onClick={handleSteer}
+                  disabled={isSendDisabled}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                    !isSendDisabled
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                      : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 cursor-not-allowed'
+                  }`}
+                  title="Lái hướng agent ngay lập tức (Enter)"
+                >
+                  <Radio className="w-3.5 h-3.5 animate-pulse" />
+                  <span>Steer</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSplitMenuOpen((prev) => !prev)}
+                  disabled={isSendDisabled}
+                  className={`px-1.5 py-1.5 border-l text-xs transition-all cursor-pointer ${
+                    !isSendDisabled
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700/50'
+                      : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 border-border/60 cursor-not-allowed'
+                  }`}
+                  title="Tùy chọn gửi khi đang chạy"
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSplitMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
+              {/* Split Menu Dropdown */}
+              {isSplitMenuOpen && (
+                <div className="absolute bottom-full right-0 mb-2 w-72 bg-surface dark:bg-[#181a24] border border-border rounded-xl shadow-xl z-50 p-1 flex flex-col gap-0.5 animate-fade-in">
+                  {/* 1. Steer Action */}
+                  <button
+                    type="button"
+                    onClick={handleSteer}
+                    className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between hover:bg-amber-500/10 text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Radio className="w-4 h-4 text-amber-500 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Steer</span>
+                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">Lái hướng lượt đang stream</span>
+                      </div>
+                    </div>
+                    <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">↵</kbd>
+                  </button>
+
+                  {/* 2. Stop & Send Action */}
+                  <button
+                    type="button"
+                    onClick={handleAbortAndPrompt}
+                    className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between hover:bg-rose-500/10 text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Square className="w-4 h-4 text-rose-500 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">Stop & send</span>
+                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">Dừng turn và gửi prompt mới</span>
+                      </div>
+                    </div>
+                    <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">⌘⇧↵</kbd>
+                  </button>
+
+                  {/* 3. Queue Follow-up Action */}
+                  <button
+                    type="button"
+                    onClick={handleFollowUp}
+                    className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between hover:bg-blue-500/10 text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Clock className="w-4 h-4 text-blue-500 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">Queue follow-up</span>
+                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">Chờ turn xong rồi tự gửi</span>
+                      </div>
+                    </div>
+                    <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">⌘↵</kbd>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

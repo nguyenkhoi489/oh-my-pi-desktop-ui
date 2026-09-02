@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { X, ZoomIn } from 'lucide-react';
+import { AttachmentImage } from '../Common/AttachmentImage';
 
 interface ImageLightboxModalProps {
   isOpen: boolean;
@@ -56,10 +57,10 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
 
         {/* Modal Image Body */}
         <div className="p-2 flex items-center justify-center overflow-auto max-h-[calc(88vh-50px)]">
-          <img
+          <AttachmentImage
             src={imageUrl}
             alt={imageName || 'Attachment preview'}
-            className="max-w-full max-h-[78vh] object-contain rounded-lg select-none"
+            className="max-w-full max-h-[78vh] object-contain rounded-lg select-none min-w-24 min-h-24"
           />
         </div>
       </div>

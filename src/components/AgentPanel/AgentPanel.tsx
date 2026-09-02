@@ -26,12 +26,18 @@ interface AgentPanelProps {
   engineStatuses?: OmpEngineStatusEntry[];
   engineWidgets?: OmpWidgetEntry[];
   workspaceFiles?: WorkspaceFile[];
+  workspacePath?: string;
   availableCommands?: OmpCommandInfo[];
   pendingToolApproval?: OmpUiRequest | null;
   toolApprovalQueueLength?: number;
   onApproveTool?: (id: string) => void;
   onDenyTool?: (id: string) => void;
   onSendMessage: (prompt: string, contextFiles?: string[]) => void;
+  onSteerMessage?: (prompt: string, contextFiles?: string[]) => void;
+  onAbortAndPrompt?: (prompt: string, contextFiles?: string[]) => void;
+  onFollowUpMessage?: (prompt: string, contextFiles?: string[]) => void;
+  followUpQueue?: Array<{ id: string; content: string; files?: string[]; timestamp: number }>;
+  onCancelFollowUp?: (id: string) => void;
   onBranchSession?: (entryId: string) => void;
   onCollapsePanel?: () => void;
   onOpenFile?: (filePath: string) => void;
@@ -47,15 +53,21 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   engineStatuses,
   engineWidgets,
   workspaceFiles,
+  workspacePath,
   availableCommands,
   pendingToolApproval,
   toolApprovalQueueLength = 1,
   onApproveTool,
   onDenyTool,
   onSendMessage,
+  onSteerMessage,
+  onAbortAndPrompt,
   onBranchSession,
   onCollapsePanel,
   onOpenFile,
+  onFollowUpMessage,
+  followUpQueue,
+  onCancelFollowUp,
 }) => {
   return (
     <div className="w-full flex flex-col h-full bg-panel select-none">
@@ -118,8 +130,14 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
       {/* Docked Prompt Composer */}
       <PromptComposer
         onSendMessage={onSendMessage}
+        onSteerMessage={onSteerMessage}
+        onAbortAndPrompt={onAbortAndPrompt}
         status={status}
         workspaceFiles={workspaceFiles}
+        workspacePath={workspacePath}
+        onFollowUpMessage={onFollowUpMessage}
+        followUpQueue={followUpQueue}
+        onCancelFollowUp={onCancelFollowUp}
         availableCommands={availableCommands}
         isToolApprovalPending={Boolean(pendingToolApproval)}
       />

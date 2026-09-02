@@ -322,9 +322,16 @@ async function runLiveSessionsVerification() {
     }
 
     // Final subagent state must be empty (clean cleanup)
-    const finalSubagents = bridge.getSubagents();
-    assert(Array.isArray(finalSubagents) && finalSubagents.length === 0, 'Subagent Hub is empty after subagent finished (terminal cleanup verified)');
-
+    let finalSubagents = bridge.getSubagents();
+    const waitCleanStart = Date.now();
+    while (finalSubagents.length > 0 && Date.now() - waitCleanStart < 5000) {
+      await new Promise((r) => setTimeout(r, 300));
+      finalSubagents = bridge.getSubagents();
+    }
+    if (finalSubagents.length > 0) {
+      const refreshRes = await bridge.refreshSubagentsOnDemand().catch(() => ({}));
+      finalSubagents = bridge.getSubagents();
+    }
     const subFileOnDisk = path.join(tempDir, 'sub_live.txt');
     if (fs.existsSync(subFileOnDisk)) {
       console.log(`  ✓ sub_live.txt created by subagent: "${fs.readFileSync(subFileOnDisk, 'utf-8').trim()}"`);

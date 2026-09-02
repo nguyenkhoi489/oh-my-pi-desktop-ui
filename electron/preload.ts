@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 import type {
   OmpAgentStatus,
   ThinkingBlock,
@@ -40,6 +40,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendOmpMessage: (prompt: string, context?: { files?: string[] }) =>
     ipcRenderer.invoke('omp:send-message', prompt, context),
 
+  steerOmp: (message: string, context?: { files?: string[] }) =>
+    ipcRenderer.invoke('omp:steer', message, context),
+
+  abortAndPromptOmp: (prompt: string, context?: { files?: string[] }) =>
+    ipcRenderer.invoke('omp:abort-and-prompt', prompt, context),
+
+  followUpOmp: (message: string, context?: { files?: string[] }) =>
+    ipcRenderer.invoke('omp:follow-up', message, context),
+
+  setSteeringMode: (mode: string) =>
+    ipcRenderer.invoke('omp:set-steering-mode', mode),
+
+  setFollowUpMode: (mode: string) =>
+    ipcRenderer.invoke('omp:set-follow-up-mode', mode),
+
+  setInterruptMode: (mode: string) =>
+    ipcRenderer.invoke('omp:set-interrupt-mode', mode),
+
+  abortOmp: () =>
+    ipcRenderer.invoke('omp:abort'),
   respondToPermission: (requestId: string, approved: boolean) =>
     ipcRenderer.invoke('omp:respond-permission', requestId, approved),
 
@@ -127,6 +147,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   saveImageAttachment: (buffer: Uint8Array | ArrayBuffer, extension: string, originalName?: string) =>
     ipcRenderer.invoke('fs:save-image-attachment', buffer, extension, originalName),
+
+  readImageAsDataUrl: (filePath: string) =>
+    ipcRenderer.invoke('fs:read-image-base64', filePath),
+
+  // Lấy đường dẫn thật của File được kéo thả (Electron >= 32 đã bỏ File.path)
+  getPathForFile: (file: any) => {
+    try {
+      return webUtils.getPathForFile(file) || undefined;
+    } catch {
+      return undefined;
+    }
+  },
 
   // Settings & Persistence (Phase 7)
   getSettings: () => ipcRenderer.invoke('settings:get'),

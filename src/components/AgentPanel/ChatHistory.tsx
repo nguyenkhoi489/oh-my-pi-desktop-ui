@@ -18,6 +18,7 @@ import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRenderer } from '../Common/MarkdownRenderer';
 import { isImageFile } from '../../utils/imageAttachment';
 import { ImageLightboxModal } from './ImageLightboxModal';
+import { AttachmentImage } from '../Common/AttachmentImage';
 
 interface ChatHistoryProps {
   messages: ChatMessage[];
@@ -158,13 +159,10 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                         title={`Xem ảnh ${file.path} phóng to`}
                       >
                         <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-surface-highlight border border-border/60 flex items-center justify-center relative">
-                          <img
+                          <AttachmentImage
                             src={file.path}
                             alt={file.name || file.path}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none';
-                            }}
                           />
                           <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                             <ZoomIn className="w-3.5 h-3.5 text-white drop-shadow" />
@@ -214,6 +212,16 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
             <div key={msg.id} className="flex flex-col items-end gap-1.5 self-end max-w-[85%] ml-auto animate-fade-in">
               {/* User Header directly above the message bubble */}
               <div className="flex items-center gap-1.5 justify-end">
+                {msg.steering && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide lowercase bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                    steered
+                  </span>
+                )}
+                {msg.queued && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide lowercase bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/25">
+                    queued
+                  </span>
+                )}
                 {msg.entryId && (
                   <button
                     onClick={() => {
