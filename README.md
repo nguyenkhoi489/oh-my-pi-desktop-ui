@@ -1,8 +1,8 @@
 # OMP Agent — macOS Desktop IDE for oh-my-pi
 
-Giao diện Desktop chuyên nghiệp dành cho **oh-my-pi (OMP)** (`can1357/oh-my-pi`) .
+**Tiếng Việt** | [English](README_EN.md)
 
-
+Giao diện Desktop chuyên nghiệp dành cho **oh-my-pi (OMP)** (`can1357/oh-my-pi`).
 ---
 
 ## Tính năng nổi bật
