@@ -206,6 +206,25 @@ Entry template:
   - `src/components/AgentPanel/ChatHistory.tsx`
   - `scripts/verify-composer-attach.mjs`
 
+## 2026-09-03 — Fix Commit Assistant Model Roles & Disambiguate Provider
+
+- **State:** Đã khắc phục triệt để lỗi tool call của Commit Assistant báo Codex usage limit khi chọn Gemini 3 Flash:
+  - `~/.omp/agent/config.yml`: Cập nhật `modelRoles` (đặc biệt là role `task` và các sub-roles) chuyển từ `openai-codex` (đang bị hết quota) sang các model LM Studio (`nguyenkhoi-lmstudio-prod` / `nguyenkhoi-lmstudio-local`), giúp toàn bộ commit agent và tool calls chạy mượt mà trên endpoint local.
+  - `src/components/Canvas/CommitView.tsx` & `src/components/Modals/CommitModal.tsx`: Định danh rõ ràng giá trị `<select>` của model thành `${m.provider}/${m.id}` khi truyền cờ `-m / --model` sang `omp commit`.
+  - `src/utils/commitMessage.ts`: Mở rộng `parseCommitMessage` hỗ trợ định dạng `Split commit plan (dry run):`.
+  - `scripts/verify-commit-assistant.mjs`: Bổ sung Test 5b kiểm tra parser split commit và cập nhật Test 11.
+  - Verification: `omp commit --dry-run -m "nguyenkhoi-lmstudio-prod/gemini-3-flash"` chạy thành công 100% trong 16s, `npm run test:commit-assistant` (13/13 passed), `npm run test:i18n` (3264/3264 passed), `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Sẵn sàng cho các yêu cầu tiếp theo.
+- **Refs:**
+  - `plans/reports/fix-260903-2355-commit-assistant-codex-error-and-provider-disambiguation.md`
+  - `~/.omp/agent/config.yml`
+  - `src/components/Canvas/CommitView.tsx`
+  - `src/components/Modals/CommitModal.tsx`
+  - `src/utils/commitMessage.ts`
+  - `scripts/verify-commit-assistant.mjs`
+
 ## 2026-09-03 — Fix HeaderBar Model Selector & Approval Mode Dropdown Visibility
 
 - **State:** Đã khắc phục triệt để lỗi không mở được menu dropdown Model Selector và Approval Mode trên HeaderBar:

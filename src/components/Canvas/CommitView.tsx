@@ -352,11 +352,14 @@ export const CommitView: React.FC<CommitViewProps> = ({
                   className="w-full text-xs px-2.5 py-1.5 rounded-lg bg-panel border border-border text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
                 >
                   <option value="">{t('commitAssistant.modelDefault')}</option>
-                  {availableModels.map((m) => (
-                    <option key={`${m.provider}/${m.id}`} value={m.id}>
-                      {m.name || m.id} ({m.provider})
-                    </option>
-                  ))}
+                  {availableModels.map((m) => {
+                    const val = m.provider ? `${m.provider}/${m.id}` : m.id;
+                    return (
+                      <option key={`${m.provider}/${m.id}`} value={val}>
+                        {m.name || m.id} ({m.provider})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

@@ -1,8 +1,7 @@
 # OMP Agent — macOS Desktop IDE for oh-my-pi
 
-Giao diện Desktop chuyên nghiệp dành cho **oh-my-pi (OMP)** (`can1357/oh-my-pi`) với ngôn ngữ thiết kế lấy cảm hứng từ **Antigravity** & **Codex**.
+Giao diện Desktop chuyên nghiệp dành cho **oh-my-pi (OMP)** (`can1357/oh-my-pi`) .
 
-![Antigravity Dark Theme](https://raw.githubusercontent.com/can1357/oh-my-pi/main/docs/assets/banner.png)
 
 ---
 

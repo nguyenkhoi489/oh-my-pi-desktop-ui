@@ -164,6 +164,23 @@ feat: exported the app constant
     );
   });
 
+  // Test 5b: parseCommitMessage với split commit plan
+  test('parseCommitMessage parses Split commit plan output', () => {
+    const splitFixture = `
+● Starting commit agent...
+● agent finished
+
+Split commit plan (dry run):
+Commit 1:
+fix(commit): reused proposed message
+
+- Passed message parameter
+`;
+    const parsed = parseCommitMessage(splitFixture);
+    assert(parsed.includes('Commit 1:'), 'Captures commit plan text');
+    assert(parsed.includes('fix(commit): reused proposed message'), 'Captures first commit message');
+  });
+
   // Test 6: isGitDirty trên thư mục không phải git
   await asyncTest('isGitDirty returns isGit false on non-git directory', async () => {
     const nonGitDir = path.join(tmpDir, 'non-git-dir');
@@ -327,10 +344,12 @@ feat: exported the app constant
     assert(commitViewSource.includes('parseCommitMessage'), 'CommitView uses parseCommitMessage');
     assert(commitViewSource.includes('availableModels'), 'CommitView accepts availableModels');
     assert(commitViewSource.includes('editedMessage: messageToCommit || undefined'), 'CommitView reuses generated/edited message to avoid redundant re-scan');
+    assert(commitViewSource.includes('m.provider ? `${m.provider}/${m.id}` : m.id'), 'CommitView prefixes provider in model select value');
     assert(appSource.includes('CommitModal'), 'App.tsx imports and renders CommitModal');
     assert(commitModalSource.includes('parseCommitMessage'), 'CommitModal uses parseCommitMessage');
     assert(commitModalSource.includes('availableModels'), 'CommitModal accepts availableModels');
     assert(commitModalSource.includes('editedMessage: messageToCommit || undefined'), 'CommitModal reuses generated/edited message to avoid redundant re-scan');
+    assert(commitModalSource.includes('m.provider ? `${m.provider}/${m.id}` : m.id'), 'CommitModal prefixes provider in model select value');
   });
 
   // Test 12: i18n keys parity

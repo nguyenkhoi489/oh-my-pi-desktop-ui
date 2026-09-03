@@ -80,6 +80,15 @@ export function parseCommitMessage(output: string): string {
       return result;
     }
   }
+  // Priority 3 marker: "Split commit plan (dry run):"
+  const splitMarker = 'Split commit plan (dry run):';
+  const splitIdx = clean.indexOf(splitMarker);
+  if (splitIdx !== -1) {
+    const splitPart = clean.slice(splitIdx + splitMarker.length).trim();
+    if (splitPart) {
+      return splitPart;
+    }
+  }
 
   return clean.trim();
 }
