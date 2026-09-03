@@ -50,7 +50,7 @@ npm run dev
 
 ```bash
 npm run dist:mac                     # arm64, ký Developer ID + notarize + staple
-npm run dist:mac -- --universal      # arm64 + x64 trong một bundle
+npm run dist:mac -- --universal      # arm64 + x64 trong m��t bundle
 npm run dist:mac -- --skip-notarize  # bỏ notarize (chỉ chạy sạch trên máy build)
 ```
 
