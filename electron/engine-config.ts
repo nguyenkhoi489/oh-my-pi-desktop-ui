@@ -1,3 +1,4 @@
+import { tm } from '../shared/i18n/index.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { buildExtendedPath } from './models-config.ts';
@@ -30,7 +31,7 @@ function getCacheKey(profile?: string): string {
   return profile && profile.trim() ? profile.trim() : '__default__';
 }
 
-// Phân tích output JSON từ omp config list --json thành danh sách entry
+// Parse JSON output from omp config list --json into entry list
 export function parseConfigListJson(stdout: string): EngineConfigEntry[] {
   if (!stdout || !stdout.trim()) return [];
 
@@ -56,7 +57,7 @@ export function parseConfigListJson(stdout: string): EngineConfigEntry[] {
       return transform(direct as Record<string, unknown>);
     }
   } catch {
-    // Có thể có log hoặc banner xung quanh chuỗi JSON
+    // May have logs or banners surrounding JSON string
   }
 
   const firstBrace = stdout.indexOf('{');
@@ -69,14 +70,14 @@ export function parseConfigListJson(stdout: string): EngineConfigEntry[] {
         return transform(parsed as Record<string, unknown>);
       }
     } catch {
-      // Bỏ qua nếu candidate không hợp lệ
+      // Ignore if candidate is invalid
     }
   }
 
   return [];
 }
 
-// Trích xuất các tùy chọn enum từ output dạng văn bản của omp config list
+// Extract enum options from text output of omp config list
 export function parseEnumOptions(textListing: string): Map<string, string[]> {
   const map = new Map<string, string[]>();
   if (!textListing) return map;
@@ -100,7 +101,7 @@ export function parseEnumOptions(textListing: string): Map<string, string[]> {
   return map;
 }
 
-// Gộp danh sách tùy chọn enum vào từng entry cấu hình tương ứng
+// Merge enum options list into corresponding config entries
 export function mergeEnumOptions(
   entries: EngineConfigEntry[],
   enumMap: Map<string, string[]>
@@ -114,7 +115,7 @@ export function mergeEnumOptions(
   return entries;
 }
 
-// Lấy danh sách toàn bộ cấu hình engine với cơ chế cache
+// Fetch complete engine config list with caching mechanism
 export async function fetchEngineConfig(
   binaryPath = 'omp',
   options?: FetchEngineConfigOptions
@@ -150,7 +151,7 @@ export async function fetchEngineConfig(
 
     const entries = parseConfigListJson(jsonResult.stdout);
     if (entries.length === 0 && jsonResult.stdout.trim().length > 0) {
-      return { success: false, error: 'Không thể phân tích dữ liệu cấu hình engine' };
+      return { success: false, error: tm('electron.config.cannotParse') };
     }
 
     if (textResult.stdout) {
@@ -162,11 +163,11 @@ export async function fetchEngineConfig(
     return { success: true, entries };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: msg || 'Lỗi khi đọc cấu hình engine' };
+    return { success: false, error: msg || tm('electron.config.readError') };
   }
 }
 
-// Cập nhật giá trị cấu hình theo key
+// Update config value by key
 export async function setEngineConfigValue(
   binaryPath = 'omp',
   key: string,
@@ -174,7 +175,7 @@ export async function setEngineConfigValue(
   options?: SetEngineConfigOptions
 ): Promise<EngineConfigMutationResult> {
   if (!key || typeof key !== 'string' || !key.trim() || /\s/.test(key.trim())) {
-    return { success: false, error: 'Tên cấu hình không hợp lệ' };
+    return { success: false, error: tm('electron.config.invalidKey') };
   }
 
   const sanitizedKey = key.trim();
@@ -200,18 +201,18 @@ export async function setEngineConfigValue(
     return { success: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: msg || 'Lỗi khi cập nhật cấu hình engine' };
+    return { success: false, error: msg || tm('electron.config.updateError') };
   }
 }
 
-// Đặt lại giá trị mặc định cho cấu hình theo key
+// Reset config value to default by key
 export async function resetEngineConfigValue(
   binaryPath = 'omp',
   key: string,
   options?: ResetEngineConfigOptions
 ): Promise<EngineConfigMutationResult> {
   if (!key || typeof key !== 'string' || !key.trim() || /\s/.test(key.trim())) {
-    return { success: false, error: 'Tên cấu hình không hợp lệ' };
+    return { success: false, error: tm('electron.config.invalidKey') };
   }
 
   const sanitizedKey = key.trim();
@@ -233,11 +234,11 @@ export async function resetEngineConfigValue(
     return { success: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: msg || 'Lỗi khi đặt lại cấu hình engine' };
+    return { success: false, error: msg || tm('electron.config.resetError') };
   }
 }
 
-// Lấy đường dẫn thư mục lưu trữ cấu hình engine
+// Get directory path storing engine config
 export async function getEngineConfigPath(
   binaryPath = 'omp',
   options?: EngineConfigPathOptions
@@ -263,11 +264,11 @@ export async function getEngineConfigPath(
     return { success: true, path: stdout.trim() };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: msg || 'Lỗi khi lấy đường dẫn cấu hình engine' };
+    return { success: false, error: msg || tm('electron.config.getPathError') };
   }
 }
 
-// Xóa cache cấu hình engine
+// Clear engine config cache
 export function clearEngineConfigCache(profile?: string): void {
   if (profile !== undefined) {
     configCache.delete(getCacheKey(profile));
@@ -276,7 +277,7 @@ export function clearEngineConfigCache(profile?: string): void {
   }
 }
 
-// Kiểm tra trạng thái cache cho profile chỉ định
+// Check cache status for specified profile
 export function getEngineConfigCacheInfo(profile?: string): {
   hasCached: boolean;
   ageMs?: number;

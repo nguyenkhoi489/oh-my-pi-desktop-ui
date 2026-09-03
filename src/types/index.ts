@@ -118,6 +118,10 @@ export interface OmpNotification {
   message: string;
   notifyType: 'info' | 'warning' | 'error' | string;
   timestamp: number;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 }
 
 export interface HostOpenRequest {
@@ -412,6 +416,13 @@ export interface OmpGlobalStatsData {
   byAgentType?: OmpAgentTypeStats[];
 }
 
+export interface FetchGlobalUsageOptions {
+  forceRefresh?: boolean;
+  timeoutMs?: number;
+  provider?: string;
+  redact?: boolean;
+}
+
 export interface GlobalUsageResult {
   success: boolean;
   data?: OmpGlobalUsageData;
@@ -425,6 +436,107 @@ export interface GlobalStatsResult {
   raw?: string;
   error?: string;
 }
+
+export interface OmpUsageHistoryEntry {
+  recordedAt: number;
+  provider: string;
+  accountKey?: string;
+  email?: string;
+  accountId?: string;
+  limitId?: string;
+  label?: string;
+  windowLabel?: string;
+  usedFraction?: number;
+  status?: string;
+  resetsAt?: number;
+  [key: string]: any;
+}
+
+export interface OmpUsageHistoryData {
+  generatedAt: number;
+  sinceMs: number;
+  entries: OmpUsageHistoryEntry[];
+}
+
+export interface FetchUsageHistoryOptions {
+  days?: number;
+  provider?: string;
+  forceRefresh?: boolean;
+  timeoutMs?: number;
+}
+
+export interface UsageHistoryResult {
+  success: boolean;
+  data?: OmpUsageHistoryData;
+  raw?: string;
+  error?: string;
+}
+
+export interface OmpUsageClientEntry {
+  client?: string;
+  name?: string;
+  id?: string;
+  tokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cost?: number;
+  sessions?: number;
+  lastActiveAt?: number;
+  [key: string]: any;
+}
+
+export interface OmpUsageClientsData {
+  generatedAt: number;
+  sinceMs: number;
+  clients: OmpUsageClientEntry[];
+}
+
+export interface FetchUsageClientsOptions {
+  days?: number;
+  forceRefresh?: boolean;
+  timeoutMs?: number;
+}
+
+export interface UsageClientsResult {
+  success: boolean;
+  data?: OmpUsageClientsData;
+  raw?: string;
+  error?: string;
+}
+
+export interface InvalidateUsageOptions {
+  provider?: string;
+  timeoutMs?: number;
+}
+
+export interface UsageInvalidateResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  raw?: string;
+}
+
+export interface StatsDashboardStatus {
+  running: boolean;
+  port?: number;
+  url?: string;
+  pid?: number;
+  status: 'stopped' | 'starting' | 'running' | 'error';
+  error?: string;
+}
+
+export interface StatsDashboardResult {
+  success: boolean;
+  status: StatsDashboardStatus;
+  error?: string;
+}
+
+export interface StartStatsDashboardOptions {
+  port?: number;
+  host?: string;
+  timeoutMs?: number;
+}
+
 
 export interface ForeignSessionCandidate {
   source: 'claude' | 'codex';
@@ -477,6 +589,72 @@ export interface MaintenanceEvent {
   exitCode?: number;
 }
 
+export interface CommitRunOptions {
+  dryRun?: boolean;
+  context?: string;
+  model?: string;
+  push?: boolean;
+  noChangelog?: boolean;
+  legacy?: boolean;
+  editedMessage?: string;
+  cwd?: string;
+}
+
+export interface CleanseRunOptions {
+  request?: string;
+  agents?: number;
+  model?: string;
+  tests?: boolean;
+  all?: boolean;
+  cwd?: string;
+}
+
+export interface GitStatusResult {
+  isGit: boolean;
+  isDirty: boolean;
+  branch?: string;
+  filesCount?: number;
+  files?: string[];
+  error?: string;
+}
+export interface BrowserRelayInstallOptions {
+  dir?: string;
+}
+
+export interface BrowserRelayStartOptions {
+  port?: number;
+  token?: string;
+  noGroup?: boolean;
+  verbose?: boolean;
+}
+
+export interface BrowserRelayStatus {
+  running: boolean;
+  source: 'app' | 'daemon' | 'none';
+  pid?: number;
+  port?: number;
+  url?: string;
+  command?: string;
+  detail?: string;
+}
+
+export interface BrowserRelayInstallResult {
+  success: boolean;
+  output?: string;
+  instructions?: string;
+  extensionDir?: string;
+  error?: string;
+}
+
+
+export interface TaskOutputEvent {
+  taskId: string;
+  type: 'stdout' | 'stderr' | 'status';
+  text?: string;
+  status?: 'running' | 'done' | 'error';
+  exitCode?: number;
+}
+
 export interface BashResultData {
   exitCode?: number;
   output?: string;
@@ -518,6 +696,28 @@ export interface OmpDaemonInfo {
   supervised?: boolean;
 }
 
+export interface OmpDaemonSpec {
+  name?: string;
+  application?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  pty?: boolean;
+  ready?: {
+    log?: string;
+    port?: number;
+    timeoutMs?: number;
+    timeout?: number;
+  };
+  restart?: string;
+  persist?: boolean;
+  detached?: boolean;
+}
+
+export interface OmpDaemonDetail extends OmpDaemonInfo {
+  spec?: OmpDaemonSpec;
+}
+
 export interface OmpPsScope {
   kind: 'project' | 'global' | string;
   projectDir?: string;
@@ -536,6 +736,262 @@ export interface OmpWorktreeInfo {
   isDirty?: boolean;
   sizeBytes?: number;
   [key: string]: unknown;
+}
+
+export interface StorageGcOptions {
+  apply?: boolean;
+  agentDir?: string;
+  profile?: string | null;
+  blobs?: boolean;
+  archive?: boolean;
+  wal?: boolean;
+  coldArchiveAfterDays?: number;
+  retainNewestGlobal?: number;
+  retainNewestPerCwd?: number;
+}
+
+export interface StorageGcBlobsResult {
+  referenced: number;
+  candidates: number;
+  wouldDelete: number;
+  deleted: number;
+  bytes: number;
+  errors: string[];
+}
+
+export interface StorageGcArchiveResult {
+  scanned: number;
+  skippedActive: number;
+  keptNewestGlobal: number;
+  keptNewestPerCwd: number;
+  wouldArchive: number;
+  archived: number;
+  historyRowsDeleted: number;
+  statsRowsDeleted: number;
+  ftsRebuilt: boolean;
+  errors: string[];
+}
+
+export interface StorageGcWalDatabase {
+  dbPath: string;
+  walBytes: number;
+  wouldCheckpoint: boolean;
+  checkpointed: boolean;
+  busy?: number;
+  log?: number;
+  checkpointedFrames?: number;
+}
+
+export interface StorageGcWalResult {
+  databases: StorageGcWalDatabase[];
+  walBytes: number;
+  wouldCheckpoint: boolean;
+  checkpointed: boolean;
+}
+
+export interface StorageGcReport {
+  agentDir: string;
+  apply: boolean;
+  lockPath?: string;
+  blobs?: StorageGcBlobsResult;
+  archive?: StorageGcArchiveResult;
+  wal?: StorageGcWalResult;
+}
+
+export interface StorageGcResponse {
+  success: boolean;
+  report?: StorageGcReport;
+  error?: string;
+}
+
+// Image Backends (Phase 11)
+export type ImageBackendsAction = 'status' | 'doctor' | 'probe' | 'purge';
+
+export interface ImageStatusDaemon {
+  state: 'running' | 'stopped' | string;
+  [key: string]: unknown;
+}
+
+export interface ImageStatusProviderFiles {
+  indexPath?: string;
+  entries: number;
+  bytes: number;
+  providers: {
+    openai?: number;
+    anthropic?: number;
+    google?: number;
+    [key: string]: number | undefined;
+  };
+  dirty?: boolean;
+}
+
+export interface ImageStatusSavings {
+  journalPath?: string;
+  entries: number;
+  imageCount: number;
+  inlineBytes: number;
+  referenceBytes: number;
+  savedBytes: number;
+  byDestination?: Record<string, unknown>;
+}
+
+export interface ImageStatusData {
+  action: 'status';
+  exitCode: number;
+  projectDir?: string;
+  enabled: boolean;
+  backends: string[];
+  daemon?: ImageStatusDaemon;
+  providerFiles?: ImageStatusProviderFiles;
+  savings?: ImageStatusSavings;
+  [key: string]: unknown;
+}
+
+export interface ImageDoctorCheck {
+  name: string;
+  severity: 'ok' | 'warn' | 'error' | string;
+  detail: string;
+}
+
+export interface ImageDoctorData {
+  action: 'doctor';
+  exitCode: number;
+  projectDir?: string;
+  healthy: boolean;
+  checks: ImageDoctorCheck[];
+  [key: string]: unknown;
+}
+
+export interface ImageProbeData {
+  action: 'probe';
+  exitCode: number;
+  projectDir?: string;
+  daemonState?: string;
+  ok: boolean;
+  detail?: string;
+  [key: string]: unknown;
+}
+
+export interface ImagePurgeProviderFiles {
+  selected: number;
+  bytes: number;
+  deleted: number;
+  skippedAuth: number;
+  errors: string[];
+}
+
+export interface ImagePurgeData {
+  action: 'purge';
+  exitCode: number;
+  projectDir?: string;
+  applied: boolean;
+  all: boolean;
+  daemon?: unknown;
+  providerFiles?: ImagePurgeProviderFiles;
+  [key: string]: unknown;
+}
+
+export type ImageRunResultData =
+  | ImageStatusData
+  | ImageDoctorData
+  | ImageProbeData
+  | ImagePurgeData
+  | Record<string, unknown>;
+
+export interface ImageBackendsOptions {
+  dir?: string;
+  timeout?: number;
+  all?: boolean;
+  apply?: boolean;
+  profile?: string | null;
+}
+
+export interface ImageBackendsResponse {
+  success: boolean;
+  action: ImageBackendsAction;
+  data?: ImageRunResultData;
+  error?: string;
+  raw?: string;
+}
+
+// SSH Hosts Management (Phase 12)
+export interface SshHostConfig {
+  host: string;
+  username?: string;
+  port?: number;
+  keyPath?: string;
+  description?: string;
+  compat?: boolean;
+}
+
+export interface SshHostAddInput {
+  name: string;
+  host: string;
+  user?: string;
+  port?: number;
+  key?: string;
+  desc?: string;
+  compat?: boolean;
+  scope: 'project' | 'user';
+}
+
+export interface SshHostsListData {
+  project: Record<string, SshHostConfig>;
+  user: Record<string, SshHostConfig>;
+}
+
+export interface SshHostsListResponse {
+  success: boolean;
+  data?: SshHostsListData;
+  error?: string;
+}
+
+export interface SshHostMutationResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+// Grievances (Auto-QA tool issues) (Phase 13)
+export interface GrievanceItem {
+  id: number;
+  model: string;
+  version: string;
+  tool: string;
+  report: string;
+}
+
+export interface GrievancesListOptions {
+  limit?: number;
+  tool?: string;
+  profile?: string | null;
+}
+
+export interface GrievancesListResponse {
+  success: boolean;
+  grievances?: GrievanceItem[];
+  endpoint?: string;
+  error?: string;
+}
+
+export interface GrievancesCleanOptions {
+  id?: number;
+  tool?: string;
+  all?: boolean;
+  profile?: string | null;
+}
+
+export interface GrievancesCleanResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface GrievancesPushResponse {
+  success: boolean;
+  message?: string;
+  endpoint?: string;
+  error?: string;
 }
 
 export interface OmpPluginInfo {
@@ -655,7 +1111,9 @@ export interface AppSettings {
   profile?: string;
   hostToolsEnabled?: boolean;
   launchOptions?: OmpLaunchOptions;
+  statsDashboardPort?: number;
 }
+
 
 export interface CustomModelCost {
   input?: number;
@@ -751,6 +1209,30 @@ export interface ModelRolesWriteResult {
   error?: string;
 }
 
+export interface OmpFoundModel {
+  provider: string;
+  id: string;
+  selector: string;
+  name?: string;
+  contextWindow?: number;
+  maxTokens?: number;
+  reasoning?: boolean;
+  thinking?: string[];
+  input?: ('text' | 'image' | string)[];
+  cost?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
+}
+
+export interface FindModelsResult {
+  success: boolean;
+  models?: OmpFoundModel[];
+  error?: string;
+}
+
 export type EngineConfigValueType = 'string' | 'number' | 'boolean' | 'enum' | 'array' | 'record';
 
 export interface EngineConfigEntry {
@@ -799,6 +1281,8 @@ export interface EngineConfigPathResult {
 export interface LoginProviderItem {
   id: string;
   name: string;
+  available?: boolean;
+  authenticated?: boolean;
 }
 
 export interface AuthLoginEvent {
@@ -806,6 +1290,17 @@ export interface AuthLoginEvent {
   status: 'started' | 'awaiting-browser' | 'success' | 'error' | 'cancelled';
   url?: string;
   message?: string;
+}
+
+export interface SayOptions {
+  voice?: string;
+  model?: string;
+}
+
+export interface SayStatusEvent {
+  speaking: boolean;
+  error?: string;
+  missingModel?: boolean;
 }
 
 export interface ElectronAPI {
@@ -827,13 +1322,22 @@ export interface ElectronAPI {
 
   // Model Catalog & Engine State (Phase 2 Additions)
   getAvailableModels: () => Promise<{ success: boolean; models?: OmpModelInfo[]; error?: string }>;
+  findModels?: (pattern: string) => Promise<FindModelsResult>;
   setModel: (provider: string, modelId: string) => Promise<{ success: boolean; model?: OmpModelInfo; error?: string }>;
   setThinkingLevel: (level: OmpThinkingLevel) => Promise<{ success: boolean; error?: string }>;
   getEngineState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
   getState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
   getSessionStats: () => Promise<{ success: boolean; stats?: OmpSessionStats; error?: string }>;
-  getGlobalUsage: (forceRefresh?: boolean) => Promise<GlobalUsageResult>;
+  getGlobalUsage: (options?: boolean | FetchGlobalUsageOptions) => Promise<GlobalUsageResult>;
   getGlobalStats: (forceRefresh?: boolean) => Promise<GlobalStatsResult>;
+  getUsageHistory: (options?: FetchUsageHistoryOptions) => Promise<UsageHistoryResult>;
+  getUsageClients: (options?: FetchUsageClientsOptions) => Promise<UsageClientsResult>;
+  invalidateUsage: (options?: InvalidateUsageOptions) => Promise<UsageInvalidateResult>;
+  startStatsDashboard: (options?: StartStatsDashboardOptions) => Promise<StatsDashboardResult>;
+  stopStatsDashboard: () => Promise<StatsDashboardResult>;
+  getStatsDashboardStatus: () => Promise<StatsDashboardStatus>;
+  openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
+
   setApprovalMode: (mode: OmpApprovalMode) => Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }>;
   getApprovalMode: () => Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }>;
   compact: (customInstructions?: string) => Promise<{ success: boolean; error?: string }>;
@@ -892,6 +1396,22 @@ export interface ElectronAPI {
   getProcessLogs?: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) => Promise<{ success: boolean; logs?: string; error?: string }>;
   listWorktrees?: () => Promise<{ success: boolean; worktrees?: OmpWorktreeInfo[]; error?: string }>;
   clearWorktrees?: (options?: { all?: boolean; dryRun?: boolean }) => Promise<{ success: boolean; rawOutput?: string; error?: string }>;
+  // Storage GC (Phase 10)
+  runGc?: (options?: StorageGcOptions) => Promise<StorageGcResponse>;
+  // Image Backends (Phase 11)
+  runImages?: (action?: ImageBackendsAction, options?: ImageBackendsOptions) => Promise<ImageBackendsResponse>;
+  // SSH Hosts (Phase 12)
+  listSshHosts?: () => Promise<SshHostsListResponse>;
+  addSshHost?: (input: SshHostAddInput) => Promise<SshHostMutationResponse>;
+  removeSshHost?: (name: string, scope: 'project' | 'user') => Promise<SshHostMutationResponse>;
+  // Grievances (Phase 13)
+  listGrievances?: (options?: GrievancesListOptions) => Promise<GrievancesListResponse>;
+  cleanGrievances?: (options: GrievancesCleanOptions) => Promise<GrievancesCleanResponse>;
+  pushGrievances?: (options?: { profile?: string | null }) => Promise<GrievancesPushResponse>;
+  getProcessInfo?: (name: string, options?: { global?: string }) => Promise<{ success: boolean; daemon?: OmpDaemonDetail; error?: string }>;
+  startProcessLogFollow?: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) => Promise<{ success: boolean; error?: string }>;
+  stopProcessLogFollow?: () => Promise<{ success: boolean }>;
+  onPsLogLine?: (callback: (data: { name: string; line: string }) => void) => () => void;
   // Plugin & Agents Managers (Phase 14, 15 & Expansion)
   listPlugins?: (options?: { local?: boolean }) => Promise<{ success: boolean; plugins?: OmpPluginInfo[]; error?: string }>;
   installPlugin?: (target: string, options?: { scope?: 'user' | 'project'; force?: boolean; local?: boolean; dryRun?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
@@ -917,6 +1437,25 @@ export interface ElectronAPI {
   // Host Tools & URI Schemes (Phase 17 & 18)
   registerHostTools?: () => Promise<{ success: boolean; toolNames?: string[]; error?: string }>;
   setHostUriSchemes?: (schemes: string[]) => Promise<{ success: boolean; schemes?: string[]; error?: string }>;
+  // Commit Assistant (Phase 14)
+  runCommit?: (options: CommitRunOptions) => Promise<{ success: boolean; error?: string }>;
+  cancelCommit?: () => Promise<{ success: boolean }>;
+  getCommitStatus?: (cwd?: string) => Promise<GitStatusResult>;
+  onCommitOutput?: (callback: (event: TaskOutputEvent) => void) => () => void;
+  // Cleanse Runner (Phase 15)
+  runCleanse?: (options: CleanseRunOptions) => Promise<{ success: boolean; error?: string }>;
+  cancelCleanse?: () => Promise<{ success: boolean }>;
+  onCleanseOutput?: (callback: (event: TaskOutputEvent) => void) => () => void;
+  // Browser Relay Service (Phase 16)
+  installBrowserRelay?: (options?: BrowserRelayInstallOptions) => Promise<BrowserRelayInstallResult>;
+  startBrowserRelay?: (options?: BrowserRelayStartOptions) => Promise<{ success: boolean; port?: number; url?: string; error?: string }>;
+  stopBrowserRelay?: () => Promise<{ success: boolean; error?: string }>;
+  getBrowserRelayStatus?: () => Promise<BrowserRelayStatus>;
+  onBrowserRelayOutput?: (callback: (event: TaskOutputEvent) => void) => () => void;
+  // Text-to-Speech (Phase 17)
+  startSay?: (text: string, options?: SayOptions) => Promise<{ success: boolean; error?: string; missingModel?: boolean }>;
+  stopSay?: () => Promise<{ success: boolean; error?: string }>;
+  onSayStatus?: (callback: (status: SayStatusEvent) => void) => () => void;
   // Todos Management (Phase 4)
   getTodos?: () => Promise<{ success: boolean; phases?: OmpTodoPhase[]; todos?: OmpTodoItem[]; error?: string }>;
   setTodos?: (phases: OmpTodoPhase[]) => Promise<{ success: boolean; phases?: OmpTodoPhase[]; error?: string }>;
@@ -959,6 +1498,8 @@ export interface ElectronAPI {
   startAuthLogin?: (providerId: string) => Promise<{ success: boolean; error?: string }>;
   cancelAuthLogin?: () => Promise<{ success: boolean }>;
   getAuthStatus?: () => Promise<{ success: boolean; providers?: string[]; error?: string }>;
+  logoutAuthProvider?: (providerId: string) => Promise<{ success: boolean; error?: string }>;
+  isEngineRunning?: () => Promise<boolean>;
   sendAuthLoginInput?: (text: string) => Promise<{ success: boolean; error?: string }>;
   onAuthLoginEvent?: (callback: (event: AuthLoginEvent) => void) => () => void;
   // Engine Configuration (Phase 2)

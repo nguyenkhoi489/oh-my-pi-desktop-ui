@@ -36,22 +36,22 @@ export interface ExtensionsTabProps {
 }
 export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeedRestart }) => {
   const { t } = useI18n();
-  // Trạng thái local mode (--local)
+  // Local mode state (--local)
   const [localOnly, setLocalOnly] = useState<boolean>(false);
 
-  // Danh sách plugin đã cài
+  // Installed plugins list
   const [plugins, setPlugins] = useState<OmpPluginInfo[]>([]);
   const [isLoadingPlugins, setIsLoadingPlugins] = useState<boolean>(false);
   const [pluginError, setPluginError] = useState<string | null>(null);
 
-  // Cài đặt plugin
+  // Install plugin
   const [installTarget, setInstallTarget] = useState<string>('');
   const [installScope, setInstallScope] = useState<'user' | 'project'>('user');
   const [installForce, setInstallForce] = useState<boolean>(false);
   const [installDryRun, setInstallDryRun] = useState<boolean>(false);
   const [isInstallingPlugin, setIsInstallingPlugin] = useState<boolean>(false);
 
-  // Liên kết local plugin
+  // Link local plugin
   const [linkPath, setLinkPath] = useState<string>('');
   const [isLinkingPlugin, setIsLinkingPlugin] = useState<boolean>(false);
 
@@ -85,10 +85,10 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
   // Dry-run preview modal
   const [previewModal, setPreviewModal] = useState<{ title: string; content: string } | null>(null);
 
-  // Đang upgrade
+  // Upgrading plugin name
   const [upgradingPlugin, setUpgradingPlugin] = useState<string | null>(null);
 
-  // 1. Fetch danh sách plugins
+  // 1. Fetch plugins list
   const fetchPlugins = useCallback(async () => {
     if (!window.electronAPI?.listPlugins) return;
     setIsLoadingPlugins(true);
@@ -98,7 +98,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
       if (res.success && res.plugins) {
         setPlugins(res.plugins);
       } else {
-        setPluginError(res.error || 'Lỗi khi tải danh sách plugins');
+        setPluginError(res.error || t('ops.extensions.error.fetchPlugins'));
       }
     } catch (err: unknown) {
       setPluginError(err instanceof Error ? err.message : String(err));
@@ -125,7 +125,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
           setNeedRestart(true);
         }
       } else {
-        setPluginError(res.error || 'Lỗi khi kiểm tra Doctor');
+        setPluginError(res.error || t('ops.extensions.error.doctor'));
       }
     } catch (err: unknown) {
       setPluginError(err instanceof Error ? err.message : String(err));
@@ -172,7 +172,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
     fetchDiscover();
   }, [fetchPlugins, fetchMarketplaces, fetchDiscover]);
 
-  // Handler cài đặt plugin
+  // Install plugin handler
   const handleInstallPlugin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const target = installTarget.trim();
@@ -191,7 +191,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         if (installDryRun) {
           setPreviewModal({
             title: `${t('ops.extensions.install.title')} (${t('ops.extensions.install.dryRun')})`,
-            content: res.message || 'Không có nội dung preview.',
+            content: res.message || t('ops.extensions.noPreview'),
           });
         } else {
           setInstallTarget('');
@@ -199,7 +199,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
           await fetchPlugins();
         }
       } else {
-        setPluginError(res.error || 'Lỗi khi cài đặt plugin');
+        setPluginError(res.error || t('ops.extensions.error.install'));
       }
     } catch (err: unknown) {
       setPluginError(err instanceof Error ? err.message : String(err));
@@ -208,10 +208,10 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
     }
   };
 
-  // Handler gỡ cài đặt plugin
+  // Uninstall plugin handler
   const handleUninstallPlugin = async (pluginName: string, scope?: string, dryRun = false) => {
     if (!window.electronAPI?.uninstallPlugin) return;
-    if (!dryRun && !confirm(`Bạn có chắc muốn gỡ plugin ${pluginName}?`)) return;
+    if (!dryRun && !confirm(t('ops.extensions.confirmUninstall', { name: pluginName }))) return;
 
     try {
       const res = await window.electronAPI.uninstallPlugin(pluginName, {
@@ -223,21 +223,21 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         if (dryRun) {
           setPreviewModal({
             title: `${t('ops.extensions.actions.uninstall')} (${t('ops.extensions.actions.preview')})`,
-            content: res.message || `[dry-run] Gỡ plugin ${pluginName}`,
+            content: res.message || t('ops.extensions.uninstallDryRun', { name: pluginName }),
           });
         } else {
           if (setNeedRestart) setNeedRestart(true);
           await fetchPlugins();
         }
       } else {
-        alert(`Lỗi: ${res.error}`);
+        alert(t('ops.extensions.error.toggle', { error: res.error || '' }));
       }
     } catch (err: unknown) {
-      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+      alert(t('ops.extensions.error.toggle', { error: err instanceof Error ? err.message : String(err) }));
     }
   };
 
-  // Handler liên kết local plugin
+  // Link local plugin handler
   const handleLinkPlugin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const p = linkPath.trim();
@@ -252,7 +252,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         if (setNeedRestart) setNeedRestart(true);
         await fetchPlugins();
       } else {
-        setPluginError(res.error || 'Lỗi khi liên kết plugin');
+        setPluginError(res.error || t('ops.extensions.error.link'));
       }
     } catch (err: unknown) {
       setPluginError(err instanceof Error ? err.message : String(err));
@@ -271,10 +271,10 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         if (setNeedRestart) setNeedRestart(true);
         await fetchPlugins();
       } else {
-        alert(`Lỗi khi chuyển trạng thái plugin: ${res.error}`);
+        alert(t('ops.extensions.error.toggle', { error: res.error || '' }));
       }
     } catch (err: unknown) {
-      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+      alert(t('ops.extensions.error.toggle', { error: err instanceof Error ? err.message : String(err) }));
     }
   };
 
@@ -292,23 +292,23 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         if (dryRun) {
           setPreviewModal({
             title: `${t('ops.extensions.actions.upgrade')} (${t('ops.extensions.actions.preview')})`,
-            content: res.message || res.rawOutput || 'Tất cả plugin đã cập nhật.',
+            content: res.message || res.rawOutput || t('ops.extensions.allUpToDate'),
           });
         } else {
           if (setNeedRestart) setNeedRestart(true);
           await fetchPlugins();
         }
       } else {
-        alert(`Lỗi nâng cấp: ${res.error}`);
+        alert(t('ops.extensions.error.upgrade', { error: res.error || '' }));
       }
     } catch (err: unknown) {
-      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+      alert(t('ops.extensions.error.toggle', { error: err instanceof Error ? err.message : String(err) }));
     } finally {
       setUpgradingPlugin(null);
     }
   };
 
-  // Handler mở modal features
+  // Open features modal handler
   const handleOpenFeatures = async (pluginName: string) => {
     if (!window.electronAPI?.pluginFeatures) return;
     setActiveFeaturesPlugin(pluginName);
@@ -344,14 +344,14 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         );
         if (setNeedRestart) setNeedRestart(true);
       } else {
-        alert(`Lỗi: ${res.error}`);
+        alert(t('ops.extensions.error.toggle', { error: res.error || '' }));
       }
     } catch (err: unknown) {
-      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+      alert(t('ops.extensions.error.toggle', { error: err instanceof Error ? err.message : String(err) }));
     }
   };
 
-  // Handler lưu config key=value
+  // Save config key=value handler
   const handleSaveConfig = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!activeConfigPlugin || !configKey.trim() || !window.electronAPI?.pluginSetConfig) return;
@@ -370,16 +370,16 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         if (setNeedRestart) setNeedRestart(true);
         await fetchPlugins();
       } else {
-        alert(`Lỗi khi cấu hình: ${res.error}`);
+        alert(t('ops.extensions.error.saveConfig', { error: res.error || '' }));
       }
     } catch (err: unknown) {
-      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+      alert(t('ops.extensions.error.toggle', { error: err instanceof Error ? err.message : String(err) }));
     } finally {
       setIsSavingConfig(false);
     }
   };
 
-  // Handler thêm marketplace source
+  // Add marketplace source handler
   const handleAddMarketplace = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const source = marketplaceSource.trim();
@@ -393,19 +393,19 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         await fetchMarketplaces();
         await fetchDiscover();
       } else {
-        alert(`Lỗi khi thêm marketplace: ${res.error}`);
+        alert(t('ops.extensions.error.addMarketplace', { error: res.error || '' }));
       }
     } catch (err: unknown) {
-      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+      alert(t('ops.extensions.error.toggle', { error: err instanceof Error ? err.message : String(err) }));
     } finally {
       setIsAddingMarketplace(false);
     }
   };
 
-  // Handler xóa marketplace
+  // Remove marketplace handler
   const handleRemoveMarketplace = async (sourceName: string) => {
     if (!window.electronAPI?.pluginMarketplace) return;
-    if (!confirm(`Bạn có chắc muốn xoá marketplace ${sourceName}?`)) return;
+    if (!confirm(t('ops.extensions.confirmRemoveMarketplace', { name: sourceName }))) return;
 
     try {
       const res = await window.electronAPI.pluginMarketplace('remove', sourceName, { local: localOnly });
@@ -413,14 +413,14 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         await fetchMarketplaces();
         await fetchDiscover();
       } else {
-        alert(`Lỗi: ${res.error}`);
+        alert(t('ops.extensions.error.toggle', { error: res.error || '' }));
       }
     } catch (err: unknown) {
-      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+      alert(t('ops.extensions.error.toggle', { error: err instanceof Error ? err.message : String(err) }));
     }
   };
 
-  // Lọc Discover plugins
+  // Filter Discover plugins
   const filteredDiscover = useMemo(() => {
     const q = discoverFilter.trim().toLowerCase();
     if (!q) return discoverPlugins;
@@ -856,7 +856,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
                   type="text"
                   value={discoverFilter}
                   onChange={(e) => setDiscoverFilter(e.target.value)}
-                  placeholder="Lọc plugin..."
+                  placeholder={t('ops.extensions.filterPlaceholder')}
                   className="pl-6 pr-2 py-1 rounded bg-surface border border-border text-[11px] text-slate-800 dark:text-zinc-200 outline-none w-28 sm:w-36"
                 />
               </div>
@@ -936,10 +936,10 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
             </div>
 
             {isLoadingFeatures ? (
-              <div className="p-4 text-center text-xs text-zinc-400">Đang nạp features...</div>
+              <div className="p-4 text-center text-xs text-zinc-400">{t('ops.extensions.loadingFeatures')}</div>
             ) : pluginFeatures.length === 0 ? (
               <div className="p-4 text-center text-xs text-zinc-400">
-                Plugin này không khai báo features nào hoặc không hỗ trợ toggle.
+                {t('ops.extensions.noFeatures')}
               </div>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -981,7 +981,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
                 onClick={() => setActiveFeaturesPlugin(null)}
                 className="px-4 py-1.5 rounded-lg bg-surface hover:bg-surface-highlight border border-border text-xs text-slate-700 dark:text-zinc-300"
               >
-                Đóng
+                {t('ops.extensions.close')}
               </button>
             </div>
           </div>
@@ -1024,7 +1024,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
                   type="text"
                   value={configValue}
                   onChange={(e) => setConfigValue(e.target.value)}
-                  placeholder="Giá trị cấu hình..."
+                  placeholder={t('ops.extensions.configValuePlaceholder')}
                   className="w-full px-3 py-1.5 rounded-lg bg-surface border border-border text-xs font-mono outline-none"
                 />
               </div>
@@ -1035,14 +1035,14 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
                   onClick={() => setActiveConfigPlugin(null)}
                   className="px-3 py-1.5 rounded-lg bg-surface hover:bg-surface-highlight border border-border text-xs"
                 >
-                  Hủy
+                  {t('ops.extensions.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={!configKey.trim() || isSavingConfig}
                   className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-sm disabled:opacity-50"
                 >
-                  {isSavingConfig ? 'Đang lưu...' : 'Lưu cấu hình'}
+                  {isSavingConfig ? t('ops.extensions.savingConfig') : t('ops.extensions.saveConfig')}
                 </button>
               </div>
             </form>

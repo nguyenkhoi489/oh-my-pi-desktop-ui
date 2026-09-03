@@ -15,6 +15,396 @@ Entry template:
 - **Refs:** report/journal/plan paths
 ```
 
+## 2026-09-03 — Phase 19: i18n Migrate Electron & Verify
+
+- **State:** Đã hoàn thành toàn bộ Phase 19 (i18n Migrate Electron & Verify) — phase cuối cùng của roadmap OMP Parity Gap + i18n:
+  - Di chuyển toàn bộ chuỗi thông báo lỗi, notification, dialog title, UI toast và message trả về renderer trong `electron/` sang `tm()` theo locale động hiện tại:
+    - `electron/main.ts`: 17 chuỗi (auth, export, reveal, image attachments, maintenance, commit, cleanse, relay dialogs/errors).
+    - `electron/omp-bridge.ts`: 15 chuỗi (lifecycle, handshake timeout, protocol negotiation, auth login RPC, approval mode & profile restart errors, host uri open).
+    - `electron/host-tools.ts`: 50 chuỗi (builtin tools description, parameters, return messages, host uri routing & schema errors).
+    - `electron/extension-manager.ts`: 24 chuỗi (plugin install, uninstall, link, doctor, features, toggle, config, marketplace, bundled agents).
+    - `electron/session-import.ts`: 29 chuỗi (scan, parse, convert, source not found error).
+    - `electron/usage-stats.ts`: 22 chuỗi (JSON extraction errors, CLI usage/stats/history/clients execution errors).
+    - `electron/engine-maintenance.ts`: 23 chuỗi (update check, tiny-models, maintenance task busy/running/failed messages).
+    - `electron/ops-manager.ts`: 14 chuỗi (daemon control, log follow, worktrees list/clear errors).
+    - `electron/auth-login.ts`: 11 chuỗi (provider fetch, auth-broker process spawn, browser open, login failure).
+    - `electron/engine-config.ts`: 10 chuỗi (config list, set, reset, path fetch errors).
+    - `electron/collab-share.ts`: 9 chuỗi (share session, join session, URL extraction errors).
+    - `electron/image-backends.ts`: 8 chuỗi (image status, pull, purge execution errors).
+    - `electron/grievances.ts`: 6 chuỗi (list, clean, push validation and execution errors).
+    - `electron/commit-assistant.ts`: 5 chuỗi (workspace validation, dirty check, git commit/push task running/cancelled messages).
+    - `electron/browser-relay.ts`: 3 chuỗi (relay install instructions, start daemon errors).
+    - `electron/cleanse-runner.ts`: 3 chuỗi (cleanse task busy, running, error messages).
+    - `electron/storage-gc.ts`: 3 chuỗi (gc run, lock conflict, parse errors).
+    - `electron/tts-say.ts`: 3 chuỗi (empty text, write file, speak failed messages).
+    - `electron/launch-args.ts`: 2 chuỗi (profile/tools sanitization and build args).
+    - `electron/ssh-hosts.ts`: 2 chuỗi (ssh list, parse errors).
+  - Quét sạch toàn bộ ký tự tiếng Việt hardcode và comment trong cả `src/` và `electron/`: kết quả 0 ký tự tiếng Việt ngoài `shared/i18n/`.
+  - Nâng cấp `scripts/verify-i18n.mjs` thêm Test 7 (quét `electron/` zero Vietnamese characters) và Test 8 (dynamic locale switching trong Main Process qua `setCurrentLocale` và `tm()` đổi tức thì mà không cần restart).
+  - Cập nhật tài liệu: `AGENTS.md` (hướng dẫn dùng `t()` và `tm()`, quy tắc thêm key mới), `README.md` (mục 4: tính năng đa ngôn ngữ và cách chuyển đổi trong Settings).
+  - Verification: `test:i18n` (3112 passed, 0 failed), cả 2 typechecks `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi, `npm run build` thành công xuất xưởng `.app`.
+- **In-flight:** Không có. Roadmap OMP Parity Gap + i18n hoàn thành 19/19 phases.
+- **Next:**
+  - Đánh dấu hoàn thành Phase 19 và toàn bộ roadmap trong `plans/260902-2057-omp-parity-gap-i18n/plan.md`.
+  - Tạo technical journal entry `/ak:journal`.
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-19-i18n-migrate-electron-verify.md`
+  - `scripts/verify-i18n.mjs`
+
+## 2026-09-03 — Phase 18: i18n Migrate Renderer
+
+- **State:** Đã hoàn thành toàn bộ Phase 18 (i18n Migrate Renderer) của roadmap OMP Parity Gap:
+  - Quét sạch toàn bộ chuỗi tiếng Việt hard-code và comment tiếng Việt trong toàn bộ cây thư mục `src/` (60 files bao gồm tất cả Modals, AgentPanel, Sidebar, HeaderBar, Canvas, Common, Notifications, Hooks, Utils và Mock).
+  - Đồng bộ hoá từ điển `shared/i18n/vi.ts` và `shared/i18n/en.ts` với 100% key parity (2590 assertions parity pass, 0 key thừa/thiếu).
+  - Toàn bộ text hiển thị, placeholder, aria-label, title tooltip, toast, mô tả lệnh `commandMenu.ts` và demo data `mock/demoData.ts` chuyển qua `t()` hoặc `tm()`.
+  - Nâng cấp `scripts/verify-i18n.mjs` thêm Test 6: quét toàn bộ `src/**/*.ts` và `src/**/*.tsx`, xác nhận 0 file chứa ký tự tiếng Việt ngoài `shared/i18n`.
+  - Verification: `test:i18n` (2590 passed, 0 failed), `test:renderer-chat` (18/18 passed), `test:renderer-tool-diff` (39/39 passed), `test:renderer-ui-request` (55/55 passed), `test:renderer-sessions` (51/51 passed), `test:subagent-transcript` (39/39 passed), `test:todos-panel` (63/63 passed), `test:engine-config-ui` (167/167 passed), cả 2 typechecks `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có. Sẵn sàng cho Phase 19: i18n Migrate Electron & Verify.
+- **Next:**
+  1. Triển khai Phase 19: i18n Migrate Electron & Verify (`plans/260902-2057-omp-parity-gap-i18n/phase-19-i18n-migrate-electron-verify.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-18-i18n-migrate-renderer.md`
+  - `scripts/verify-i18n.mjs`
+
+## 2026-09-03 — Phase 17: Command Output ANSI & TTS
+
+- **State:** Đã hoàn thành toàn bộ Phase 17 (Command Output ANSI & TTS) của roadmap OMP Parity Gap:
+  - `shared/text/strip-ansi.ts`: Module thuần dùng chung giữa renderer và electron, trang bị regex chuẩn loại bỏ ANSI CSI (SGR color codes, cursor moves, clear line/screen), OSC (window title, hyperlinks, ST terminator), 2-character escape sequences, đồng thời bảo toàn nguyên vẹn xuống dòng (`\n`, `\r\n`), khoảng trắng, ký tự unicode, tiếng Việt và thanh tiến trình block (`█░`).
+  - `src/utils/cleanseArgs.ts`: Cập nhật tái sử dụng `stripAnsi` từ `shared/text/strip-ansi.ts` nhằm đảm bảo tính nhất quán và DRY.
+  - `electron/tts-say.ts`: Lớp `SayManager` quản lý vòng đời Text-to-Speech:
+    - Ghi file tạm an toàn tại `app.getPath('temp')` (với fallback `os.tmpdir()` cho test scripts).
+    - Khởi chạy lệnh `omp say --file <tmp>` với các tuỳ chọn `--voice` và `--model`.
+    - Bắt lỗi thiếu model TTS local (`could not synthesize with local TTS model`, `Run omp setup speech`), đánh dấu cờ `missingModel: true`.
+    - Tự động huỷ tiến trình cũ khi có yêu cầu mới hoặc dừng thủ công qua `stop()`, dọn dẹp file tạm, bỏ qua sự kiện close/error từ các tiến trình cũ đã bị thay thế (superseded).
+    - Tự động dọn dẹp và giải phóng tài nguyên trong `dispose()`.
+  - `electron/main.ts`: Khởi tạo `sayManager`, tích hợp vào `disposeAll()`, đăng ký IPC handlers `omp:say-start` và `omp:say-stop`, emit event `omp:say-status` về renderer.
+  - `electron/preload.ts`: Expose các phương thức `startSay`, `stopSay`, và `onSayStatus` trên `window.electronAPI`.
+  - `electron/types.ts` & `src/types/index.ts`: Bổ sung `SayOptions`, `SayStatusEvent`, mở rộng `OmpNotification` với thuộc tính tuỳ chọn `action?: { label: string; onClick: () => void }`, cập nhật interface `ElectronAPI`.
+  - `src/hooks/useOmpRpc.ts`:
+    - Áp dụng `stripAnsi` cho nội dung `onOmpCommandOutput` trước khi render tin nhắn system trong `ChatMessage`.
+    - Cập nhật `pushNotification` hỗ trợ đối tượng `action`.
+    - Lắng nghe sự kiện `onSayStatus`, cung cấp state `isSpeaking` và các callbacks `startSay`, `stopSay`.
+  - `src/components/Canvas/TerminalView.tsx`: Áp dụng `stripAnsi` khi nhận stream `onBashOutput`, khi hoàn thành lệnh, khi hiển thị khối pre output và khi copy nội dung lệnh.
+  - `src/components/AgentPanel/ChatHistory.tsx`: Áp dụng `stripAnsi` trong `SystemMessageCard` cho cả chế độ thu gọn và xem đầy đủ.
+  - `src/components/Notifications/ToastStack.tsx`: Hiển thị nút bấm hành động `notif.action` (ví dụ: mở Ops Center).
+  - `src/components/HeaderBar.tsx`: Bổ sung nút loa (TTS) cạnh nút sao chép phản hồi cuối cùng:
+    - Nhận diện trạng thái phát âm thanh (`Volume2` khi sẵn sàng, `Square` animate-pulse khi đang phát).
+    - Nhấp nút sẽ gọi `getLastAssistantText()` và phát âm thanh qua `omp say`, hoặc dừng ngay lập tức nếu đang phát.
+  - `src/App.tsx`: Kết nối state `isSpeaking`, `startSay`, `stopSay` với HeaderBar, xử lý thông báo khi text rỗng hoặc khi thiếu model TTS kèm nút mở trực tiếp tab Engine của `OpsModal`.
+  - `src/components/Modals/OpsModal.tsx`: Hỗ trợ prop `initialTab` cho phép mở trực tiếp tab chỉ định.
+  - `shared/i18n/{vi,en}.ts`: Bổ sung 8 translation keys cho `tts.*` ở cả 2 ngôn ngữ (1145 keys, parity 100%).
+  - `scripts/verify-ansi-tts.mjs`: Test suite toàn diện 19/19 checks pass (stripAnsi CSI/OSC/unicode/context, SayManager lifecycle/temp-file/missing-model/stop, Preload/Main IPC contracts, Types, i18n parity, hook/component integration).
+  - `package.json`: Bổ sung script `"test:ansi-tts"` và đưa vào chuỗi `"test"`.
+  - Verification: `test:ansi-tts` pass 19/19, `test:terminal` pass 6/6, `test:slash-commands` pass 44/44, `test:i18n` pass 1145/1145, `test:cleanse-runner` pass 6/6, `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Triển khai Phase 18: Session Graph & Branch Visualizer hoặc tiếp tục theo roadmap.
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-17-command-output-ansi-tts.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `scripts/verify-ansi-tts.mjs`
+
+## 2026-09-03 — Phase 16: Browser Relay Service
+
+- **State:** Đã hoàn thành toàn bộ Phase 16 (Browser Relay Service) của roadmap OMP Parity Gap:
+  - `electron/browser-relay.ts`: Triển khai các hàm tiện ích và quản lý dịch vụ Browser Relay:
+    - `buildBrowserRelayInstallArgs`: Tạo đối số `['browser-relay', 'install']`, hỗ trợ cờ `--dir`.
+    - `buildBrowserRelayStartArgs`: Tạo đối số `['browser-relay', 'serve']`, hỗ trợ `--port`, `--token`, `--no-group`, `--verbose`.
+    - `getDefaultExtensionDir`: Xác định đường dẫn thư mục extension chuẩn `~/.omp/browser-relay/extension`.
+    - `parseInstallInstructions`: Bóc tách khối hướng dẫn Chrome setup từ output dòng lệnh.
+    - `checkDaemonRelayStatus`: Kiểm tra daemon global `omp.browser.relay` qua `omp ps list --json --all`.
+    - `RelayServer`: Quản lý tiến trình relay server do app spawn, hỗ trợ cơ chế chờ readiness line `listening on ...` trước khi báo thành công, reset trạng thái giữa các lần chạy, giới hạn buffer log tối đa 200 dòng, timeout dừng tiến trình SIGTERM/SIGKILL theo dõi qua `exitCode`.
+    - `BrowserRelayManager`: Điều phối `RelayServer`, `StreamingTaskRunner` cho tác vụ cài extension (`omp:browser-relay-output`), xử lý dừng đồng bộ cả app server lẫn daemon global `omp.browser.relay` qua `opsManager`, tự động giải phóng trong `dispose()`.
+  - `electron/main.ts`: Khởi tạo `browserRelayManager`, tích hợp vào `disposeAll()`, mở rộng `shell:open-external` cho giao thức `chrome:`, mở rộng `fs:reveal-in-finder` hỗ trợ mở rộng đường dẫn `~/`, truyền active profile vào `startRelay`, đăng ký các IPC handlers `omp:browser-relay-install`, `omp:browser-relay-start`, `omp:browser-relay-stop`, `omp:browser-relay-status`.
+  - `electron/preload.ts`: Expose `installBrowserRelay`, `startBrowserRelay`, `stopBrowserRelay`, `getBrowserRelayStatus`, và event listener `onBrowserRelayOutput`.
+  - `electron/types.ts` & `src/types/index.ts`: Bổ sung các interfaces `BrowserRelayInstallOptions`, `BrowserRelayStartOptions`, `BrowserRelayStatus`, `BrowserRelayInstallResult`, và cập nhật contract `ElectronAPI`.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung các callbacks `installBrowserRelay`, `startBrowserRelay`, `stopBrowserRelay`, `getBrowserRelayStatus`.
+  - `src/components/Modals/ops/ProcessesTab.tsx`: Tích hợp Browser Relay Service Card trong tab Processes:
+    - Trạng thái hoạt động kèm badge live (Đang chạy / Đã dừng, nguồn từ App hoặc Global Daemon, port / URL / PID).
+    - Nút "Cài extension" kích hoạt task streaming hiển thị output realtime.
+    - Nút "Mở thư mục" hiển thị extension trong Finder.
+    - Nút "Mở chrome://extensions" sao chép đường dẫn vào clipboard và kích hoạt trình duyệt.
+    - Ô nhập Port (mặc định 9224) và Token tùy chọn cho chế độ khởi động thủ công.
+    - Nút chuyển đổi Khởi động thủ công / Dừng relay server.
+    - Khung hướng dẫn cài đặt Chrome kèm nút sao chép đường dẫn.
+  - `shared/i18n/{vi,en}.ts`: Bổ sung 24 keys i18n cho Browser Relay ở cả tiếng Việt và tiếng Anh (1129 keys, parity 100%).
+  - `scripts/verify-browser-relay.mjs`: Test suite 8/8 checks pass (buildBrowserRelayInstallArgs, buildBrowserRelayStartArgs, getDefaultExtensionDir, parseInstallInstructions, RelayServer lifecycle với mock executable, BrowserRelayManager dispose, IPC contract check, i18n key existence & parity).
+  - `package.json`: Bổ sung script `"test:browser-relay"` và đưa vào chuỗi `"test"`.
+  - Verification: `test:browser-relay` pass 8/8, `test:i18n` pass 1129/1129, `test:preload` pass, `test:ops-manager` pass 10/10, `test:ops-manager-follow` pass 5/5, `test:cleanse-runner` pass 6/6, `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Triển khai Phase 17: Command Output ANSI & TTS.
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-16-browser-relay-service.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `scripts/verify-browser-relay.mjs`
+
+## 2026-09-03 — Phase 15: Cleanse Runner
+
+- **State:** Đã hoàn thành toàn bộ Phase 15 (Cleanse Runner) của roadmap OMP Parity Gap:
+  - `src/utils/cleanseArgs.ts`: Module thuần quản lý `buildCleanseArgs(opts)` (hỗ trợ tham số request, `-n` số agents, `-m` model, `-t` tests, `--all`, tự động bật `--all` khi request rỗng để tránh interactive TTY picker), và `stripAnsi` loại bỏ mã màu ANSI khỏi stream.
+  - `electron/streaming-task-runner.ts`: Bổ sung tùy chọn `stripAnsi?: boolean` trong `StartTaskOptions` giúp tự động lọc bỏ ANSI escape codes ở cả stdout và stderr khi emit event.
+  - `electron/cleanse-runner.ts`: Cung cấp `CleanseRunnerManager` sử dụng `StreamingTaskRunner('omp:cleanse-output')` với slot lock 1 tác vụ tại 1 thời điểm, hỗ trợ `runCleanse`, `cancelCleanse`, `isRunning`, `currentTaskId`, `dispose`.
+  - `electron/main.ts`: Khởi tạo và quản lý vòng đời `cleanseRunnerManager`, đăng ký IPC handlers `omp:cleanse-run` (tự động fallback `cwd` về workspace của omp bridge nếu không truyền) và `omp:cleanse-cancel`.
+  - `electron/preload.ts`: Expose `runCleanse`, `cancelCleanse`, `onCleanseOutput` trên `window.electronAPI`.
+  - `electron/types.ts` & `src/types/index.ts`: Bổ sung interface `CleanseRunOptions` và khai báo các phương thức Cleanse Runner trên `window.electronAPI`.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung callbacks `runCleanse`, `cancelCleanse`.
+  - `src/components/Modals/ops/EngineTab.tsx`: Tích hợp section Cleanse Runner:
+    - Input `request` (tìm và sửa chẩn đoán theo từ khóa), input số subagents `-n` (1-16, mặc định 2), input `model` (`-m`), toggles `tests` (`-t`) và `all` (`--all`, bắt buộc khi request rỗng).
+    - Cảnh báo xung đột khi OMP engine đang streaming hội thoại.
+    - Cảnh báo Cleanse sửa trực tiếp mã nguồn trong workspace kèm nút "Tạo commit trước" (kết nối mở `CommitModal` của Phase 14).
+    - Log console streaming (terminal style) tự cuộn, hiển thị trạng thái `running`/`done`/`error`, lọc ANSI, nút xoá log, và nút Huỷ tác vụ.
+  - `src/components/Modals/OpsModal.tsx` & `src/App.tsx`: Truyền `onOpenCommitModal` và trạng thái `isEngineRunning={status === 'streaming'}` xuống `EngineTab`.
+  - `shared/i18n/{vi,en}.ts`: Bổ sung đầy đủ 16 khóa i18n cho Cleanse Runner ở cả `vi` và `en` (1065 keys, parity 100%).
+  - `scripts/verify-cleanse-runner.mjs`: Test suite 6/6 checks pass (buildCleanseArgs mọi tổ hợp cờ, stripAnsi, CleanseRunnerManager lifecycle & cancellation, IPC contracts, UI/Hook integration, i18n parity).
+  - `package.json`: Thêm script `"test:cleanse-runner"` và gắn vào chuỗi `"test"`.
+  - Verification: `test:cleanse-runner` pass 6/6, `test:commit-assistant` pass 12/12, `test:preload` pass, `test:engine-maintenance` pass 6/6, live probe `omp cleanse --all -n 2` sửa thành công lỗi TS trong repo thử nghiệm, `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Triển khai Phase 16: Browser Relay Service.
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-15-cleanse-runner.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `scripts/verify-cleanse-runner.mjs`
+
+## 2026-09-03 — Phase 14: Commit Assistant
+
+- **State:** Đã hoàn thành toàn bộ Phase 14 (Commit Assistant) của roadmap OMP Parity Gap:
+  - `electron/streaming-task-runner.ts`: Tách `StreamingTaskRunner` độc lập từ `EngineMaintenanceManager` hỗ trợ đa instance song song, quản lý tiến trình CLI streaming (stdout, stderr, status), hủy an toàn với SIGTERM và fallback SIGKILL, bảo vệ trạng thái tránh late events từ task cũ.
+  - `electron/engine-maintenance.ts`: Refactor `EngineMaintenanceManager` tái sử dụng `StreamingTaskRunner('omp:maintenance-output')`, giữ nguyên hoàn toàn public API và IPC channels hiện có (100% pass `test:engine-maintenance`).
+  - `src/utils/commitMessage.ts`: Module thuần phục vụ renderer & electron gồm `buildCommitArgs` (cấu hình cờ `--dry-run`, `--push`, `-c`, `-m`, `--no-changelog`, `--legacy`), `stripAnsi` loại bỏ ANSI escape codes, và `parseCommitMessage` trích xuất thông điệp commit từ các định dạng output khác nhau của `omp commit`.
+  - `electron/commit-assistant.ts`: Cung cấp `isGitDirty` kiểm tra trạng thái git porcelain kèm giới hạn buffer và cap danh sách files an toàn, `CommitAssistantManager` điều phối runner cho cả `omp commit --dry-run` và custom `git commit -m` (kèm tự động stage nếu cần và chuỗi `git push`), hỗ trợ hủy tiến trình staging đang chờ.
+  - `electron/main.ts`, `electron/preload.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung các IPC channels `omp:commit-run`, `omp:commit-cancel`, `omp:commit-status`, event `omp:commit-output`, và các phương thức `runCommit`, `cancelCommit`, `getCommitStatus`, `onCommitOutput` trên `window.electronAPI`.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung callbacks `runCommitAssistant`, `cancelCommitAssistant`, `checkCommitStatus`.
+  - `src/components/Modals/CommitModal.tsx`: Modal trợ lý commit hoàn chỉnh:
+    - Kiểm tra nhánh Git và số tệp thay đổi, vô hiệu hóa nút khi working tree sạch hoặc không phải git repo.
+    - Thêm ngữ cảnh context (`-c`), chọn model từ `availableModels` (`-m`), toggles `push`, `noChangelog`, `legacy`.
+    - Nút Tạo thông điệp (dry-run) sinh message và preview có thể trực tiếp chỉnh sửa; nhận biết trạng thái đã sửa vs đề xuất từ AI.
+    - Nút Commit và Commit & Push với luồng trạng thái đồng bộ, log stream thu gọn có giới hạn 500 dòng an toàn.
+    - Hủy bỏ tác vụ đang chạy giữa chừng không để lại tiến trình treo.
+  - `src/components/HeaderBar.tsx` & `src/App.tsx`: Thêm nút Commit (icon `GitCommit`) cạnh nút Ops, kết nối mở `CommitModal`.
+  - `shared/i18n/{vi,en}.ts`: Bổ sung đồng bộ 31 khóa i18n cho Commit Assistant (1049 keys, parity 100%).
+  - `scripts/verify-commit-assistant.mjs`: Test suite 12/12 checks pass (buildCommitArgs, stripAnsi, parseCommitMessage fixtures, isGitDirty, multi-instance StreamingTaskRunner, cancellation, contracts và i18n sync).
+  - `package.json`: Thêm script `"test:commit-assistant"` và gắn vào chuỗi `"test"`.
+  - Verification: `test:commit-assistant` (12/12 passed), `test:engine-maintenance` (6/6 passed), `test:i18n` (1049/1049 passed), live end-to-end smoke test passed, cả `npx tsc --noEmit` và `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Triển khai Phase 15: External Agents & Skills Manager.
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-14-commit-assistant.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `scripts/verify-commit-assistant.mjs`
+
+## 2026-09-03 — Phase 13: Grievances
+
+- **State:** Đã hoàn thành toàn bộ Phase 13 (Grievances - Auto-QA Tool Issues) của roadmap OMP Parity Gap:
+  - `electron/grievances.ts`: Cung cấp hàm `validateCleanOptions(options)` kiểm tra chặt chẽ tính loại trừ lẫn nhau của `id`, `tool`, `all`; hàm `buildGrievancesArgs(action, opts)` hỗ trợ tham số top-level `--profile`, cờ `--limit` (giới hạn cap 200 dòng), `--tool`, `--id`, `--all`, `--json`; `parseGrievancesListJson(stdout)` phân tích output an toàn; `listGrievances`, `cleanGrievances` và `pushGrievances` gọi CLI bất đồng bộ, tự động đọc endpoint `dev.autoqaPush.endpoint` (hoặc fallback mặc định).
+  - `electron/main.ts`: Đăng ký IPC handlers `omp:grievances-list`, `omp:grievances-clean`, `omp:grievances-push` giải quyết profile và workspace directory.
+  - `electron/preload.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung các phương thức `listGrievances`, `cleanGrievances`, `pushGrievances` vào `window.electronAPI` và các interface `GrievanceItem`, `GrievancesListOptions`, `GrievancesListResponse`, `GrievancesCleanOptions`, `GrievancesCleanResponse`, `GrievancesPushResponse`.
+  - `src/hooks/useOmpRpc.ts`: Cung cấp các callbacks `listGrievances`, `cleanGrievances`, `pushGrievances`.
+  - `src/components/Modals/ops/GrievancesTab.tsx`: Component `React.memo` tab Grievances trong OpsModal:
+    - Bảng danh sách sự cố (cột ID, Tool badge, Model & Version, Report kèm tính năng xem thêm/thu gọn (expand/collapse) cho nội dung dài).
+    - Bộ lọc danh sách theo tool (dropdown) và thanh tìm kiếm realtime.
+    - Các tác vụ: Làm mới (Refresh spinner), Xóa 1 sự cố với modal xác nhận, Xóa theo tool với modal xác nhận, Xóa toàn bộ với modal xác nhận.
+    - Nút Gửi báo cáo (Push) kèm modal xác nhận cảnh báo an toàn thông tin và hiển thị rõ ràng endpoint tiếp nhận dữ liệu.
+    - Cap 200 dòng, thông báo phản hồi feedback banner và xử lý trạng thái rỗng.
+  - `src/components/Modals/OpsModal.tsx` & `src/App.tsx`: Tích hợp tab `'grievances'` (icon `Wrench`), i18n label `t('ops.tab.grievances')`, kết nối các handlers.
+  - `shared/i18n/{vi,en}.ts`: Thêm đầy đủ các khóa i18n cho Grievances (985 keys, parity 100%).
+  - `scripts/verify-grievances.mjs`: Test suite 7/7 tests pass (validateCleanOptions, buildGrievancesArgs, parseGrievancesListJson fixture, live CLI list & clean, contract pinning, i18n sync).
+  - `package.json`: Thêm script `"test:grievances"` và gắn vào chuỗi `"test"`.
+  - Verification: `test:grievances` (7/7 passed), `test:i18n` (985/985 passed), `test:ssh-hosts` (9/9 passed), `test:image-backends` (15/15 passed), `test:storage-gc` (8/8 passed), `npx tsc --noEmit` và `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Triển khai Phase 14: Commit Assistant (`plans/260902-2057-omp-parity-gap-i18n/phase-14-commit-assistant.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-13-grievances.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `scripts/verify-grievances.mjs`
+
+## 2026-09-03 — Phase 12: SSH Hosts
+
+- **State:** Đã hoàn thành toàn bộ Phase 12 (SSH Hosts) của roadmap OMP Parity Gap:
+  - `electron/ssh-hosts.ts`: Cung cấp hàm `validateHostName(name)` (`^[\w.-]+$`), `buildSshArgs(action, opts)` hỗ trợ tham số top-level `--profile`, cờ `--host`, `--user`, `--port`, `--key` (mở rộng `~` qua `expandHomeDir`), `--desc`, `--compat`, `--scope` và `--json`; các hàm `listSshHosts(binary, cwd, profile)`, `addSshHost(binary, cwd, input, profile)` (kiểm tra tồn tại của file key trước khi chạy, validate port 1-65535, host, scope), và `removeSshHost(binary, cwd, name, scope, profile)`.
+  - `electron/main.ts`: IPC handlers `omp:ssh-list`, `omp:ssh-add`, `omp:ssh-remove` phân giải profile và thư mục workspace của bridge/settings.
+  - `electron/preload.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung methods `listSshHosts`, `addSshHost`, `removeSshHost` vào `window.electronAPI` và các interface `SshHostConfig`, `SshHostAddInput`, `SshHostsListData`, `SshHostsListResponse`, `SshHostMutationResponse`.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung callbacks `listSshHosts`, `addSshHost`, `removeSshHost`.
+  - `src/components/Modals/ops/SshTab.tsx`: Component `React.memo` tab SSH trong OpsModal:
+    - Danh sách hosts phân loại theo scope (Project vs User) với bộ lọc tab (Tất cả, Dự án, Người dùng) kèm đếm số lượng.
+    - Thanh tìm kiếm realtime theo tên host, IP/domain, username, key, mô tả.
+    - Thẻ Host trực quan với badge scope, target `user@host:port`, đường dẫn key, badge `Compat`, mô tả, nút sao chép lệnh SSH (`ssh [-p port] [-i key] [user@]host`) có phản hồi trực quan và nút xóa có modal xác nhận.
+    - Modal Thêm Host với validation realtime, chọn tệp khóa qua file dialog `selectFile`, scope selector, lưu host có loading spinner.
+    - Trạng thái rỗng (empty state) và xử lý lỗi / thông báo feedback banner.
+  - `src/components/Modals/OpsModal.tsx` & `src/App.tsx`: Tích hợp tab `'ssh'` (icon `Server`), nhãn i18n `t('ops.tab.ssh')`, kết nối các callbacks SSH.
+  - `shared/i18n/{vi,en}.ts`: Thêm đầy đủ 50 khóa i18n mới cho SSH Hosts (899 keys parity 100%).
+  - `scripts/verify-ssh-hosts.mjs`: Test suite 9/9 tests pass (name validation, args building with flags/profile/key expansion, input validation errors, live roundtrip add/list/duplicate-error/remove với binary thật `omp` trong temp dir, contract check xuyên suốt các layer và i18n sync).
+  - `package.json`: Thêm script `"test:ssh-hosts"` và gắn vào `"test"`.
+  - Verification: `test:ssh-hosts` (9/9 passed), `test:image-backends` (15/15 passed), `test:storage-gc` (8/8 passed), `test:i18n` (899/899 passed), cả `npx tsc --noEmit` và `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Triển khai Phase 13: Grievances (`plans/260902-2057-omp-parity-gap-i18n/phase-13-grievances.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-12-ssh-hosts.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `scripts/verify-ssh-hosts.mjs`
+
+## 2026-09-03 — Phase 11: Image Backends
+
+- **State:** Đã hoàn thành toàn bộ Phase 11 (Image Backends) của roadmap OMP Parity Gap:
+  - `electron/image-backends.ts`: Cung cấp hàm `buildImagesArgs(action, opts)` hỗ trợ tham số top-level `--profile`, cờ `--dir`, `--timeout`, `--all`, `--apply` và `runImages(binaryPath, action, opts)` sử dụng `child_process.spawn` kết hợp `extractJsonSubstring` để trích xuất ngay lập tức payload JSON hoàn chỉnh khi engine in xong và ngắt tiến trình kịp thời (tránh bị treo 20s do daemon probe upstream), đồng thời hỗ trợ hard timeout 20s an toàn.
+  - `electron/main.ts`: Handler `omp:images-run` kiểm tra trạng thái engine stream/thinking (`ompBridge.isStreaming()`) để chặn lệnh `purge --apply` phá hủy khi engine đang bận; phân giải đúng profile và thư mục workspace của bridge/settings.
+  - `electron/preload.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung method `runImages` vào `window.electronAPI` và các interface `ImageBackendsAction`, `ImageBackendsOptions`, `ImageBackendsResponse`, `ImageStatusData`, `ImageDoctorData`, `ImageProbeData`, `ImagePurgeData`, `ImageRunResultData`.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung `runImages` callback.
+  - `src/components/Modals/ops/StorageTab.tsx`: Tích hợp hoàn chỉnh Section "Ảnh & Image Backends (`omp images`)" trong tab Lưu trữ gồm 3 thẻ trạng thái (Trạng thái & 4 Backends, Provider Files phân bổ theo OpenAI/Anthropic/Google, Storage Savings), nhóm Chẩn đoán & Thăm dò (Doctor checks với severity icon, Probe với tùy chọn timeout), Dọn dẹp Cache ảnh (Purge Dry-run, Apply với modal xác nhận số lượng/dung lượng, phát hiện đổi tùy chọn sau xem trước và hiển thị danh sách lỗi cục bộ nếu có). Sử dụng ref guard ngăn chặn re-render vòng lặp khi tự động tải trạng thái.
+  - `shared/i18n/{vi,en}.ts`: Thêm đầy đủ 45 khóa i18n cho Image Backends (793 keys parity 100%).
+  - `scripts/verify-image-backends.mjs`: Test suite 15/15 tests pass (unit test `buildImagesArgs` bao gồm profile prefixing, mock hanging script thoát nhanh <5s, mock doctor/probe/purge dry-run & apply, error handling, contract check xuyên suốt các layer và live commands với binary thật `omp`).
+  - `package.json`: Thêm script `"test:image-backends"` và gắn vào `"test"`.
+  - Verification: `test:image-backends` (15/15 passed), `test:storage-gc` (8/8 passed), `test:i18n` (793/793 passed), cả `npx tsc --noEmit` và `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Triển khai Phase 12: Worktree Management (`plans/260902-2057-omp-parity-gap-i18n/phase-12-worktree-management.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-11-image-backends.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `scripts/verify-image-backends.mjs`
+
+## 2026-09-03 — Phase 10: Storage GC
+
+- **State:** Đã hoàn thành toàn bộ Phase 10 (Storage GC) của roadmap OMP Parity Gap:
+  - `electron/storage-gc.ts`: Cung cấp hàm `buildGcArgs(opts)` chuẩn hóa cờ dòng lệnh CLI (`--blobs`, `--archive`, `--wal`, `--cold-archive-after-days`, `--retain-newest-global`, `--retain-newest-per-cwd`, `--agent-dir`), `runGc(binaryPath, opts)` thực thi async với timeout 60s, bắt lỗi khóa `gc.lock` và parse kết quả JSON.
+  - `electron/main.ts`: Handler `omp:gc-run` kiểm tra trạng thái engine stream/thinking (`ompBridge.isStreaming()`) để chặn lệnh `apply` phá hủy khi engine đang bận; phân giải đúng profile được chọn từ settings/bridge.
+  - `electron/omp-bridge.ts`: Bổ sung helper `getStatus()` và `isStreaming()`.
+  - `electron/preload.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung method `runGc` vào `window.electronAPI` và các interface `StorageGcOptions`, `StorageGcReport`, `StorageGcResponse`, `StorageGcBlobsResult`, `StorageGcArchiveResult`, `StorageGcWalResult`.
+  - `src/hooks/useOmpRpc.ts`: Bổ sung `runGc` callback.
+  - `src/components/Modals/ops/StorageTab.tsx`: Tab Lưu trữ mới trong OpsModal với form tùy chọn, nút "Xem trước (Dry-run)" và "Áp dụng thay đổi", modal xác nhận chi tiết số blob sẽ xóa và session sẽ archive, thẻ tóm tắt phân tách theo Blobs, Archive và WAL, huy hiệu trạng thái partial failure/warning và theo dõi spinner theo từng nút hành động.
+  - `src/components/Modals/OpsModal.tsx` & `src/App.tsx`: Tích hợp tab `'storage'` (Lưu trữ) với icon `Database`, truyền trạng thái `isStreaming` để khóa hành động dọn dẹp khi engine đang hoạt động.
+  - `shared/i18n/{vi,en}.ts`: Thêm đầy đủ các khóa i18n cho Storage Tab (703 keys parity 100%).
+  - `scripts/verify-storage-gc.mjs`: Test suite 8/8 tests pass (unit test `buildGcArgs`, mock output fixture, lock conflict, contract pinning trên các layer, live dry-run với binary thật `omp`).
+  - `package.json`: Thêm script `"test:storage-gc"` và gắn vào `"test"`.
+  - Typecheck: cả `npx tsc --noEmit` và `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Triển khai Phase 11: Image Backends (`plans/260902-2057-omp-parity-gap-i18n/phase-11-image-backends.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-10-storage-gc.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+
+## 2026-09-03 — Phase 9: Auth via RPC Login
+
+- **State:** Đã hoàn thành toàn bộ Phase 9 của roadmap OMP Parity Gap:
+  - **Live Probe Findings:**
+    - `get_login_providers`: Lệnh RPC chuẩn `omp --mode rpc` trả về danh sách đầy đủ 70 providers với `{ id, name, available, authenticated }`.
+    - `login`: Lệnh RPC `{ type: 'login', providerId }`. Khi chạy OAuth browser flow (e.g. Anthropic), engine phát `extension_ui_request` (`open_url`, `notify`, `input`), và client phản hồi mã ủy quyền qua `extension_ui_response`.
+    - Khi gặp provider yêu cầu terminal interactive prompts (e.g. `github-copilot`), engine báo lỗi không hỗ trợ trong RPC mode -> Hybrid fallback tự động chuyển sang `AuthLoginManager` CLI spawn.
+    - `logout`: RPC không có lệnh logout native -> thực hiện qua CLI `omp auth-broker logout <provider>` an toàn, không block, cập nhật trực tiếp auth store.
+  - `electron/omp-rpc-types.ts`: Định nghĩa `GetLoginProvidersCommand`, `LoginCommand`, `GetLoginProvidersResponseData`, `LoginResponseData`, mở rộng `OmpCommandFrame` và `ExtensionUiRequestEvent`.
+  - `electron/omp-bridge.ts`: Bổ sung `getLoginProviders()`, `startAuthLogin()`, `cancelAuthLogin()`, `submitAuthLoginInput()`, `setOpenUrlHandler()`, `setInteractiveFallback()`, `isRunning()`, xử lý `extension_ui_request` `open_url` và `input` trong login flow.
+  - `electron/main.ts`: Handler `omp:login-providers` ưu tiên bridge khi `isRunning()`, fallback CLI `fetchLoginProviders` + `fetchAuthenticatedProviders` khi offline; handler `omp:auth-logout` chạy `auth-broker logout <providerId>`; handler `omp:auth-login-start/cancel/input` kết nối qua RPC với fallback CLI.
+  - `electron/preload.ts`, `electron/types.ts`, `src/types/index.ts`: Bổ sung `logoutAuthProvider` vào `window.electronAPI` và mở rộng `LoginProviderItem` với `available` và `authenticated`.
+  - `src/components/Modals/SettingsModal.tsx`:
+    - Providers tab hiển thị badge `✓ Đã đăng nhập` dựa trên `p.authenticated || authedProviders.includes(p.id)`.
+    - Thêm nút "Đăng xuất" cho provider đã xác thực có trạng thái loading spinner.
+    - Thêm cảnh báo khi engine chưa chạy và vô hiệu hóa nút Đăng nhập kèm gợi ý mở workspace.
+    - Tự động làm mới danh sách providers khi login/logout thành công.
+  - `shared/i18n/{vi,en}.ts`: Thêm 8 cặp khóa i18n mới cho providers login/logout/offline (603 keys parity).
+  - `scripts/verify-auth-rpc-live.mjs`: Test suite live kiểm tra handshake, `get_login_providers`, `login` error validation, interactive-prompt detection, optional `OMP_PROBE_PROVIDER` browser flow, CLI logout (17/17 passed; 18/18 khi set probe).
+  - `scripts/verify-auth-login.mjs`: Thêm test suite cho OmpBridge Auth & Login offline/state guards (24/24 passed).
+  - `package.json`: Thêm script `test:auth-rpc-live`.
+  - Verification: `test:auth-rpc-live` (17/17 passed), `test:auth-login` (24/24 passed), `test:bridge` (55/55 passed), `test:i18n` (603/603 passed), cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Triển khai Phase 10: Storage GC (`plans/260902-2057-omp-parity-gap-i18n/phase-10-storage-gc.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-09-auth-rpc-login.md`
+  - `scripts/verify-auth-rpc-live.mjs`
+  - `scripts/verify-auth-login.mjs`
+
+## 2026-09-03 — Phase 8: Usage History & Stats Dashboard
+
+- **State:** Đã hoàn thành toàn bộ Phase 8 của roadmap OMP Parity Gap:
+  - `electron/stats-dashboard.ts`: Tạo mới `StatsDashboardManager` quản lý tiến trình web server `omp stats -p <port> [--host <host>]`:
+    - Kiểm tra tính khả dụng của cổng TCP trước khi spawn để tránh xung đột với tiến trình khác.
+    - Giám sát ready đa tầng: phân tích output stdout/stderr tìm `Dashboard available at:` và polling endpoint HTTP GET cục bộ.
+    - Dọn dẹp tiến trình an toàn với chu trình SIGTERM -> SIGKILL có timeout và gắn vào `disposeAll()` trong `electron/main.ts`.
+  - `electron/usage-stats.ts`: Mở rộng parser và fetchers:
+    - `fetchUsageHistory(binary, { days, provider })`: Lấy lịch sử hạn mức qua `omp usage --history --days <N> --json` kèm bộ nhớ cache in-memory TTL 60s.
+    - `fetchUsageClients(binary, { days })`: Lấy tiêu thụ token theo client qua `omp usage clients --days <N> --json` kèm cache in-memory.
+    - `invalidateUsage(binary, { provider })`: Xóa cache hạn mức phía engine qua `omp usage invalidate` và tự động làm rỗng cache in-memory.
+    - `fetchGlobalUsage`: Bổ sung hỗ trợ các cờ `--provider <id>` và `--redact`.
+  - `electron/settings-store.ts`: Bổ sung cấu hình `statsDashboardPort` (port 1024-65535, mặc định 3457), hỗ trợ sanitize khi lưu và load.
+  - `electron/main.ts` & `electron/preload.ts`: Thêm các IPC handlers và bridge methods: `omp:usage-history`, `omp:usage-clients`, `omp:usage-invalidate`, `omp:stats-dashboard-start`, `omp:stats-dashboard-stop`, `omp:stats-dashboard-status`, `shell:open-external` (kiểm tra an toàn chỉ cho phép protocol `http:` và `https:`).
+  - `electron/types.ts` & `src/types/index.ts`: Bổ sung đầy đủ types cho Usage History, Clients, Stats Dashboard và cập nhật `ElectronAPI`.
+  - `src/hooks/useOmpRpc.ts`: Expose các wrapper methods phục vụ `SessionStatsPanel`.
+  - `src/components/HeaderBar/SessionStatsPanel.tsx`: Nâng cấp giao diện:
+    - Tab Usage Limits: Thêm sub-tab (Live Limits, Usage History, Client Usage), bộ lọc Provider, chọn khoảng ngày (1/7/30), toggle Redact (mặc định bật bảo vệ thông tin), nút Invalidate Cache có loading spinner.
+    - Vẽ biểu đồ sparkline SVG xu hướng sử dụng theo từng nhóm `(provider, limitId)` khi có đủ dữ liệu.
+    - Tab Global Stats: Bổ sung card điều khiển Dashboard (Mở dashboard, Dừng, xem trạng thái cổng) và nút "Trace phiên này" (`/trace`) tự động kích hoạt dashboard và bắt URL trace.
+  - `shared/i18n/{vi,en}.ts`: Bổ sung 38 khóa i18n mới cho Usage History, Clients, Stats Dashboard và Settings (587 keys parity).
+  - `scripts/verify-usage-history-dashboard.mjs`: Test suite 73 checks kiểm tra parse fixture, stub CLI, cache invalidation, dashboard lifecycle, URL security validation, IPC contracts và live CLI checks.
+  - `package.json`: Thêm script `test:usage-history-dashboard` vào chuỗi `npm test`.
+  - Verification: `test:usage-history-dashboard` (73/73 passed), `test:usage-stats` (45/45 passed), `test:i18n` (587/587 passed), cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) 0 lỗi.
+- **In-flight:** Không có. Sẵn sàng cho Phase 9: Auth via RPC Login.
+- **Next:**
+  1. Triển khai Phase 9: Auth via RPC Login (`plans/260902-2057-omp-parity-gap-i18n/phase-09-auth-rpc-login.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-08-usage-history-stats-dashboard.md`
+  - `scripts/verify-usage-history-dashboard.mjs`
+
+## 2026-09-03 — Phase 7: Update Channel & Models Refresh
+
+- **State:** Đã hoàn thành toàn bộ Phase 7 của roadmap OMP Parity Gap:
+  - `src/components/Modals/ops/EngineTab.tsx`: Tách toàn bộ tab Engine từ `OpsModal.tsx` thành component `React.memo` riêng biệt:
+    - Quản lý kênh cập nhật nhị phân OMP CLI (`update.channel`: Stable / Canary), đọc qua `getEngineConfig`, hiển thị badge động và nút chuyển đổi giữa Canary/Stable có confirm dialog an toàn.
+    - Tự động kiểm tra và dừng tiến trình OMP engine trước khi tiến hành cập nhật nhị phân để chống xung đột file.
+    - Các tác vụ bảo trì nhanh: Cập nhật cưỡng bức (`update --force`), Cập nhật toàn bộ plugins (`update --plugins`).
+    - Quản lý các thành phần mở rộng hệ thống (`setup <component>`) và tải Tiny Local Models (`tiny-models download`).
+    - Khung xem live execution logs realtime, nút Huỷ tác vụ và banner thông báo khởi động lại engine.
+  - `src/components/Modals/settings/ModelsCatalogSection.tsx`: Tạo mới component quản lý tra cứu catalog models (`omp models find <query> --json`) và làm mới catalog upstream (`omp models refresh`):
+    - Ô tìm kiếm debounce/submit tức thời, hiển thị kết quả phân trang an toàn (cap 50), hiển thị đầy đủ thông tin model: provider, ID, selector, name, reasoning badge, context window, max tokens, và biểu phí chi phí input/output.
+    - Nút sao chép selector model nhanh vào clipboard với phản hồi trực quan.
+    - Nút "Làm mới Catalog" (`models refresh`), tự động kích hoạt callback `refreshModels()` để cập nhật danh mục models khả dụng ngay lập tức mà không cần restart app.
+  - `src/components/Modals/SettingsModal.tsx`: Tích hợp `<ModelsCatalogSection onRefreshModels={onRefreshModels} />` vào tab Providers.
+  - `src/components/Modals/OpsModal.tsx`: Tích hợp `<EngineTab onRestartEngine={onRestartEngine} />` và dọn dẹp logic inline cũ.
+  - `src/App.tsx`: Truyền prop `onRefreshModels={refreshModels}` từ `useOmpRpc` vào `SettingsModal`.
+  - `shared/i18n/vi.ts` & `shared/i18n/en.ts`: Bổ sung đồng bộ các khóa i18n cho EngineTab và ModelsCatalogSection (509 keys parity).
+  - `scripts/verify-update-models.mjs`: Test suite 7 checks kiểm tra `parseFindModelsJson` (chuẩn hóa fields, selector fallback, banner noise, direct array, empty input), `findModels` validation, ma trận tham số tác vụ bảo trì Phase 7, Preload/Main IPC contract, và tích hợp UI/i18n.
+  - `package.json`: Thêm script `test:update-models` vào chuỗi `npm test`.
+  - Verification: `test:update-models` (7/7 passed), `test:engine-maintenance` (6/6 passed), `test:i18n` (509/509 passed), `test:preload` (pass), cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) 0 lỗi.
+- **In-flight:** Không có. Sẵn sàng cho Phase 8: Usage History & Stats Dashboard.
+- **Next:**
+  1. Triển khai Phase 8: Usage History & Stats Dashboard (`plans/260902-2057-omp-parity-gap-i18n/phase-08-usage-history-stats-dashboard.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-07-update-channel-models-refresh.md`
+  - `scripts/verify-update-models.mjs`
+
+## 2026-09-03 — Phase 6: Process Manager Expansion
+
+- **State:** Đã hoàn thành toàn bộ Phase 6 của roadmap OMP Parity Gap:
+  - `electron/ops-manager.ts`: Mở rộng `OpsManager` với phương thức `info` (`omp ps info <name> --json [--global <service>]`) trả về `OmpDaemonDetail` kèm `OmpDaemonSpec`, và class `ProcessLogFollower` quản lý tiến trình stream log daemon realtime (`omp ps logs <name> --follow [--lines] [--head] [--grep] [--global]`), hỗ trợ tự động hủy tiến trình cũ khi start tiến trình mới, idle timeout 10 phút, và phương thức `dispose()`.
+  - `electron/main.ts`: Tạo hàm dọn dẹp tập trung `disposeAll()` kết hợp `authLoginManager.dispose()`, `engineMaintenanceManager.dispose()`, `opsManager.dispose()`, `ompBridge.stopProcess()`, gắn vào cả `mainWindow.on('closed')` và `app.on('before-quit')`. Bổ sung 3 IPC handlers: `omp:ps-info`, `omp:ps-logs-follow-start` (gửi log lines qua `webContents.send('omp:ps-log-line')`), `omp:ps-logs-follow-stop`.
+  - `electron/preload.ts`: Expose các phương thức context bridge: `getProcessInfo`, `startProcessLogFollow`, `stopProcessLogFollow`, `onPsLogLine`.
+  - `electron/types.ts` & `src/types/index.ts`: Bổ sung các kiểu `OmpDaemonSpec`, `OmpDaemonDetail`, và cập nhật `ElectronAPI`.
+  - `src/components/Modals/ops/ProcessesTab.tsx`: Tách toàn bộ tab Processes từ `OpsModal.tsx` thành component `React.memo` riêng biệt:
+    - Danh sách daemons phân loại theo scope (Project & Global), huy hiệu trạng thái động (`running`, `exited`, v.v.), các nút hành động (Info, Logs, Stop, Restart, Kill).
+    - Drawer chi tiết Daemon hiển thị cấu hình khởi chạy (Spec: application, args, cwd, pty, ready condition, restart policy, persist, detached) và trạng thái runtime (id, createdAt, startedAt, readyAt, exitedAt, exitCode, restartCount, outputBytes).
+    - Trình xem Logs realtime với indicator streaming, thanh điều khiển toolbar: toggle Follow (`--follow`), chọn số dòng (`--lines` 100/500/1000), toggle Head (`--head`), lọc regex (`--grep`), nút xóa màn hình và tự động cuộn xuống cuối, giới hạn bộ đệm an toàn 2000 dòng (`MAX_LOG_BUFFER_LINES`).
+  - `src/components/Modals/OpsModal.tsx`: Tích hợp `<ProcessesTab />` và dọn dẹp logic inline cũ.
+  - `shared/i18n/vi.ts` & `shared/i18n/en.ts`: Bổ sung đồng bộ 38 khóa i18n cho ProcessesTab và Process Manager Expansion.
+  - `scripts/verify-ops-manager-follow.mjs`: Test suite 5 checks kiểm tra `ProcessLogFollower` stream lines, tự động ngắt follower cũ, vòng đời `OpsManager` follow, validation và kiểm tra hợp đồng IPC/Preload.
+  - `scripts/verify-ops-manager.mjs`: Cập nhật thêm kiểm tra `info()`, error handling và hợp đồng IPC mới.
+  - `package.json`: Thêm script `test:ops-manager-follow` vào chuỗi `npm test`.
+  - Verification: `test:ops-manager` (10/10 passed), `test:ops-manager-follow` (5/5 passed), `test:i18n` (409/409 passed), `test:host-tools` (18/18 passed), `npm test` toàn bộ ~47 test suites pass 100%, cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) 0 lỗi.
+- **In-flight:** Không có. Sẵn sàng cho Phase tiếp theo.
+- **Next:**
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-06-process-manager-expansion.md`
+  - `scripts/verify-ops-manager-follow.mjs`
+
 ## 2026-09-03 — Phase 5: Plugin Manager Expansion
 
 - **State:** Đã hoàn thành toàn bộ Phase 5 của roadmap OMP Parity Gap:

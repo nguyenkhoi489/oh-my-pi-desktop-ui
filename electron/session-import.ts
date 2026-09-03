@@ -1,17 +1,18 @@
+import { tm } from '../shared/i18n/index.ts';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import type { ForeignSessionCandidate, ImportSessionResult } from './types.ts';
 
-// Chuyển đường dẫn thư mục làm việc thành tên thư mục lưu session của OMP
+// Convert working directory path to OMP session directory name
 export function sanitizeCwdToSessionDirName(cwd: string): string {
   const normalized = path.resolve(cwd);
   const trimmed = normalized.replace(/^[/\\]+/, '').replace(/[/\\]+/g, '-').replace(/:/g, '-');
   return `-${trimmed}`;
 }
 
-// Lấy đường dẫn thư mục lưu session OMP cho một project
+// Get OMP session directory path for a project
 export function getOmpSessionDir(targetCwd?: string): string {
   const baseDir = process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.omp', 'agent');
   const sessionsBase = path.join(baseDir, 'sessions');
@@ -21,14 +22,14 @@ export function getOmpSessionDir(targetCwd?: string): string {
   return path.join(sessionsBase, sanitizeCwdToSessionDirName(targetCwd));
 }
 
-// Cắt ngắn văn bản để làm tiêu đề hoặc preview
+// Truncate text for title or preview
 function truncateText(text: string, maxLength = 80): string {
   const clean = text.replace(/\s+/g, ' ').trim();
   if (clean.length <= maxLength) return clean;
   return clean.slice(0, maxLength - 1) + '…';
 }
 
-// Quét các session Claude Code từ thư mục ~/.claude
+// Scan Claude Code sessions from ~/.claude directory
 export async function scanClaudeSessions(configDir?: string): Promise<ForeignSessionCandidate[]> {
   const root = configDir || process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
   const candidates: ForeignSessionCandidate[] = [];
@@ -37,7 +38,7 @@ export async function scanClaudeSessions(configDir?: string): Promise<ForeignSes
     return candidates;
   }
 
-  // Đọc metadata từ history.jsonl nếu có
+  // Read metadata from history.jsonl if available
   const historyMap = new Map<string, { created?: number; modified?: number; title?: string; firstMessage?: string }>();
   const historyFile = path.join(root, 'history.jsonl');
   if (fs.existsSync(historyFile)) {
@@ -59,15 +60,15 @@ export async function scanClaudeSessions(configDir?: string): Promise<ForeignSes
             });
           }
         } catch {
-          // Bỏ qua dòng lỗi
+          // Ignore error line
         }
       }
     } catch {
-      // Bỏ qua lỗi đọc file history
+      // Ignore error reading history file
     }
   }
 
-  // Đọc danh sách project mapping từ .claude.json nếu có
+  // Read project mapping list from .claude.json if available
   const projectMapping = new Map<string, string>();
   const claudeJsonPath = path.join(root, '.claude.json');
   if (fs.existsSync(claudeJsonPath)) {
@@ -83,7 +84,7 @@ export async function scanClaudeSessions(configDir?: string): Promise<ForeignSes
         }
       }
     } catch {
-      // Bỏ qua lỗi đọc config
+    // Ignore error reading config
     }
   }
 
@@ -127,7 +128,7 @@ export async function scanClaudeSessions(configDir?: string): Promise<ForeignSes
           let detectedCreated = historyMeta?.created || stat.birthtimeMs || stat.ctimeMs || stat.mtimeMs;
           let detectedModified = Math.max(historyMeta?.modified || 0, stat.mtimeMs);
 
-          // Đọc mẫu vài dòng đầu và cuối để trích xuất title, cwd và first message nếu thiếu
+          // Read first and last few lines sample to extract title, cwd and first message if missing
           const content = fs.readFileSync(filePath, 'utf-8');
           const lines = content.split('\n');
 
@@ -136,7 +137,7 @@ export async function scanClaudeSessions(configDir?: string): Promise<ForeignSes
             if (!trimmed) continue;
             messageCount++;
             if (messageCount > 500 && title && detectedCwd && firstMessage) {
-              // Đã có đủ metadata cơ bản, dừng đọc sớm
+              // Found sufficient basic metadata, stop reading early
               break;
             }
 
@@ -170,7 +171,7 @@ export async function scanClaudeSessions(configDir?: string): Promise<ForeignSes
                 }
               }
             } catch {
-              // Bỏ qua dòng json lỗi
+            // Ignore invalid json line
             }
           }
 
@@ -186,7 +187,7 @@ export async function scanClaudeSessions(configDir?: string): Promise<ForeignSes
             messageCount,
           });
         } catch {
-          // Bỏ qua file unreadable
+        // Ignore unreadable file
         }
       }
     }
@@ -195,7 +196,7 @@ export async function scanClaudeSessions(configDir?: string): Promise<ForeignSes
   return candidates;
 }
 
-// Quét các session Codex từ thư mục ~/.codex
+// Scan Codex sessions from ~/.codex directory
 export async function scanCodexSessions(codexDir?: string): Promise<ForeignSessionCandidate[]> {
   const root = codexDir || path.join(os.homedir(), '.codex');
   const candidates: ForeignSessionCandidate[] = [];
@@ -204,7 +205,7 @@ export async function scanCodexSessions(codexDir?: string): Promise<ForeignSessi
     return candidates;
   }
 
-  // Quét đệ quy thư mục sessions
+  // Recursively scan sessions directory
   const sessionsDir = path.join(root, 'sessions');
   const filesToScan: string[] = [];
 
@@ -221,13 +222,13 @@ export async function scanCodexSessions(codexDir?: string): Promise<ForeignSessi
         }
       }
     } catch {
-      // Bỏ qua lỗi đọc thư mục
+    // Ignore directory read error
     }
   }
 
   collectJsonlFiles(sessionsDir);
 
-  // Đọc thêm index nếu có
+  // Read index if available
   const titleMap = new Map<string, string>();
   const indexFile = path.join(root, 'session_index.jsonl');
   if (fs.existsSync(indexFile)) {
@@ -302,7 +303,7 @@ export async function scanCodexSessions(codexDir?: string): Promise<ForeignSessi
             }
           }
         } catch {
-          // Bỏ qua dòng json lỗi
+        // Ignore invalid json line
         }
       }
 
@@ -318,14 +319,14 @@ export async function scanCodexSessions(codexDir?: string): Promise<ForeignSessi
         messageCount,
       });
     } catch {
-      // Bỏ qua file unreadable
+    // Ignore unreadable file
     }
   }
 
   return candidates;
 }
 
-// Quét toàn bộ session candidates từ Claude và Codex
+// Scan all session candidates from Claude and Codex
 export async function listImportCandidates(
   source?: 'claude' | 'codex',
   currentCwd?: string
@@ -342,13 +343,13 @@ export async function listImportCandidates(
     results.push(...codexList);
   }
 
-  // Sắp xếp theo modified mới nhất trước
+  // Sort by latest modified first
   results.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
 
   return results;
 }
 
-// Chuyển đổi nội dung session Claude thành các bản ghi OMP session jsonl
+// Convert Claude session content to OMP session jsonl records
 export function convertClaudeSessionToOmp(
   content: string,
   candidate: ForeignSessionCandidate,
@@ -361,7 +362,7 @@ export function convertClaudeSessionToOmp(
 
   const outputRecords: any[] = [];
 
-  // Tạo header OMP
+  // Create OMP header
   outputRecords.push({
     type: 'title',
     v: 1,
@@ -467,7 +468,7 @@ export function convertClaudeSessionToOmp(
         prevId = recordId;
       }
     } catch {
-      // Bỏ qua dòng json lỗi
+    // Ignore invalid json line
     }
   }
 
@@ -475,7 +476,7 @@ export function convertClaudeSessionToOmp(
   return { ompJsonl, sessionId: newSessionId, title };
 }
 
-// Chuyển đổi nội dung session Codex thành các bản ghi OMP session jsonl
+// Convert Codex session content to OMP session jsonl records
 export function convertCodexSessionToOmp(
   content: string,
   candidate: ForeignSessionCandidate,
@@ -578,7 +579,7 @@ export function convertCodexSessionToOmp(
         }
       }
     } catch {
-      // Bỏ qua dòng json lỗi
+    // Ignore invalid json line
     }
   }
 
@@ -586,7 +587,7 @@ export function convertCodexSessionToOmp(
   return { ompJsonl, sessionId: newSessionId, title };
 }
 
-// Thực hiện chuyển đổi và lưu session vào thư mục session OMP
+// Convert and save session to OMP session directory
 export async function importForeignSession(
   candidate: ForeignSessionCandidate,
   targetCwd: string,
@@ -594,7 +595,7 @@ export async function importForeignSession(
 ): Promise<ImportSessionResult> {
   try {
     if (!fs.existsSync(candidate.path)) {
-      return { success: false, error: `File session nguồn không tồn tại: ${candidate.path}` };
+      return { success: false, error: tm('electron.sessionImport.sourceFileNotFound', { path: candidate.path }) };
     }
 
     const rawContent = fs.readFileSync(candidate.path, 'utf-8');
@@ -623,7 +624,7 @@ export async function importForeignSession(
   } catch (err: any) {
     return {
       success: false,
-      error: err?.message || 'Chuyển đổi session thất bại',
+      error: err?.message || tm('electron.sessionImport.conversionFailed'),
     };
   }
 }

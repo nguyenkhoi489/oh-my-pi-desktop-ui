@@ -21,7 +21,11 @@ import {
   Settings,
   SlidersHorizontal,
   Terminal,
+  GitCommit,
+  Volume2,
+  Square,
 } from 'lucide-react';
+import { useI18n } from '../i18n/I18nProvider';
 import {
   OmpAgentStatus,
   OmpInstallStatus,
@@ -33,6 +37,16 @@ import {
   OmpApprovalMode,
   GlobalUsageResult,
   GlobalStatsResult,
+  FetchGlobalUsageOptions,
+  FetchUsageHistoryOptions,
+  UsageHistoryResult,
+  FetchUsageClientsOptions,
+  UsageClientsResult,
+  InvalidateUsageOptions,
+  UsageInvalidateResult,
+  StartStatsDashboardOptions,
+  StatsDashboardResult,
+  StatsDashboardStatus,
 } from '../types';
 import { SessionStatsPanel } from './HeaderBar/SessionStatsPanel';
 interface HeaderBarProps {
@@ -57,8 +71,15 @@ interface HeaderBarProps {
   contextUsage?: OmpContextUsage | null;
   tokensPerSecond?: number | null;
   onGetSessionStats?: () => Promise<{ success: boolean; stats?: OmpSessionStats; error?: string }>;
-  onGetGlobalUsage?: (forceRefresh?: boolean) => Promise<GlobalUsageResult>;
+  onGetGlobalUsage?: (options?: boolean | FetchGlobalUsageOptions) => Promise<GlobalUsageResult>;
   onGetGlobalStats?: (forceRefresh?: boolean) => Promise<GlobalStatsResult>;
+  onGetUsageHistory?: (options?: FetchUsageHistoryOptions) => Promise<UsageHistoryResult>;
+  onGetUsageClients?: (options?: FetchUsageClientsOptions) => Promise<UsageClientsResult>;
+  onInvalidateUsage?: (options?: InvalidateUsageOptions) => Promise<UsageInvalidateResult>;
+  onStartStatsDashboard?: (options?: StartStatsDashboardOptions) => Promise<StatsDashboardResult>;
+  onStopStatsDashboard?: () => Promise<StatsDashboardResult>;
+  onGetStatsDashboardStatus?: () => Promise<StatsDashboardStatus>;
+  onOpenExternal?: (url: string) => Promise<{ success: boolean; error?: string }>;
   approvalMode?: OmpApprovalMode;
   onSelectApprovalMode?: (mode: OmpApprovalMode) => void;
   isCompacting?: boolean;
@@ -67,7 +88,12 @@ interface HeaderBarProps {
   onSetAutoCompaction?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onOpenSettingsModal?: () => void;
   onOpenOpsModal?: () => void;
+  onOpenCommitModal?: () => void;
+  isCommitDisabled?: boolean;
   onCopyLastAssistantText?: () => Promise<string | null>;
+  isSpeaking?: boolean;
+  onSpeakLastAssistantText?: () => void;
+  onStopSpeaking?: () => void;
   onToggleTerminal?: () => void;
   isTerminalActive?: boolean;
 }
@@ -96,11 +122,6 @@ interface ApprovalOption {
   description: string;
 }
 
-const APPROVAL_OPTIONS: ApprovalOption[] = [
-  { id: 'always-ask', label: 'Hỏi mọi tool', description: 'Yêu cầu phê duyệt trước khi gọi bất kỳ tool nào' },
-  { id: 'write', label: 'Hỏi khi ghi & exec', description: 'Chỉ yêu cầu phê duyệt khi sửa file hoặc thực thi lệnh' },
-  { id: 'yolo', label: 'Tự chạy', description: 'Tự động thực thi mọi tool mà không cần hỏi' },
-];
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   workspaceName,
   hasWorkspace = true,
@@ -123,6 +144,15 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   contextUsage,
   tokensPerSecond,
   onGetSessionStats,
+  onGetGlobalUsage,
+  onGetGlobalStats,
+  onGetUsageHistory,
+  onGetUsageClients,
+  onInvalidateUsage,
+  onStartStatsDashboard,
+  onStopStatsDashboard,
+  onGetStatsDashboardStatus,
+  onOpenExternal,
   approvalMode,
   onSelectApprovalMode,
   isCompacting = false,
@@ -130,19 +160,27 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onCompact,
   onSetAutoCompaction,
   onOpenOpsModal,
+  onOpenCommitModal,
+  isCommitDisabled,
   onOpenSettingsModal,
-  onGetGlobalUsage,
-  onGetGlobalStats,
   onToggleTerminal,
   isTerminalActive,
   onCopyLastAssistantText,
+  isSpeaking,
+  onSpeakLastAssistantText,
+  onStopSpeaking,
 }) => {
+  const { t } = useI18n();
+  const approvalOptions: ApprovalOption[] = React.useMemo(() => [
+    { id: 'always-ask', label: t('header.approval.alwaysAsk'), description: t('header.approval.alwaysAskDesc') },
+    { id: 'write', label: t('header.approval.write'), description: t('header.approval.writeDesc') },
+    { id: 'yolo', label: t('header.approval.yolo'), description: t('header.approval.yoloDesc') },
+  ], [t]);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isApprovalDropdownOpen, setIsApprovalDropdownOpen] = useState(false);
   const [isStatsPanelOpen, setIsStatsPanelOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const approvalDropdownRef = useRef<HTMLDivElement>(null);
-
   const [copiedLastText, setCopiedLastText] = useState(false);
 
   const handleCopyLastAssistantText = async () => {
@@ -188,7 +226,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       return (
         <span className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-xs font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 animate-pulse">
           <RotateCw className="w-3.5 h-3.5 animate-spin text-purple-500" />
-          Đang nén context...
+          {t('header.compactingContext')}
         </span>
       );
     }
@@ -251,8 +289,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
   const contextTooltip = hasContextUsage
     ? contextUsage!.tokens != null && contextUsage!.contextWindow != null
-      ? `Ngữ cảnh: ${(contextUsage!.tokens as number).toLocaleString()} / ${(contextUsage!.contextWindow as number).toLocaleString()} tokens (${percent}%) - Click xem chi tiết`
-      : `Ngữ cảnh: ${percent}% - Click xem chi tiết`
+      ? t('header.contextUsageDetail', { tokens: (contextUsage!.tokens as number).toLocaleString(), window: (contextUsage!.contextWindow as number).toLocaleString(), percent: percent ?? 0 })
+      : t('header.contextUsageSimple', { percent: percent ?? 0 })
     : undefined;
   const getMeterColorClass = (pct: number) => {
     if (pct > 90) {
@@ -276,7 +314,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               ? 'bg-surface-highlight text-codex-accent border-border'
               : 'bg-surface text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
           }`}
-          title={isLeftSidebarOpen ? 'Thu gọn Explorer (⌘B)' : 'Mở rộng Explorer (⌘B)'}
+          title={isLeftSidebarOpen ? t('header.collapseExplorer') : t('header.expandExplorer')}
         >
           {isLeftSidebarOpen ? (
             <PanelLeftClose className="w-4 h-4" />
@@ -288,7 +326,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         <button
           onClick={onOpenFolder}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 border border-border transition-colors cursor-pointer"
-          title="Mở thư mục dự án"
+          title={t('header.openProjectFolder')}
         >
           <FolderOpen className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400 shrink-0" />
           <span className="max-w-[150px] truncate font-medium">{workspaceName}</span>
@@ -316,7 +354,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             <button
               onClick={onOpenInstallModal}
               className="text-[11px] font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-md border border-amber-500/30 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
-              title="Click để xem hướng dẫn cài đặt OMP"
+              title={t('header.setupOmpTooltip')}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
               Setup OMP
@@ -342,10 +380,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             }`}
             title={
               !hasWorkspace
-                ? 'Mở project trước khi chọn model'
+                ? t('header.openProjectBeforeModel')
                 : isBusy
-                  ? 'Không thể đổi model khi agent đang hoạt động'
-                  : 'Chọn Model & Thinking Level'
+                  ? t('header.modelDisabledBusy')
+                  : t('header.selectModelAndThinking')
             }
           >
             <Cpu className="w-3.5 h-3.5 text-codex-accent shrink-0" />
@@ -454,15 +492,15 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               setIsApprovalDropdownOpen(!isApprovalDropdownOpen);
             }}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border border-border bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 transition-colors font-medium cursor-pointer"
-            title="Chế độ phê duyệt công cụ (Approval Mode)"
+            title={t('header.approvalModeTooltip')}
           >
             <Shield className="w-3.5 h-3.5 text-codex-accent shrink-0" />
             <span className="text-[12px] truncate max-w-[130px]">
               {approvalMode === 'always-ask'
-                ? 'Hỏi mọi tool'
+                ? t('header.approval.alwaysAsk')
                 : approvalMode === 'yolo'
-                ? 'Tự chạy'
-                : 'Hỏi khi ghi & exec'}
+                ? t('header.approval.yolo')
+                : t('header.approval.write')}
             </span>
             <ChevronDown className="w-3 h-3 text-slate-400 dark:text-zinc-500 shrink-0" />
           </button>
@@ -473,7 +511,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 Approval Mode
               </div>
               <div className="pt-1 space-y-0.5 px-1">
-                {APPROVAL_OPTIONS.map((opt) => {
+                {approvalOptions.map((opt) => {
                   const isSelected = approvalMode === opt.id || (!approvalMode && opt.id === 'write');
                   return (
                     <button
@@ -510,7 +548,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         {status === 'streaming' && tokensPerSecond != null && tokensPerSecond > 0 && (
           <span
             className="flex items-center gap-1 whitespace-nowrap px-2 py-1 rounded-md text-[11px] font-mono font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 animate-pulse"
-            title="Tốc độ sinh token"
+            title={t('header.tokensPerSecondTooltip')}
           >
             <Zap className="w-3 h-3 text-emerald-500" />
             {tokensPerSecond >= 10 ? Math.round(tokensPerSecond) : tokensPerSecond.toFixed(1)} tok/s
@@ -541,7 +579,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               ? 'bg-surface-highlight text-codex-accent border-border font-semibold shadow-xs'
               : 'bg-surface text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
           }`}
-          title={isRightSidebarOpen ? 'Thu gọn Agent Panel (⌘J)' : 'Mở rộng Agent Panel (⌘J)'}
+          title={isRightSidebarOpen ? t('header.collapseAgent') : t('header.expandAgent')}
         >
           {isRightSidebarOpen ? (
             <PanelRightClose className="w-3.5 h-3.5 text-codex-accent" />
@@ -554,7 +592,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         <button
           onClick={onToggleTheme}
           className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
-          title={`Chuyển sang chế độ ${theme === 'light' ? 'Dark' : 'Light'}`}
+          title={t('header.switchTheme', { theme: theme === 'light' ? 'Dark' : 'Light' })}
         >
           {theme === 'light' ? (
             <Moon className="w-3.5 h-3.5 text-slate-700" />
@@ -563,19 +601,44 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           )}
         </button>
         {onCopyLastAssistantText && (
-          <button
-            onClick={handleCopyLastAssistantText}
-            className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
-            title={copiedLastText ? 'Đã sao chép phản hồi cuối' : 'Sao chép phản hồi cuối cùng'}
-          >
-            {copiedLastText ? (
-              <Check className="w-3.5 h-3.5 text-emerald-500" />
-            ) : (
-              <Copy className="w-3.5 h-3.5" />
-            )}
-          </button>
-        )}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleCopyLastAssistantText}
+              className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
+              title={copiedLastText ? t('header.copiedLastResponse') : t('header.copyLastResponseAction')}
+            >
+              {copiedLastText ? (
+                <Check className="w-3.5 h-3.5 text-emerald-500" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
 
+            {onSpeakLastAssistantText && (
+              <button
+                onClick={() => {
+                  if (isSpeaking) {
+                    onStopSpeaking?.();
+                  } else {
+                    onSpeakLastAssistantText();
+                  }
+                }}
+                className={`p-2 rounded-lg text-xs border transition-colors cursor-pointer ${
+                  isSpeaking
+                    ? 'bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400 animate-pulse'
+                    : 'bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
+                }`}
+                title={isSpeaking ? t('tts.stop') : t('tts.speakLast')}
+              >
+                {isSpeaking ? (
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                ) : (
+                  <Volume2 className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+          </div>
+        )}
         {onToggleTerminal && (
           <button
             onClick={onToggleTerminal}
@@ -584,7 +647,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 ? 'bg-emerald-950/60 border-emerald-800/60 text-emerald-400'
                 : 'bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
             }`}
-            title="Bật/tắt Terminal Console (⌘`)"
+            title={t('header.toggleTerminal')}
           >
             <Terminal className="w-3.5 h-3.5" />
           </button>
@@ -595,9 +658,22 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <button
             onClick={onOpenOpsModal}
             className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
-            title="Quản lý vận hành (Ops Center)"
+            title={t('header.opsCenterTooltip')}
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {onOpenCommitModal && (
+          <button
+            onClick={onOpenCommitModal}
+            disabled={isCommitDisabled}
+            className={`p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer ${
+              isCommitDisabled ? 'opacity-40 cursor-not-allowed' : ''
+            }`}
+            title={t('header.commitAssistantTooltip')}
+          >
+            <GitCommit className="w-3.5 h-3.5" />
           </button>
         )}
 
@@ -605,7 +681,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <button
             onClick={onOpenSettingsModal}
             className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
-            title="Cài đặt (Settings)"
+            title={t('header.settingsTooltip')}
           >
             <Settings className="w-3.5 h-3.5" />
           </button>
@@ -614,7 +690,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         <button
           onClick={onOpenOmnibar}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
-          title="Mở thanh lệnh nhanh (⌘K)"
+          title={t('header.omnibarTooltip')}
         >
           <Command className="w-3.5 h-3.5" />
           <span className="font-semibold text-[11px]">K</span>
@@ -630,6 +706,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           autoCompactionEnabled={autoCompactionEnabled}
           onGetGlobalUsage={onGetGlobalUsage}
           onGetGlobalStats={onGetGlobalStats}
+          onGetUsageHistory={onGetUsageHistory}
+          onGetUsageClients={onGetUsageClients}
+          onInvalidateUsage={onInvalidateUsage}
+          onStartStatsDashboard={onStartStatsDashboard}
+          onStopStatsDashboard={onStopStatsDashboard}
+          onGetStatsDashboardStatus={onGetStatsDashboardStatus}
+          onOpenExternal={onOpenExternal}
           onCompact={onCompact}
           onSetAutoCompaction={onSetAutoCompaction}
         />

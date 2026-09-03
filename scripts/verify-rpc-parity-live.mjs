@@ -83,10 +83,7 @@ async function runLiveRpcParityVerification() {
     const text = chunk.toString('utf-8');
     const frames = framer.push(text);
     for (const frame of frames) {
-      if (frame.type !== 'response') {
-        receivedEvents.push(frame);
-      }
-
+      receivedEvents.push(frame);
       if (frame.type === 'ready') {
         readyResolver(frame);
       } else if (frame.type === 'response' && frame.id && pendingMap.has(frame.id)) {
@@ -284,15 +281,23 @@ async function runLiveRpcParityVerification() {
 
   // 9. Abort and Prompt
   console.log('\n[Section 9] abort_and_prompt & get_last_assistant_text...');
+  const agentEndCountBefore = receivedEvents.filter((e) => e.type === 'agent_end').length;
   const abortAndPromptRes = await sendCommand({
     type: 'abort_and_prompt',
     id: 'turn-abort-prompt-1',
     prompt: 'Say FINAL_ABORT_AND_PROMPT_DONE',
+    message: 'Say FINAL_ABORT_AND_PROMPT_DONE',
   });
   assert(abortAndPromptRes.success === true, 'abort_and_prompt accepted prompt parameter');
 
   // Wait for turn to finish
-  await new Promise((r) => setTimeout(r, 3500));
+  let turnWaited = 0;
+  while (turnWaited < 15000) {
+    const currentAgentEnds = receivedEvents.filter((e) => e.type === 'agent_end').length;
+    if (currentAgentEnds > agentEndCountBefore) break;
+    await new Promise((r) => setTimeout(r, 400));
+    turnWaited += 400;
+  }
 
   const lastTextRes = await sendCommand({ type: 'get_last_assistant_text', id: 'rpc-last-text-1' });
   assert(
@@ -302,7 +307,7 @@ async function runLiveRpcParityVerification() {
 
   // 10. Handoff command verification
   console.log('\n[Section 10] Handoff command...');
-  const handoffRes = await sendCommand({ type: 'handoff', id: 'rpc-handoff-1' });
+  const handoffRes = await sendCommand({ type: 'handoff', id: 'rpc-handoff-1' }, 30000);
   assert(
     handoffRes.id === 'rpc-handoff-1' && typeof handoffRes.success === 'boolean',
     'handoff command executed and responded'

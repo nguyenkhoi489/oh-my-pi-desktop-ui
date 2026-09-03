@@ -25,6 +25,17 @@ import type {
   SetEngineConfigOptions,
   ResetEngineConfigOptions,
   EngineConfigPathOptions,
+  FetchGlobalUsageOptions,
+  FetchUsageHistoryOptions,
+  FetchUsageClientsOptions,
+  InvalidateUsageOptions,
+  StartStatsDashboardOptions,
+  StorageGcOptions,
+  ImageBackendsAction,
+  ImageBackendsOptions,
+  SshHostAddInput,
+  GrievancesListOptions,
+  GrievancesCleanOptions,
 } from './types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -77,6 +88,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAvailableModels: () =>
     ipcRenderer.invoke('omp:get-models'),
 
+  findModels: (pattern: string) =>
+    ipcRenderer.invoke('omp:models-find', pattern),
+
   setModel: (provider: string, modelId: string) =>
     ipcRenderer.invoke('omp:set-model', provider, modelId),
 
@@ -92,12 +106,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSessionStats: () =>
     ipcRenderer.invoke('omp:session-stats'),
 
-  getGlobalUsage: (forceRefresh?: boolean) =>
-    ipcRenderer.invoke('omp:global-usage', forceRefresh),
+  getGlobalUsage: (options?: boolean | FetchGlobalUsageOptions) =>
+    ipcRenderer.invoke('omp:global-usage', options),
 
   getGlobalStats: (forceRefresh?: boolean) =>
     ipcRenderer.invoke('omp:global-stats', forceRefresh),
 
+  getUsageHistory: (options?: FetchUsageHistoryOptions) =>
+    ipcRenderer.invoke('omp:usage-history', options),
+
+  getUsageClients: (options?: FetchUsageClientsOptions) =>
+    ipcRenderer.invoke('omp:usage-clients', options),
+
+  invalidateUsage: (options?: InvalidateUsageOptions) =>
+    ipcRenderer.invoke('omp:usage-invalidate', options),
+
+  startStatsDashboard: (options?: StartStatsDashboardOptions) =>
+    ipcRenderer.invoke('omp:stats-dashboard-start', options),
+
+  stopStatsDashboard: () =>
+    ipcRenderer.invoke('omp:stats-dashboard-stop'),
+
+  getStatsDashboardStatus: () =>
+    ipcRenderer.invoke('omp:stats-dashboard-status'),
+
+  openExternal: (url: string) =>
+    ipcRenderer.invoke('shell:open-external', url),
   // Engine Configuration (Phase 2)
   getEngineConfig: (options?: FetchEngineConfigOptions) =>
     ipcRenderer.invoke('omp:config-list', options),
@@ -215,11 +249,50 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getProcessLogs: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) =>
     ipcRenderer.invoke('omp:ps-logs', name, options),
 
+  getProcessInfo: (name: string, options?: { global?: string }) =>
+    ipcRenderer.invoke('omp:ps-info', name, options),
+
+  startProcessLogFollow: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) =>
+    ipcRenderer.invoke('omp:ps-logs-follow-start', name, options),
+
+  stopProcessLogFollow: () =>
+    ipcRenderer.invoke('omp:ps-logs-follow-stop'),
+
+  onPsLogLine: (callback: (data: { name: string; line: string }) => void) => {
+    const listener = (_: any, data: { name: string; line: string }) => callback(data);
+    ipcRenderer.on('omp:ps-log-line', listener);
+    return () => {
+      ipcRenderer.removeListener('omp:ps-log-line', listener);
+    };
+  },
+
   listWorktrees: () =>
     ipcRenderer.invoke('omp:worktree-list'),
 
   clearWorktrees: (options?: { all?: boolean; dryRun?: boolean }) =>
     ipcRenderer.invoke('omp:worktree-clear', options),
+
+  // Storage GC (Phase 10)
+  runGc: (options?: StorageGcOptions) =>
+    ipcRenderer.invoke('omp:gc-run', options),
+
+  // Image Backends (Phase 11)
+  runImages: (action?: ImageBackendsAction, options?: ImageBackendsOptions) =>
+    ipcRenderer.invoke('omp:images-run', action, options),
+
+  // SSH Hosts (Phase 12)
+  listSshHosts: () => ipcRenderer.invoke('omp:ssh-list'),
+  addSshHost: (input: SshHostAddInput) => ipcRenderer.invoke('omp:ssh-add', input),
+  removeSshHost: (name: string, scope: 'project' | 'user') =>
+    ipcRenderer.invoke('omp:ssh-remove', name, scope),
+
+  // Grievances (Phase 13)
+  listGrievances: (options?: GrievancesListOptions) =>
+    ipcRenderer.invoke('omp:grievances-list', options),
+  cleanGrievances: (options: GrievancesCleanOptions) =>
+    ipcRenderer.invoke('omp:grievances-clean', options),
+  pushGrievances: (options?: { profile?: string | null }) =>
+    ipcRenderer.invoke('omp:grievances-push', options),
 
   // Plugin & Agents Managers (Phase 14, 15 & Expansion)
   listPlugins: (options?: { local?: boolean }) =>
@@ -289,6 +362,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setHostUriSchemes: (schemes: string[]) =>
     ipcRenderer.invoke('omp:set-host-uri-schemes', schemes),
 
+  // Commit Assistant (Phase 14)
+  runCommit: (options: any) =>
+    ipcRenderer.invoke('omp:commit-run', options),
+
+  cancelCommit: () =>
+    ipcRenderer.invoke('omp:commit-cancel'),
+
+  getCommitStatus: (cwd?: string) =>
+    ipcRenderer.invoke('omp:commit-status', cwd),
+
+
+  // Cleanse Runner (Phase 15)
+  runCleanse: (options: any) =>
+    ipcRenderer.invoke('omp:cleanse-run', options),
+
+  cancelCleanse: () =>
+    ipcRenderer.invoke('omp:cleanse-cancel'),
+  // Browser Relay Service (Phase 16)
+  installBrowserRelay: (options?: any) =>
+    ipcRenderer.invoke('omp:browser-relay-install', options),
+  startBrowserRelay: (options?: any) =>
+    ipcRenderer.invoke('omp:browser-relay-start', options),
+  stopBrowserRelay: () =>
+    ipcRenderer.invoke('omp:browser-relay-stop'),
+  getBrowserRelayStatus: () =>
+    ipcRenderer.invoke('omp:browser-relay-status'),
+  // Text-to-Speech (Phase 17)
+  startSay: (text: string, options?: any) =>
+    ipcRenderer.invoke('omp:say-start', text, options),
+  stopSay: () =>
+    ipcRenderer.invoke('omp:say-stop'),
   getAvailableCommands: () =>
     ipcRenderer.invoke('omp:get-commands'),
 
@@ -325,7 +429,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readImageAsDataUrl: (filePath: string) =>
     ipcRenderer.invoke('fs:read-image-base64', filePath),
 
-  // Lấy đường dẫn thật của File được kéo thả (Electron >= 32 đã bỏ File.path)
+  // Real file path resolver for drag-and-drop (Electron >= 32 removed File.path)
   getPathForFile: (file: any) => {
     try {
       return webUtils.getPathForFile(file) || undefined;
@@ -364,6 +468,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getAuthStatus: () =>
     ipcRenderer.invoke('omp:auth-status'),
+  logoutAuthProvider: (providerId: string) =>
+    ipcRenderer.invoke('omp:auth-logout', providerId),
+  isEngineRunning: () =>
+    ipcRenderer.invoke('omp:is-engine-running'),
 
   sendAuthLoginInput: (text: string) =>
     ipcRenderer.invoke('omp:auth-login-input', text),
@@ -487,6 +595,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: unknown, event: any) => callback(event);
     ipcRenderer.on('omp:maintenance-output', handler);
     return () => ipcRenderer.removeListener('omp:maintenance-output', handler);
+  },
+  onCommitOutput: (callback: (event: any) => void) => {
+    const handler = (_: unknown, event: any) => callback(event);
+    ipcRenderer.on('omp:commit-output', handler);
+    return () => ipcRenderer.removeListener('omp:commit-output', handler);
+  },
+  onCleanseOutput: (callback: (event: any) => void) => {
+    const handler = (_: unknown, event: any) => callback(event);
+    ipcRenderer.on('omp:cleanse-output', handler);
+    return () => ipcRenderer.removeListener('omp:cleanse-output', handler);
+  },
+  onBrowserRelayOutput: (callback: (event: any) => void) => {
+    const handler = (_: unknown, event: any) => callback(event);
+    ipcRenderer.on('omp:browser-relay-output', handler);
+    return () => ipcRenderer.removeListener('omp:browser-relay-output', handler);
+  },
+  onSayStatus: (callback: (status: any) => void) => {
+    const handler = (_: unknown, status: any) => callback(status);
+    ipcRenderer.on('omp:say-status', handler);
+    return () => ipcRenderer.removeListener('omp:say-status', handler);
   },
   onBashOutput: (callback: (data: { text: string; id?: string }) => void) => {
     const handler = (_: unknown, data: { text: string; id?: string }) => callback(data);

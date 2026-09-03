@@ -32,6 +32,7 @@ import {
 } from '../../utils/imageAttachment';
 import { ImageLightboxModal } from './ImageLightboxModal';
 import { AttachmentImage } from '../Common/AttachmentImage';
+import { useI18n } from '../../i18n/I18nProvider';
 
 export { buildMessageWithFileMentions, flattenWorkspaceFiles };
 
@@ -48,7 +49,7 @@ interface PromptComposerProps {
   isToolApprovalPending?: boolean;
   externalAttachment?: { path: string; nonce: number } | null;
 }
-// Giới hạn số file hiển thị trong picker để tránh render hàng nghìn node
+// Limit rendered files count in picker to prevent lag (Rule 4)
 const MAX_PICKER_FILES = 100;
 
 const PromptComposerComponent: React.FC<PromptComposerProps> = ({
@@ -64,6 +65,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   isToolApprovalPending = false,
   externalAttachment,
 }) => {
+  const { t } = useI18n();
   const [input, setInput] = useState<string>('');
   const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState<boolean>(false);
@@ -74,9 +76,9 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   const [isCommandMenuOpen, setIsCommandMenuOpen] = useState<boolean>(false);
   const [commandQuery, setCommandQuery] = useState<string>('');
   const [commandSelectedIndex, setCommandSelectedIndex] = useState<number>(0);
-  // Vị trí ký tự '/' đang mở command menu (hỗ trợ command giữa message)
+  // Cursor position for '/' command menu trigger
   const [slashIndex, setSlashIndex] = useState<number | null>(null);
-  // State menu split-button khi agent đang chạy
+  // Split-button menu state when agent is running
   const [isSplitMenuOpen, setIsSplitMenuOpen] = useState<boolean>(false);
   const splitMenuRef = useRef<HTMLDivElement>(null);
 
@@ -90,7 +92,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   const commandMenuRef = useRef<HTMLDivElement>(null);
   const dragCounterRef = useRef<number>(0);
   const activeBlobUrlsRef = useRef<Set<string>>(new Set());
-  // Các attachment được chèn dạng @token trong text (phân biệt với attach qua nút)
+  // Attachments inserted as @token in text (distinguished from button attachments)
   const inlineAttachmentsRef = useRef<Set<string>>(new Set());
   const allFiles = React.useMemo(() => {
     const sourceTree =
@@ -169,7 +171,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     };
   }, [isPickerOpen, isCommandMenuOpen, isSplitMenuOpen]);
 
-  // Dọn dẹp các Object URL khi unmount để chống rò rỉ bộ nhớ
+  // Revoke Object URLs on unmount to prevent memory leaks
   useEffect(() => {
     const blobUrls = activeBlobUrlsRef.current;
     return () => {
@@ -206,7 +208,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     setAtCursorIndex(null);
   };
 
-  // Đính kèm file khi cây thư mục gửi yêu cầu "Thêm vào chat"
+  // Attach file when tree emits "Add to chat" request
   const lastAttachNonceRef = useRef<number>(0);
   useEffect(() => {
     if (!externalAttachment) return;
@@ -220,7 +222,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   const removeAttachment = (file: string) => {
     setAttachedFiles((prev) => prev.filter((f) => f !== file));
 
-    // Giải phóng blob URL preview nếu có
+    // Revoke blob preview URL if existing
     const previewUrl = imagePreviews[file];
     if (previewUrl && previewUrl.startsWith('blob:')) {
       URL.revokeObjectURL(previewUrl);
@@ -232,7 +234,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
       return next;
     });
 
-    // Chip chèn inline: gỡ luôn token @file trong text để hai phía đồng bộ
+    // Inline chip: remove @file token in text to keep both sides synced
     if (inlineAttachmentsRef.current.has(file)) {
       inlineAttachmentsRef.current.delete(file);
       const token = `@${file}`;
@@ -242,7 +244,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     }
   };
 
-  // Lưu file ảnh đính kèm vào hệ thống tập tin hoặc tạo blob preview
+  // Save image attachment to filesystem or create blob preview
   const saveAndAttachImage = useCallback(
     async (file: File | Blob, rawBuffer?: Uint8Array, extension?: string, originalName?: string) => {
       try {
@@ -257,8 +259,8 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
         if (window.electronAPI?.saveImageAttachment) {
           const res = await window.electronAPI.saveImageAttachment(buffer, ext, name);
           if (!res || !res.success) {
-            // Không attach đường dẫn giả khi lưu thất bại — engine sẽ trỏ file không tồn tại
-            console.error('Lưu attachment ảnh thất bại:', res?.error || 'unknown error');
+            // Do not attach fake path when save fails
+            console.error('Failed to save image attachment:', res?.error || 'unknown error');
             return;
           }
           const savedPath = res.relativePath || res.filePath;
@@ -270,7 +272,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
           return;
         }
 
-        // Fallback môi trường web preview (không có Electron)
+        // Web preview fallback without Electron
         const blob = file instanceof Blob ? file : new Blob([buffer.buffer as ArrayBuffer]);
         const blobUrl = URL.createObjectURL(blob);
         activeBlobUrlsRef.current.add(blobUrl);
@@ -278,16 +280,16 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
         setImagePreviews((prev) => ({ ...prev, [fallbackPath]: blobUrl }));
         setAttachedFiles((prev) => (prev.includes(fallbackPath) ? prev : [...prev, fallbackPath]));
       } catch (err) {
-        console.error('Lỗi khi lưu attachment ảnh:', err);
+        console.error('Failed to save image attachment:', err);
       }
     },
     []
   );
 
-  // Xử lý dán hình ảnh từ clipboard (Cmd+V / Ctrl+V)
+  // Handle paste image from clipboard (Cmd+V / Ctrl+V)
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const clipboardData = e.clipboardData;
-    // preventDefault phải gọi đồng bộ trước mọi await, nếu không default paste vẫn chạy
+    // Call preventDefault synchronously before any await
     const hasImage =
       Array.from(clipboardData?.items || []).some((item) => item.type.startsWith('image/')) ||
       Array.from(clipboardData?.files || []).some(
@@ -296,7 +298,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     if (!hasImage) return;
 
     e.preventDefault();
-    // Phần đồng bộ của extract (getAsFile) chạy ngay trong event handler
+    // Synchronous part of extraction runs immediately in event handler
     void extractImageFromClipboard(clipboardData).then((extracted) => {
       if (extracted) {
         return saveAndAttachImage(
@@ -309,7 +311,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     });
   };
 
-  // Xử lý sự kiện kéo thả file vào ô composer
+  // Handle drag and drop files into composer
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -352,10 +354,10 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
       const isInWorkspace = !!item.path && !!rel && rel !== item.path;
 
       if (item.isImage && !isInWorkspace) {
-        // Ảnh ngoài workspace hoặc kéo từ ứng dụng khác: lưu bản sao vào .omp/attachments
+        // Image outside workspace: save copy to .omp/attachments
         await saveAndAttachImage(item.file, undefined, undefined, item.file.name);
       } else if (rel) {
-        // File trong workspace (kể cả ảnh) attach trực tiếp, không copy trùng
+        // File inside workspace: attach directly without copying
         attachPath(rel);
       } else if (item.file.name) {
         attachPath(item.file.name);
@@ -366,13 +368,13 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   const handleSelectCommand = (insertText: string) => {
     let newCursorPos: number;
     if (slashIndex !== null) {
-      // Thay token '/query' tại vị trí slash bằng lệnh được chọn
+      // Replace '/query' token at slash index with selected command
       const before = input.slice(0, slashIndex);
       const after = input.slice(textareaRef.current?.selectionEnd ?? input.length);
       setInput(`${before}${insertText}${after}`);
       newCursorPos = before.length + insertText.length;
     } else {
-      // Menu mở qua nút khi chưa có token: chèn tại vị trí con trỏ
+      // Menu opened via button without token: insert at cursor position
       const pos = textareaRef.current?.selectionEnd ?? input.length;
       setInput(`${input.slice(0, pos)}${insertText}${input.slice(pos)}`);
       newCursorPos = pos + insertText.length;
@@ -388,7 +390,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     }, 0);
   };
 
-  // Chèn '/' tại con trỏ và mở command menu (dùng cho nút Commands và ⌘+/)
+  // Insert '/' at cursor and open command menu
   const openCommandMenuAtCursor = () => {
     const pos = textareaRef.current?.selectionEnd ?? input.length;
     const needsSpace = pos > 0 && !/\s/.test(input[pos - 1]);
@@ -419,7 +421,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     setSlashIndex(null);
     setIsSplitMenuOpen(false);
 
-    // Giải phóng các blob URL khi gửi tin nhắn
+    // Revoke blob URLs when message is sent
     activeBlobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     activeBlobUrlsRef.current.clear();
     setImagePreviews({});
@@ -477,7 +479,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     const cursorPos = e.target.selectionStart;
     setInput(val);
 
-    // Xoá token @file khỏi text thì gỡ luôn chip attachment tương ứng
+    // Removing @file token removes corresponding attachment chip
     if (inlineAttachmentsRef.current.size > 0) {
       const removed = findRemovedInlineAttachments(val, inlineAttachmentsRef.current);
       if (removed.length > 0) {
@@ -488,7 +490,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
       }
     }
 
-    // Command menu: '/' ở đầu chuỗi hoặc sau whitespace (hỗ trợ command giữa message)
+    // Command menu: '/' at start of input or after whitespace
     if (
       cursorPos > 0 &&
       val[cursorPos - 1] === '/' &&
@@ -685,16 +687,16 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
       onDrop={handleDrop}
       className="p-3.5 bg-panel border-t border-border flex flex-col gap-2.5 relative"
     >
-      {/* Hàng đợi follow-up phía trên composer */}
+      {/* Follow-up queue above composer */}
       {followUpQueue && followUpQueue.length > 0 && (
         <div className="p-2 bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/20 rounded-xl flex flex-col gap-1.5">
           <div className="flex items-center justify-between px-1">
             <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
-              Hàng đợi follow-up ({followUpQueue.length})
+              {t('composer.followUpQueue', { count: followUpQueue.length })}
             </span>
             <span className="text-[10px] text-slate-400 dark:text-zinc-500">
-              Tự động chạy sau turn hiện tại
+              {t('composer.followUpQueueDesc')}
             </span>
           </div>
           <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
@@ -729,15 +731,15 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
             <UploadCloud className="w-6 h-6 animate-bounce" />
           </div>
           <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-            Thả hình ảnh hoặc file vào đây để đính kèm
+            {t('composer.dragDropHint')}
           </span>
           <span className="text-[11px] text-slate-500 dark:text-zinc-400">
-            Hỗ trợ PNG, JPG, WebP, GIF, SVG hoặc file mã nguồn
+            {t('composer.dropzoneSupport')}
           </span>
         </div>
       )}
 
-      {/* Lightbox Xem Ảnh Phóng To */}
+      {/* Lightbox Image Modal */}
       <ImageLightboxModal
         isOpen={!!lightboxImage}
         imageUrl={lightboxImage?.url || ''}
@@ -763,7 +765,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                     type="button"
                     onClick={() => setLightboxImage({ url: previewUrl, name: file })}
                     className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-surface-highlight border border-border/60 flex items-center justify-center relative cursor-pointer group-hover:scale-105 transition-transform"
-                    title="Xem ảnh phóng to"
+                    title={t('composer.zoomImage')}
                   >
                     <AttachmentImage
                       src={previewUrl}
@@ -775,22 +777,22 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                     </div>
                   </button>
 
-                  {/* Tên file & định dạng */}
+                  {/* File name & format */}
                   <div className="flex flex-col min-w-0 max-w-[130px]">
                     <span className="font-mono text-[11.5px] font-medium text-slate-800 dark:text-zinc-200 truncate" title={file}>
                       {file.split('/').pop()}
                     </span>
                     <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans uppercase">
-                      {file.split('.').pop()} ảnh
+                      {file.split('.').pop()} {t('composer.imageTag')}
                     </span>
                   </div>
 
-                  {/* Nút xóa attachment */}
+                  {/* Remove attachment button */}
                   <button
                     type="button"
                     onClick={() => removeAttachment(file)}
                     className="ml-0.5 p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-surface-highlight cursor-pointer"
-                    title="Bỏ đính kèm ảnh"
+                    title={t('composer.removeImageAttachment')}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -808,7 +810,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                 <button
                   onClick={() => removeAttachment(file)}
                   className="ml-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 cursor-pointer"
-                  title="Bỏ đính kèm"
+                  title={t('composer.removeAttachment')}
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -845,7 +847,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
               value={pickerQuery}
               onChange={(e) => setPickerQuery(e.target.value)}
               onKeyDown={handlePickerSearchKeyDown}
-              placeholder="Tìm file trong workspace..."
+              placeholder={t('composer.searchFilePlaceholder')}
               className="w-full bg-transparent text-xs text-slate-800 dark:text-zinc-200 placeholder-slate-400 outline-none"
             />
             <button
@@ -863,7 +865,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
           <div className="overflow-y-auto flex-1 p-1 max-h-52">
             {visibleFiles.length === 0 ? (
               <div className="p-4 text-center text-xs text-slate-400">
-                Không tìm thấy file nào phù hợp
+                {t('composer.noFilesMatch')}
               </div>
             ) : (
               visibleFiles.map((file, idx) => (
@@ -889,11 +891,11 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
           <div className="px-2.5 py-1.5 border-t border-border/40 bg-surface-highlight/20 text-[10.5px] text-slate-400 flex items-center justify-between">
             <span>
               {filteredFiles.length > MAX_PICKER_FILES
-                ? `${MAX_PICKER_FILES}/${filteredFiles.length} — gõ để lọc thêm`
-                : '↑↓ di chuyển'}
+                ? t('composer.filterMoreNotice', { max: MAX_PICKER_FILES, count: filteredFiles.length })
+                : t('composer.moveNav')}
             </span>
-            <span>↵ chọn</span>
-            <span>esc đóng</span>
+            <span>{t('composer.selectNav')}</span>
+            <span>{t('composer.closeNav')}</span>
           </div>
         </div>
       )}
@@ -908,10 +910,10 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
           onPaste={handlePaste}
           placeholder={
             isToolApprovalPending
-              ? 'Vui lòng duyệt hoặc từ chối quyền thực thi công cụ trước...'
+              ? t('composer.waitingPermissionPlaceholder')
               : status !== 'idle'
-              ? 'Gõ chỉ đạo tức thời (Enter: Steer, ⌘⇧Enter: Dừng & gửi mới, @file để đính kèm)...'
-              : 'Yêu cầu OMP Agent xử lý code, gõ @file để đính kèm, hoặc / để mở lệnh...'
+              ? t('composer.streamingPlaceholder')
+              : t('composer.idlePlaceholder')
           }
           rows={3}
           className="w-full bg-transparent text-[13.5px] text-slate-900 dark:text-zinc-100 placeholder-slate-400 dark:placeholder-zinc-500 resize-none outline-none font-sans leading-relaxed"
@@ -931,7 +933,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                   ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
                   : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-surface-highlight'
               }`}
-              title="Đính kèm file từ workspace (@file)"
+              title={t('composer.attachWorkspaceFile')}
             >
               <Paperclip className="w-3.5 h-3.5" />
               <span>Attach</span>
@@ -952,7 +954,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                   ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
                   : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-surface-highlight'
               }`}
-              title="Danh sách lệnh Slash & Skills (/)"
+              title={t('composer.openSlashCommands')}
             >
               <Terminal className="w-3.5 h-3.5" />
               <span>Commands</span>
@@ -991,7 +993,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                       ? 'bg-amber-600 hover:bg-amber-700 text-white'
                       : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 cursor-not-allowed'
                   }`}
-                  title="Lái hướng agent ngay lập tức (Enter)"
+                  title={t('composer.steerNowTooltip')}
                 >
                   <Radio className="w-3.5 h-3.5 animate-pulse" />
                   <span>Steer</span>
@@ -1006,7 +1008,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                       ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700/50'
                       : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 border-border/60 cursor-not-allowed'
                   }`}
-                  title="Tùy chọn gửi khi đang chạy"
+                  title={t('composer.runningSendOptionsTooltip')}
                 >
                   <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSplitMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -1025,7 +1027,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                       <Radio className="w-4 h-4 text-amber-500 shrink-0" />
                       <div className="flex flex-col">
                         <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Steer</span>
-                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">Lái hướng lượt đang stream</span>
+                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.steerOptionDesc')}</span>
                       </div>
                     </div>
                     <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">↵</kbd>
@@ -1041,7 +1043,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                       <Square className="w-4 h-4 text-rose-500 shrink-0" />
                       <div className="flex flex-col">
                         <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">Stop & send</span>
-                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">Dừng turn và gửi prompt mới</span>
+                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.abortOptionDesc')}</span>
                       </div>
                     </div>
                     <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">⌘⇧↵</kbd>
@@ -1057,7 +1059,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                       <Clock className="w-4 h-4 text-blue-500 shrink-0" />
                       <div className="flex flex-col">
                         <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">Queue follow-up</span>
-                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">Chờ turn xong rồi tự gửi</span>
+                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.followUpOptionDesc')}</span>
                       </div>
                     </div>
                     <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">⌘↵</kbd>

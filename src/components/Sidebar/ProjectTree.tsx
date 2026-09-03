@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { WorkspaceFile } from '../../types';
 import { getFileInfo } from '../../utils/fileLanguage';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface ProjectTreeProps {
   files: WorkspaceFile[];
@@ -42,6 +43,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
   onAddToChat,
   onDeleteFile,
 }) => {
+  const { t } = useI18n();
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -238,7 +240,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
                 style={{ paddingLeft: `${(depth + 1) * 14 + 24}px` }}
                 className="py-1 text-[11px] text-slate-400 dark:text-zinc-500 italic"
               >
-                (trống)
+                {t('projectTree.empty')}
               </div>
             )}
           </div>
@@ -260,7 +262,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
           <button
             onClick={expandAllFolders}
             className="p-1 rounded hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-            title="Mở rộng tất cả thư mục"
+            title={t('projectTree.expandAll')}
           >
             <ChevronsUpDown className="w-3.5 h-3.5" />
           </button>
@@ -268,7 +270,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
           <button
             onClick={collapseAllFolders}
             className="p-1 rounded hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-            title="Thu gọn tất cả thư mục"
+            title={t('projectTree.collapseAll')}
           >
             <ChevronsDownUp className="w-3.5 h-3.5" />
           </button>
@@ -277,7 +279,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
             <button
               onClick={onCollapseSidebar}
               className="p-1 rounded hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors cursor-pointer ml-0.5"
-              title="Thu gọn Sidebar (⌘B)"
+              title={t('projectTree.collapseSidebar')}
             >
               <PanelLeftClose className="w-3.5 h-3.5" />
             </button>
@@ -290,7 +292,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
           files.map((f) => renderFileNode(f))
         ) : (
           <div className="p-4 text-center text-xs text-slate-400 dark:text-zinc-500">
-            Chưa có file nào trong workspace
+            {t('projectTree.noFiles')}
           </div>
         )}
       </div>
@@ -313,7 +315,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
                 className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 hover:bg-blue-500/10 text-slate-800 dark:text-zinc-200 text-[13px] transition-colors cursor-pointer"
               >
                 <MessageSquarePlus className="w-4 h-4 text-blue-500 shrink-0" />
-                <span>Thêm vào chat</span>
+                <span>{t('projectTree.addToChat')}</span>
               </button>
             )}
 
@@ -350,7 +352,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
               className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 text-[13px] transition-colors cursor-pointer"
             >
               <FolderSymlink className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>Hiện trong Finder</span>
+              <span>{t('projectTree.revealInFinder')}</span>
             </button>
 
             {onDeleteFile && !contextMenu.file.isDirectory && (
@@ -365,7 +367,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
                   className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[13px] transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4 shrink-0" />
-                  <span>Xóa</span>
+                  <span>{t('projectTree.delete')}</span>
                 </button>
               </>
             )}
@@ -388,14 +390,10 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
               <div className="w-9 h-9 rounded-full bg-rose-500/10 flex items-center justify-center shrink-0">
                 <Trash2 className="w-5 h-5 text-rose-500" />
               </div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">Xóa file</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">{t('projectTree.deleteFileTitle')}</h3>
             </div>
             <p className="text-[13px] text-slate-600 dark:text-zinc-400 mb-5">
-              Xóa vĩnh viễn{' '}
-              <span className="font-mono font-semibold text-slate-800 dark:text-zinc-200">
-                {fileToDelete.name}
-              </span>
-              ? Hành động này không thể hoàn tác.
+              {t('projectTree.deleteFileConfirm', { name: fileToDelete.name })}
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -404,7 +402,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
                 disabled={isDeleting}
                 className="px-3 py-1.5 rounded-lg text-[13px] font-medium text-slate-600 dark:text-zinc-300 hover:bg-surface-highlight transition-colors cursor-pointer disabled:opacity-50"
               >
-                Hủy
+                {t('projectTree.cancel')}
               </button>
               <button
                 type="button"
@@ -412,7 +410,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
                 disabled={isDeleting}
                 className="px-3 py-1.5 rounded-lg text-[13px] font-semibold text-white bg-rose-500 hover:bg-rose-600 transition-colors cursor-pointer disabled:opacity-50"
               >
-                {isDeleting ? 'Đang xóa…' : 'Xóa'}
+                {isDeleting ? t('projectTree.deleting') : t('projectTree.delete')}
               </button>
             </div>
           </div>

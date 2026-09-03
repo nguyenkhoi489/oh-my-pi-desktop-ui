@@ -14,9 +14,12 @@ import { useOmpRpc } from './hooks/useOmpRpc';
 import { useWorkspace } from './hooks/useWorkspace';
 import { ThemeMode, FileDiffItem, WorkspaceFile } from './types';
 import { OpsModal } from './components/Modals/OpsModal';
+import { CommitModal } from './components/Modals/CommitModal';
+import { useI18n } from './i18n/I18nProvider';
 
 export function App() {
   const [theme, setTheme] = useState<ThemeMode>('light');
+  const { t } = useI18n();
   const [isOmnibarOpen, setIsOmnibarOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isOmpModalOpen, setIsOmpModalOpen] = useState<boolean>(false);
@@ -35,6 +38,8 @@ export function App() {
   }, [theme]);
 
   const [isOpsModalOpen, setIsOpsModalOpen] = useState(false);
+  const [opsModalInitialTab, setOpsModalInitialTab] = useState<'engine' | 'processes' | 'worktrees' | 'extensions' | 'agents' | 'storage' | 'ssh' | 'grievances'>('engine');
+  const [isCommitModalOpen, setIsCommitModalOpen] = useState(false);
   // Load initial theme from settings
   useEffect(() => {
     const initSettings = async () => {
@@ -59,7 +64,7 @@ export function App() {
           }
         }
       } catch (err) {
-        console.warn('[App] Lỗi khi nạp cấu hình ban đầu:', err);
+        console.warn('[App] Failed to load initial settings:', err);
       }
     };
     initSettings();
@@ -91,7 +96,7 @@ export function App() {
     setIsRightSidebarOpen((prev) => !prev);
   };
 
-  // Callback ổn định để không phá React.memo của ProjectTree/AgentPanel
+  // Stable callbacks to avoid breaking React.memo of ProjectTree/AgentPanel
   const collapseLeftSidebar = useCallback(() => setIsLeftSidebarOpen(false), []);
   const collapseRightSidebar = useCallback(() => setIsRightSidebarOpen(false), []);
 
@@ -148,6 +153,13 @@ export function App() {
     getSessionStats,
     getGlobalUsage,
     getGlobalStats,
+    getUsageHistory,
+    getUsageClients,
+    invalidateUsage,
+    startStatsDashboard,
+    stopStatsDashboard,
+    getStatsDashboardStatus,
+    openExternal,
     getEngineConfig,
     setEngineConfigValue,
     resetEngineConfigValue,
@@ -164,6 +176,15 @@ export function App() {
     retryState,
     abortRetry,
     getLastAssistantText,
+    listSshHosts,
+    addSshHost,
+    removeSshHost,
+    listGrievances,
+    cleanGrievances,
+    pushGrievances,
+    isSpeaking,
+    startSay,
+    stopSay,
   } = useOmpRpc();
 
   // Principle #1: When app loads, if OMP is not installed, open the Requirement Modal
@@ -180,6 +201,40 @@ export function App() {
     refreshModels();
     refreshSessions();
   }, [refreshEngineState, refreshModels, refreshSessions]);
+  const handleSpeakLastAssistantText = useCallback(async () => {
+    if (isSpeaking) {
+      await stopSay();
+      return;
+    }
+    const text = await getLastAssistantText();
+    if (!text || !text.trim()) {
+      pushNotification(t('tts.empty'), 'info');
+      return;
+    }
+    const res = await startSay(text);
+    if (!res.success) {
+      if (res.missingModel) {
+        pushNotification(
+          t('tts.missingModel'),
+          'warning',
+          {
+            label: t('tts.openOpsCenter'),
+            onClick: () => {
+              setOpsModalInitialTab('engine');
+              setIsOpsModalOpen(true);
+            },
+          }
+        );
+      } else {
+        pushNotification(res.error || t('tts.error'), 'error');
+      }
+    }
+  }, [isSpeaking, stopSay, getLastAssistantText, pushNotification, startSay, t]);
+
+  const handleStopSpeaking = useCallback(async () => {
+    await stopSay();
+  }, [stopSay]);
+
 
   const {
     workspacePath,
@@ -242,7 +297,7 @@ export function App() {
       await refreshEngineState();
     }
   };
-  // Yêu cầu đính kèm file vào composer từ cây thư mục (nonce để re-trigger cùng path)
+  // Attachment request from file tree to composer (nonce to re-trigger same path)
   const [attachmentRequest, setAttachmentRequest] = useState<{ path: string; nonce: number } | null>(
     null
   );
@@ -258,7 +313,7 @@ export function App() {
       if (ok) {
         await refreshFiles();
       } else {
-        pushNotification(`Không thể xóa ${file.name}`, 'error');
+        pushNotification(t('app.deleteFileError', { fileName: file.name }), 'error');
       }
     },
     [refreshFiles, pushNotification]
@@ -303,7 +358,7 @@ export function App() {
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
 
-  // Nhận yêu cầu mở file/session do model gửi qua host tool
+  // Handle open file/session requests from model via host tools
   useEffect(() => {
     if (!window.electronAPI?.onHostOpenRequest) return;
     return window.electronAPI.onHostOpenRequest((request) => {
@@ -401,6 +456,13 @@ export function App() {
         onGetSessionStats={getSessionStats}
         onGetGlobalUsage={getGlobalUsage}
         onGetGlobalStats={getGlobalStats}
+        onGetUsageHistory={getUsageHistory}
+        onGetUsageClients={getUsageClients}
+        onInvalidateUsage={invalidateUsage}
+        onStartStatsDashboard={startStatsDashboard}
+        onStopStatsDashboard={stopStatsDashboard}
+        onGetStatsDashboardStatus={getStatsDashboardStatus}
+        onOpenExternal={openExternal}
         approvalMode={approvalMode}
         onSelectApprovalMode={setApprovalMode}
         isCompacting={isCompacting}
@@ -409,9 +471,13 @@ export function App() {
         onSetAutoCompaction={setAutoCompaction}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenOpsModal={() => setIsOpsModalOpen(true)}
+        onOpenCommitModal={() => setIsCommitModalOpen(true)}
         onToggleTerminal={() => setActiveTab((prev) => (prev === 'terminal' ? 'diff' : 'terminal'))}
         isTerminalActive={activeTab === 'terminal'}
         onCopyLastAssistantText={getLastAssistantText}
+        isSpeaking={isSpeaking}
+        onSpeakLastAssistantText={handleSpeakLastAssistantText}
+        onStopSpeaking={handleStopSpeaking}
       />
       {/* 2. Main 3-Column Layout */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
@@ -541,10 +607,11 @@ export function App() {
         onSelectBinaryFile={browseBinaryFile}
         onSetCustomBinaryPath={setCustomPath}
         availableModels={availableModels}
+        onRefreshModels={refreshModels}
         thinkingLevel={thinkingLevel}
         onSelectThinkingLevel={changeThinkingLevel}
         onRestartEngine={handleRestartEngine}
-        isEngineRunning={status !== 'idle'}
+        isEngineRunning={Boolean(workspacePath) || status !== 'idle'}
         getEngineConfig={getEngineConfig}
         setEngineConfigValue={setEngineConfigValue}
         resetEngineConfigValue={resetEngineConfigValue}
@@ -556,7 +623,27 @@ export function App() {
       <OpsModal
         isOpen={isOpsModalOpen}
         onClose={() => setIsOpsModalOpen(false)}
+        initialTab={opsModalInitialTab}
         onRestartEngine={handleRestartEngine}
+        status={status}
+        onOpenCommitModal={() => {
+          setIsOpsModalOpen(false);
+          setIsCommitModalOpen(true);
+        }}
+        listSshHosts={listSshHosts}
+        addSshHost={addSshHost}
+        removeSshHost={removeSshHost}
+        listGrievances={listGrievances}
+        cleanGrievances={cleanGrievances}
+        pushGrievances={pushGrievances}
+      />
+      {/* Commit Assistant Modal (Phase 14) */}
+      <CommitModal
+        isOpen={isCommitModalOpen}
+        onClose={() => setIsCommitModalOpen(false)}
+        workspacePath={workspacePath || undefined}
+        availableModels={availableModels}
+        selectedModel={selectedModel}
       />
       {/* 4. Notification Toast Stack */}
       <ToastStack

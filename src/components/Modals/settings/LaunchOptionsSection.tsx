@@ -17,7 +17,7 @@ import type { OmpLaunchOptions } from '../../../types';
 import { useI18n } from '../../../i18n/I18nProvider';
 
 const SERVICE_TIER_OPTIONS = [
-  { id: '', label: '(Mặc định)' },
+  { id: '', label: '' },
   { id: 'standard', label: 'standard' },
   { id: 'scale', label: 'scale' },
   { id: 'priority', label: 'priority' },
@@ -100,7 +100,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
   const handleBrowseFileForConfig = useCallback(async () => {
     if (!window.electronAPI?.selectFile) return;
     const selected = await window.electronAPI.selectFile({
-      title: 'Chọn tệp cấu hình YAML / JSON',
+      title: t('settings.launchOptions.selectConfigTitle'),
       filters: [{ name: 'Config files', extensions: ['yml', 'yaml', 'json', 'toml'] }],
     });
     if (selected) {
@@ -114,7 +114,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
   const handleBrowseFileForExtension = useCallback(async () => {
     if (!window.electronAPI?.selectFile) return;
     const selected = await window.electronAPI.selectFile({
-      title: 'Chọn tệp extension JS / TS',
+      title: t('settings.launchOptions.selectExtensionTitle'),
       filters: [{ name: 'Extension scripts', extensions: ['js', 'ts', 'mjs', 'cjs'] }],
     });
     if (selected) {
@@ -128,7 +128,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
   const handleBrowseFileForHook = useCallback(async () => {
     if (!window.electronAPI?.selectFile) return;
     const selected = await window.electronAPI.selectFile({
-      title: 'Chọn tệp hook script',
+      title: t('settings.launchOptions.selectHookTitle'),
       filters: [{ name: 'Hook scripts', extensions: ['sh', 'js', 'ts', 'py', 'bash'] }],
     });
     if (selected) {
@@ -329,7 +329,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
               {t('settings.launchOptions.addDirs.title')}
             </label>
             <span className="text-[10px] font-mono text-slate-400 dark:text-zinc-500">
-              {(currentOptions.addDirs || []).length} mục
+              {t('settings.launchOptions.itemsCount', { count: (currentOptions.addDirs || []).length })}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-400">
@@ -349,7 +349,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
                     type="button"
                     onClick={() => removeAddDir(idx)}
                     className="text-slate-400 hover:text-rose-500 transition-colors p-0.5 cursor-pointer shrink-0"
-                    title="Xóa"
+                    title={t('settings.launchOptions.removeTitle')}
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -396,7 +396,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
               {t('settings.launchOptions.configOverlays.title')}
             </label>
             <span className="text-[10px] font-mono text-slate-400 dark:text-zinc-500">
-              {(currentOptions.configOverlays || []).length} mục
+              {t('settings.launchOptions.itemsCount', { count: (currentOptions.configOverlays || []).length })}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-400">
@@ -416,7 +416,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
                     type="button"
                     onClick={() => removeConfigOverlay(idx)}
                     className="text-slate-400 hover:text-rose-500 transition-colors p-0.5 cursor-pointer shrink-0"
-                    title="Xóa"
+                    title={t('settings.launchOptions.removeTitle')}
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -460,7 +460,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
       <div className="p-3.5 bg-surface rounded-xl border border-border space-y-3.5">
         <div className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
           <Terminal className="w-3.5 h-3.5 text-codex-accent" />
-          <span>Công cụ & Kỹ năng (Tools & Skills)</span>
+          <span>{t('settings.launchOptions.toolsAndSkillsTitle')}</span>
         </div>
 
         {/* Toggle Grid */}
@@ -707,7 +707,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
                   value={newExtension}
                   onChange={(e) => setNewExtension(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addExtension()}
-                  placeholder="Nhập đường dẫn extension..."
+                  placeholder={t('settings.launchOptions.addExtensionPlaceholder')}
                   className="flex-1 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 placeholder-slate-400 outline-none focus:border-codex-accent"
                 />
                 <button
@@ -759,7 +759,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
                   value={newHook}
                   onChange={(e) => setNewHook(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addHook()}
-                  placeholder="Nhập đường dẫn hook script..."
+                  placeholder={t('settings.launchOptions.addHookPlaceholder')}
                   className="flex-1 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 placeholder-slate-400 outline-none focus:border-codex-accent"
                 />
                 <button
@@ -788,7 +788,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
       <div className="p-3.5 bg-surface rounded-xl border border-border space-y-3.5">
         <div className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
           <Clock className="w-3.5 h-3.5 text-codex-accent" />
-          <span>Hành vi & Thực thi (Execution & Runtime)</span>
+          <span>{t('settings.launchOptions.runtimeBehaviorTitle')}</span>
         </div>
 
         {/* Toggles */}
@@ -869,7 +869,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
                   prewalkInto: e.target.value.trim() || undefined,
                 }))
               }
-              placeholder="Đường dẫn lưu prewalk..."
+              placeholder={t('settings.launchOptions.prewalkIntoPlaceholder')}
               className="w-full px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 placeholder-slate-400 outline-none focus:border-codex-accent"
             />
           </div>
@@ -888,7 +888,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
                   planYoloInto: e.target.value.trim() || undefined,
                 }))
               }
-              placeholder="Đường dẫn tệp plan..."
+              placeholder={t('settings.launchOptions.planYoloIntoPlaceholder')}
               className="w-full px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 placeholder-slate-400 outline-none focus:border-codex-accent"
             />
           </div>
@@ -929,7 +929,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
             >
               {SERVICE_TIER_OPTIONS.map((opt) => (
                 <option key={opt.id} value={opt.id}>
-                  {opt.label}
+                  {opt.id === '' ? t('settings.launchOptions.defaultTier') : opt.label}
                 </option>
               ))}
             </select>

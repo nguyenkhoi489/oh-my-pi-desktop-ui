@@ -26,7 +26,7 @@ function normalizePath(relativePath: string): string {
   return relativePath.toLowerCase().replace(/\\/g, '/');
 }
 
-// Nhận diện loại artifact từ đường dẫn tương đối
+// Identify artifact type from relative path
 export function detectArtifactType(relativePath: string): ArtifactType | null {
   const normalized = normalizePath(relativePath);
   const filename = normalized.split('/').pop() || '';
@@ -58,7 +58,7 @@ function bucketOf(relativePath: string): ArtifactBucket {
   return 'other';
 }
 
-// Tách và loại bỏ khối YAML frontmatter ở đầu markdown
+// Strip YAML frontmatter block at start of markdown
 export function stripMarkdownFrontmatter(content: string): string {
   const match = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(content);
   return match ? content.slice(match[0].length) : content;
@@ -68,7 +68,7 @@ function isDatedPlan(title: string): boolean {
   return /^plans\/\d/.test(normalizePath(title));
 }
 
-// Plan có prefix ngày xếp trước và mới nhất lên đầu; journals/reports/templates xếp sau
+// Date-prefixed plans sorted first (newest first); journals/reports/templates after
 function comparePlans(a: ArtifactDocument, b: ArtifactDocument): number {
   const datedA = isDatedPlan(a.title);
   const datedB = isDatedPlan(b.title);
@@ -76,7 +76,7 @@ function comparePlans(a: ArtifactDocument, b: ArtifactDocument): number {
   return datedA ? b.title.localeCompare(a.title) : a.title.localeCompare(b.title);
 }
 
-// Quét cây thư mục và trích xuất danh sách artifact
+// Scan file tree and extract artifacts list
 export function discoverWorkspaceArtifacts(
   tree: WorkspaceFile[],
   maxCount: number = MAX_WORKSPACE_ARTIFACTS
@@ -122,7 +122,7 @@ export function discoverWorkspaceArtifacts(
   buckets.other.sort(byTitle);
   buckets.plans.sort(comparePlans);
 
-  // Giữ chỗ cho docs/root/other trước, phần còn lại dành cho plans mới nhất
+  // Reserve space for docs/root/other first, remainder for latest plans
   const nonPlans = [...buckets.docs, ...buckets.root, ...buckets.other].slice(0, maxCount);
   const keptPlans = buckets.plans.slice(0, Math.max(0, maxCount - nonPlans.length));
   const kept = new Set([...nonPlans, ...keptPlans]);

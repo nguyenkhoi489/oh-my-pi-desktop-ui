@@ -1,3 +1,4 @@
+import { tm } from '../shared/i18n/index.ts';
 import { spawn, execFile, type ChildProcess } from 'child_process';
 import { promisify } from 'util';
 
@@ -30,6 +31,8 @@ import type {
   OmpTodoItem,
   OmpTodoStatus,
   HostOpenRequest,
+  LoginProviderItem,
+  AuthLoginEvent,
 } from './types.ts';
 import type { SettingsStore } from './settings-store.ts';
 import { NdjsonFramer } from './ndjson-framer.ts';
@@ -118,6 +121,10 @@ import type {
   HandoffCommand,
   AutoRetryStartEvent,
   AutoRetryEndEvent,
+  GetLoginProvidersCommand,
+  LoginCommand,
+  GetLoginProvidersResponseData,
+  LoginResponseData,
 } from './omp-rpc-types.ts';
 
 export type BridgeLifecycleState =
@@ -259,6 +266,14 @@ export class OmpBridge {
   private commandCounter: number = 0;
   private settingsStore?: SettingsStore;
   private retryState: { isRetrying: boolean; attempt?: number; maxAttempts?: number; delayMs?: number; error?: string; success?: boolean } = { isRetrying: false };
+  private openUrlHandler?: (url: string) => Promise<void>;
+  private interactiveFallback?: (providerId: string) => Promise<{ success: boolean; error?: string }>;
+  private activeAuthLogin: {
+    providerId: string;
+    loginCommandId: string;
+    pendingInputReqId?: string;
+    isCancelled?: boolean;
+  } | null = null;
 
 
   constructor(window: BrowserWindow, settingsStore?: SettingsStore) {
@@ -289,6 +304,16 @@ export class OmpBridge {
   public getLifecycleState(): BridgeLifecycleState {
     return this.lifecycleState;
   }
+  public isRunning(): boolean {
+    return this.lifecycleState === 'ready' && Boolean(this.process);
+  }
+  public getStatus(): OmpAgentStatus {
+    return this.status;
+  }
+  public isStreaming(): boolean {
+    return this.status === 'streaming' || this.status === 'thinking' || this.status === 'executing_tool';
+  }
+
 
   public getCurrentSessionFile(): string | null {
     return this.currentSessionFile;
@@ -401,7 +426,7 @@ export class OmpBridge {
     this.emitTodosUpdate();
   }
 
-  // Reminder chỉ trả todos phẳng không kèm phase; giữ nguyên cấu trúc phase và chỉ đồng bộ trạng thái
+  // Reminder only returns flat todos without phase; preserve phase structure and sync status only
   private mergeTodoStatuses(todos: OmpTodoItem[]): boolean {
     if (this.currentTodoPhases.length === 0 || todos.some((t) => typeof t.phase === 'string' && t.phase)) {
       return false;
@@ -441,7 +466,7 @@ export class OmpBridge {
     }
   }
 
-  // Cập nhật tiến độ ngay khi agent gọi tool "todo", không chờ get_state cuối phiên
+  // Update progress immediately when agent calls "todo" tool, without waiting for end of turn
   private applyTodosFromToolResult(toolName: string | undefined, result: unknown): void {
     if (toolName !== 'todo') {
       return;
@@ -690,7 +715,7 @@ export class OmpBridge {
     return null;
   }
 
-  // Fallback chậm: hỏi login shell ở tiến trình con async để không block main process
+  // Fallback: ask login shell asynchronously to avoid blocking main process
   private async detectViaLoginShell(): Promise<string | null> {
     const binaryNames = ['omp', 'oh-my-pi', 'pi-coding-agent', 'pi'];
     for (const name of binaryNames) {
@@ -715,7 +740,7 @@ export class OmpBridge {
     if (!binaryPath || !fs.existsSync(binaryPath)) {
       return {
         installed: false,
-        error: 'Chưa tìm thấy file nhị phân OMP trên máy (quét qua ~/.local/bin, /opt/homebrew, ~/.bun, ~/.nvm, zsh).',
+        error: tm('electron.bridge.binaryNotFound'),
       };
     }
 
@@ -732,7 +757,7 @@ export class OmpBridge {
       '/bin',
     ].filter(Boolean).join(':');
 
-    // Version đã hỏi rồi thì dùng lại, tránh spawn tiến trình con lặp lại
+    // Reuse cached version to avoid repeatedly spawning child processes
     if (this.cachedVersion?.path === binaryPath) {
       return {
         installed: true,
@@ -783,13 +808,13 @@ export class OmpBridge {
     options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode; profile?: string }
   ): Promise<{ success: boolean; pid?: number }> {
     if (this.process) {
-      // Chờ tiến trình cũ thoát hẳn trước khi spawn, tránh handshake timeout do tranh chấp
+      // Wait for old process to fully exit before spawning to prevent race condition
       const oldProcess = this.process;
       this.stopProcess();
       await this.waitForProcessExit(oldProcess, 3000);
     }
 
-    this.rejectAllPending('Khởi động tiến trình OMP mới');
+    this.rejectAllPending(tm('electron.bridge.startingNewProcess'));
     this.frameLogger.truncate();
     this.framer.reset();
     this.thinkingAccumulator.reset();
@@ -869,7 +894,7 @@ export class OmpBridge {
         const handshakeTimer = setTimeout(() => {
           console.warn(`[OmpBridge] Handshake timed out after ${handshakeTimeoutMs}ms`);
           this.emitNotification(
-            'Không thể khởi động OMP engine (handshake timeout). Hãy thử mở lại dự án.',
+            tm('electron.bridge.handshakeTimeout'),
             'error'
           );
           this.cleanupProcess();
@@ -1236,6 +1261,151 @@ export class OmpBridge {
       return { success: false, error: err.message || 'Error executing set_thinking_level' };
     }
   }
+  public setOpenUrlHandler(fn: (url: string) => Promise<void>): void {
+    this.openUrlHandler = fn;
+  }
+
+  public setInteractiveFallback(fn: (providerId: string) => Promise<{ success: boolean; error?: string }>): void {
+    this.interactiveFallback = fn;
+  }
+
+  public hasActiveAuthLogin(): boolean {
+    return this.activeAuthLogin !== null;
+  }
+
+  public getActiveAuthLoginProviderId(): string | null {
+    return this.activeAuthLogin?.providerId ?? null;
+  }
+
+  public async getLoginProviders(): Promise<{ success: boolean; providers?: LoginProviderItem[]; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    try {
+      const res = await this.sendCommand<GetLoginProvidersResponseData>({
+        type: 'get_login_providers',
+        id: this.generateId(),
+      });
+      if (res.success && res.data && Array.isArray(res.data.providers)) {
+        return { success: true, providers: res.data.providers };
+      }
+      return { success: false, error: res.error || 'Failed to get login providers' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing get_login_providers' };
+    }
+  }
+
+  public async startAuthLogin(providerId: string): Promise<{ success: boolean; error?: string }> {
+    if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      return { success: false, error: 'OMP process is not ready or offline' };
+    }
+    if (!providerId || typeof providerId !== 'string') {
+      return { success: false, error: tm('electron.bridge.invalidProviderId') };
+    }
+
+    if (this.activeAuthLogin) {
+      this.cancelAuthLogin();
+    }
+
+    const loginCommandId = this.generateId();
+    this.activeAuthLogin = { providerId, loginCommandId };
+    this.emitAuthLoginEvent({ providerId, status: 'started' });
+
+    // Send login command via RPC in background with 5 minute timeout
+    this.sendCommand<LoginResponseData>(
+      {
+        type: 'login',
+        id: loginCommandId,
+        providerId,
+      },
+      5 * 60 * 1000
+    )
+      .then((res) => {
+        if (!this.activeAuthLogin || this.activeAuthLogin.loginCommandId !== loginCommandId) {
+          return;
+        }
+        if (this.activeAuthLogin.isCancelled) {
+          this.activeAuthLogin = null;
+          return;
+        }
+        if (res.success) {
+          this.activeAuthLogin = null;
+          this.emitAuthLoginEvent({ providerId, status: 'success' });
+        } else {
+          const errorMsg = res.error || tm('electron.bridge.loginFailed');
+          // If provider requires interactive prompts in terminal (like copilot) -> fallback
+          if (errorMsg.includes('requires interactive prompts') && this.interactiveFallback) {
+            this.activeAuthLogin = null;
+            this.interactiveFallback(providerId).catch((fallbackErr) => {
+              this.emitAuthLoginEvent({
+                providerId,
+                status: 'error',
+                message: fallbackErr?.message || String(fallbackErr),
+              });
+            });
+            return;
+          }
+          this.activeAuthLogin = null;
+          this.emitAuthLoginEvent({ providerId, status: 'error', message: errorMsg });
+        }
+      })
+      .catch((err: unknown) => {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        if (!this.activeAuthLogin || this.activeAuthLogin.loginCommandId !== loginCommandId) {
+          return;
+        }
+        if (this.activeAuthLogin.isCancelled) {
+          this.activeAuthLogin = null;
+          return;
+        }
+        if (errorMsg.includes('requires interactive prompts') && this.interactiveFallback) {
+          this.activeAuthLogin = null;
+          this.interactiveFallback(providerId).catch((fallbackErr) => {
+            this.emitAuthLoginEvent({
+              providerId,
+              status: 'error',
+              message: fallbackErr?.message || String(fallbackErr),
+            });
+          });
+          return;
+        }
+        this.activeAuthLogin = null;
+        this.emitAuthLoginEvent({ providerId, status: 'error', message: errorMsg });
+      });
+
+    return { success: true };
+  }
+
+  public cancelAuthLogin(): { success: boolean } {
+    if (!this.activeAuthLogin) {
+      return { success: true };
+    }
+    const { providerId, pendingInputReqId } = this.activeAuthLogin;
+    this.activeAuthLogin.isCancelled = true;
+    if (pendingInputReqId) {
+      this.respondUiRequest(pendingInputReqId, { cancelled: true });
+      this.activeAuthLogin.pendingInputReqId = undefined;
+    }
+    this.emitAuthLoginEvent({ providerId, status: 'cancelled' });
+    return { success: true };
+  }
+
+  public submitAuthLoginInput(text: string): { success: boolean; error?: string } {
+    if (!this.activeAuthLogin || !this.activeAuthLogin.pendingInputReqId || this.activeAuthLogin.isCancelled) {
+      return { success: false, error: tm('electron.bridge.noPendingAuthSession') };
+    }
+    const reqId = this.activeAuthLogin.pendingInputReqId;
+    this.respondUiRequest(reqId, { value: text.trim() });
+    this.activeAuthLogin.pendingInputReqId = undefined;
+    return { success: true };
+  }
+
+  private emitAuthLoginEvent(event: AuthLoginEvent): void {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('omp:auth-login-event', event);
+    }
+  }
 
   public async getState(): Promise<{ success: boolean; state?: OmpEngineState; error?: string }> {
     if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
@@ -1341,7 +1511,7 @@ export class OmpBridge {
           return {
             success: false,
             mode: oldMode,
-            error: 'Khởi động lại engine thất bại khi chuyển approval mode',
+            error: tm('electron.bridge.restartFailedApprovalMode'),
           };
         }
       }
@@ -1393,7 +1563,7 @@ export class OmpBridge {
           return {
             success: false,
             profile: oldProfile,
-            error: 'Khởi động lại engine thất bại khi chuyển profile',
+            error: tm('electron.bridge.restartFailedProfile'),
           };
         }
       }
@@ -2095,12 +2265,12 @@ export class OmpBridge {
     }
   }
 
-  // Chuyển yêu cầu mở file/session từ model sang renderer, kèm thông báo nguồn gốc
+  // Forward host open request from model to renderer, with source notification
   private emitHostOpenRequest(request: HostOpenRequest) {
     if (!this.window || this.window.isDestroyed()) return;
     this.window.webContents.send('omp:host-open-request', request);
     const label = request.kind === 'session' ? 'session' : 'file';
-    this.emitNotification(`Model yêu cầu mở ${label}: ${request.target}`, 'info');
+    this.emitNotification(tm('electron.bridge.modelRequestedOpen', { kind: label, target: request.target }), 'info');
   }
 
   private handleHostUriRequest(frame: HostUriRequestEvent) {
@@ -2488,14 +2658,14 @@ export class OmpBridge {
             }
           } else {
             console.error('[OmpBridge] Protocol negotiation failed:', res.error);
-            this.emitNotification('Khởi động OMP engine thất bại (negotiation). Hãy thử mở lại dự án.', 'error');
+            this.emitNotification(tm('electron.bridge.negotiationFailed'), 'error');
             this.cleanupProcess();
             this.handshakePromise?.resolve({ success: false });
           }
         })
         .catch((err) => {
           console.error('[OmpBridge] Protocol negotiation timeout or error:', err.message);
-          this.emitNotification('Khởi động OMP engine thất bại (negotiation timeout). Hãy thử mở lại dự án.', 'error');
+          this.emitNotification(tm('electron.bridge.negotiationTimeout'), 'error');
           this.cleanupProcess();
           this.handshakePromise?.resolve({ success: false });
         });
@@ -2589,15 +2759,75 @@ export class OmpBridge {
       const reqEvent = frame as ExtensionUiRequestEvent;
       const reqId = (reqEvent.id || reqEvent.requestId || '') as string;
       const method = (reqEvent.method || '') as string;
+      if (method === 'open_url') {
+        const raw = reqEvent as Record<string, unknown>;
+        const url = typeof reqEvent.url === 'string' ? reqEvent.url : typeof raw.url === 'string' ? (raw.url as string) : '';
+        if (this.activeAuthLogin) {
+          if (this.activeAuthLogin.isCancelled) {
+            return;
+          }
+          if (url && this.openUrlHandler) {
+            this.openUrlHandler(url)
+              .then(() => {
+                if (this.activeAuthLogin && !this.activeAuthLogin.isCancelled) {
+                  this.emitAuthLoginEvent({
+                    providerId: this.activeAuthLogin.providerId,
+                    status: 'awaiting-browser',
+                    url,
+                  });
+                }
+              })
+              .catch((err) => {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.error('[OmpBridge] Error opening OAuth browser:', msg);
+                if (this.activeAuthLogin && !this.activeAuthLogin.isCancelled) {
+                  const provId = this.activeAuthLogin.providerId;
+                  this.activeAuthLogin = null;
+                  this.emitAuthLoginEvent({
+                    providerId: provId,
+                    status: 'error',
+                    message: tm('electron.bridge.cannotOpenBrowser', { detail: msg }),
+                  });
+                }
+              });
+          } else {
+            this.emitAuthLoginEvent({
+              providerId: this.activeAuthLogin.providerId,
+              status: 'awaiting-browser',
+              url,
+            });
+          }
+        } else if (url && this.openUrlHandler) {
+          this.openUrlHandler(url).catch((err) => {
+            console.error('[OmpBridge] Error opening browser:', err);
+          });
+        }
+        return;
+      }
 
       // A. Interactive Methods: select, confirm, input, editor
       if (method === 'select' || method === 'confirm' || method === 'input' || method === 'editor') {
+        // If in OAuth login flow and engine asks for code input -> route separately
+        if (this.activeAuthLogin && method === 'input') {
+          if (this.activeAuthLogin.isCancelled) {
+            this.respondUiRequest(reqId, { cancelled: true });
+            return;
+          }
+          this.activeAuthLogin.pendingInputReqId = reqId;
+          this.emitAuthLoginEvent({
+            providerId: this.activeAuthLogin.providerId,
+            status: 'awaiting-browser',
+            message: reqEvent.title || reqEvent.message,
+          });
+          return;
+        }
         const isToolApproval =
           method === 'select' &&
           Array.isArray(reqEvent.options) &&
           reqEvent.options.length === 2 &&
           reqEvent.options[0] === 'Approve' &&
           reqEvent.options[1] === 'Deny';
+
 
         const uiReq: OmpUiRequest = {
           id: reqId,
@@ -2626,6 +2856,9 @@ export class OmpBridge {
         const targetId = (reqEvent.targetId || '') as string;
         if (this.pendingUiRequests.has(targetId)) {
           this.pendingUiRequests.delete(targetId);
+        }
+        if (this.activeAuthLogin && this.activeAuthLogin.pendingInputReqId === targetId) {
+          this.activeAuthLogin.pendingInputReqId = undefined;
         }
         if (this.pendingUiRequests.size === 0 && this.status === 'waiting_permission') {
           this.setStatus(this.currentTurnId ? 'thinking' : 'idle');
@@ -3425,7 +3658,7 @@ export class OmpBridge {
     }
   }
 
-  // Chờ tiến trình thoát hẳn; quá hạn thì ép SIGKILL
+  // Wait for process to exit; force SIGKILL on timeout
   private waitForProcessExit(proc: ChildProcess, timeoutMs: number): Promise<void> {
     return new Promise((resolve) => {
       if (proc.exitCode !== null || proc.signalCode !== null) {
@@ -3474,6 +3707,11 @@ export class OmpBridge {
       }
     }
     this.pendingUiRequests.clear();
+    if (this.activeAuthLogin) {
+      const { providerId } = this.activeAuthLogin;
+      this.activeAuthLogin = null;
+      this.emitAuthLoginEvent({ providerId, status: 'error', message: tm('electron.bridge.processStopped') });
+    }
     this.activeSubagents.clear();
     this.emitSubagentUpdate();
     this.availableCommands = [];
@@ -3523,7 +3761,7 @@ export class OmpBridge {
     setTimeout(() => {
       const thinking: ThinkingBlock = {
         id: 'think-' + Date.now(),
-        thought: `Đang phân tích yêu cầu: "${prompt}".\nĐọc cấu trúc AST, kiểm tra các symbols liên quan qua Language Server Protocol (LSP) và lên kế hoạch patch...`,
+        thought: tm('electron.bridge.mockThought', { prompt }),
         timestamp: Date.now(),
         completed: true,
       };
@@ -3601,7 +3839,7 @@ export class OmpBridge {
         }
 
         this.setStatus('streaming');
-        const text = `Tôi đã phân tích AST của \`src/auth/service.ts\` và hoàn thiện hàm \`validateUser\` với việc kiểm tra Token và giải mã JWT an toàn.\n\nBạn có thể xem **Visual Diff** ở khung Canvas ở giữa và nhấn **Accept Changes** (⌘↵) để ghi đè code.`;
+        const text = tm('electron.bridge.mockText');
         
         let index = 0;
         const interval = setInterval(() => {

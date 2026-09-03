@@ -25,7 +25,7 @@ export function buildMessageWithFileMentions(text: string, files: string[]): str
   return trimmed ? `${trimmed} ${tokensToAppend.join(' ')}` : tokensToAppend.join(' ');
 }
 
-// Tìm các attachment inline có token @file đã bị xoá khỏi text
+// Find inline attachments whose @file token was deleted from text
 export function findRemovedInlineAttachments(
   text: string,
   inlineFiles: Iterable<string>

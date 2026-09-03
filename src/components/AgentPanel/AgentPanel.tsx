@@ -21,6 +21,7 @@ import { PromptComposer } from './PromptComposer';
 import { ToolApprovalCard } from './ToolApprovalCard';
 import { EngineStatusStrip } from '../Notifications/EngineStatusStrip';
 import { TodoPanel } from './TodoPanel';
+import { useI18n } from '../../i18n/I18nProvider';
 interface AgentPanelProps {
   messages: ChatMessage[];
   currentThinking: ThinkingBlock | null;
@@ -82,6 +83,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   retryState,
   onAbortRetry,
 }) => {
+  const { t } = useI18n();
   return (
     <div className="w-full flex flex-col h-full bg-panel select-none">
       {/* Agent Panel Header */}
@@ -105,7 +107,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
             <button
               onClick={onCollapsePanel}
               className="p-1 rounded-md hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-              title="Thu gọn Agent Panel (⌘J)"
+              title={t('agentPanel.collapse')}
             >
               <PanelRightClose className="w-3.5 h-3.5" />
             </button>
@@ -148,7 +150,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
           <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 min-w-0">
             <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
             <span className="truncate">
-              Đang retry{retryState.attempt ? ` (lần ${retryState.attempt}${retryState.maxAttempts ? `/${retryState.maxAttempts}` : ''})` : ''}…
+              {t('agentPanel.retrying', { attempt: retryState.attempt || 1, max: retryState.maxAttempts || 3 })}
               {retryState.error ? ` - ${retryState.error}` : ''}
             </span>
           </div>
@@ -156,16 +158,16 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
             <button
               onClick={onAbortRetry}
               className="px-2.5 py-1 text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 rounded-md transition-colors cursor-pointer shrink-0"
-              title="Huỷ quá trình retry hiện tại"
+              title={t('agentPanel.cancelRetryTitle')}
             >
-              Huỷ retry
+              {t('agentPanel.cancelRetry')}
             </button>
           )}
         </div>
       )}
 
 
-      {/* Trạng thái hoạt động của agent, hiển thị sát composer */}
+      {/* Agent activity indicator, rendered above composer */}
       <AgentActivityIndicator status={status} activeToolCalls={activeToolCalls} />
 
       {/* Docked Prompt Composer */}

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Search, Sparkles, Download, ArrowRight, Folder, RefreshCw, AlertCircle } from 'lucide-react';
 import type { ForeignSessionCandidate } from '../../types';
 import { formatRelativeTime } from './ThreadList';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface ImportSessionModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
   onImportSuccess,
   currentCwd,
 }) => {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'all' | 'claude' | 'codex'>('all');
   const [candidates, setCandidates] = useState<ForeignSessionCandidate[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,10 +36,10 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
       if (res.success && res.candidates) {
         setCandidates(res.candidates);
       } else {
-        setErrorMessage(res.error || 'Không thể tải danh sách session');
+        setErrorMessage(res.error || t('import.errorLoad'));
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Lỗi quét session');
+      setErrorMessage(err?.message || t('import.scanError'));
     } finally {
       setIsLoading(false);
     }
@@ -82,10 +84,10 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
         onImportSuccess(res.sessionPath);
         onClose();
       } else {
-        setErrorMessage(res.error || 'Import thất bại');
+        setErrorMessage(res.error || t('import.errorImport'));
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Lỗi trong quá trình import');
+      setErrorMessage(err?.message || t('import.exceptionImport'));
     } finally {
       setImportingId(null);
     }
@@ -110,10 +112,10 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
-                Nhập phiên làm việc từ Claude Code / Codex
+                {t('import.title')}
               </h2>
               <p className="text-[12px] text-slate-500 dark:text-zinc-400">
-                Chuyển đổi lịch sử chat, công cụ và trạng thái vào OMP Desktop
+                {t('import.desc')}
               </p>
             </div>
           </div>
@@ -138,7 +140,7 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
                     : 'text-slate-500 hover:text-slate-800 dark:hover:text-zinc-300'
                 }`}
               >
-                Tất cả ({candidates.length})
+                {t('import.allCount', { count: candidates.length })}
               </button>
               <button
                 type="button"
@@ -170,7 +172,7 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm theo tiêu đề, tin nhắn, thư mục..."
+                placeholder={t('import.searchPlaceholder')}
                 className="w-full text-xs pl-8 pr-3 py-1.5 rounded-xl bg-panel border border-border text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 focus:outline-hidden focus:border-codex-accent"
               />
             </div>
@@ -180,7 +182,7 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
               onClick={fetchCandidates}
               disabled={isLoading}
               className="p-1.5 rounded-xl border border-border bg-panel hover:bg-surface-highlight text-slate-500 hover:text-slate-800 dark:hover:text-zinc-200 transition-colors cursor-pointer disabled:opacity-50"
-              title="Quét lại"
+              title={t('import.rescan')}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
@@ -195,7 +197,7 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
                   onChange={(e) => setFilterCurrentProjectOnly(e.target.checked)}
                   className="rounded border-border text-codex-accent focus:ring-0 cursor-pointer"
                 />
-                <span>Chỉ hiển thị session thuộc project hiện tại</span>
+                <span>{t('import.currentProjectOnly')}</span>
               </label>
             </div>
           )}
@@ -214,16 +216,16 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-48 text-slate-400 space-y-2">
               <RefreshCw className="w-5 h-5 animate-spin" />
-              <span className="text-xs">Đang quét session từ Claude Code và Codex...</span>
+              <span className="text-xs">{t('import.scanning')}</span>
             </div>
           ) : filteredCandidates.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-slate-400 dark:text-zinc-500 space-y-2 text-center px-4">
               <Sparkles className="w-6 h-6 stroke-1" />
               <p className="text-xs font-medium text-slate-600 dark:text-zinc-400">
-                Không tìm thấy phiên làm việc phù hợp
+                {t('import.noSessions')}
               </p>
               <p className="text-[11px] text-slate-400 dark:text-zinc-500 max-w-sm">
-                Đảm bảo bạn đã từng chạy phiên làm việc với Claude Code (~/.claude) hoặc Codex (~/.codex) trên máy tính này.
+                {t('import.noSessionsHint')}
               </p>
             </div>
           ) : (
@@ -277,11 +279,11 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
                     {isImportingThis ? (
                       <>
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Đang nhập...</span>
+                        <span>{t('import.importing')}</span>
                       </>
                     ) : (
                       <>
-                        <span>Nhập</span>
+                        <span>{t('import.importAction')}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}
@@ -295,14 +297,14 @@ export const ImportSessionModal: React.FC<ImportSessionModalProps> = ({
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-surface/30 shrink-0">
           <span className="text-[11px] text-slate-400 dark:text-zinc-500">
-            Tìm thấy {filteredCandidates.length} phiên khả dụng
+            {t('import.foundSessions', { count: filteredCandidates.length })}
           </span>
           <button
             type="button"
             onClick={onClose}
             className="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-surface-highlight transition-colors cursor-pointer"
           >
-            Đóng
+            {t('import.close')}
           </button>
         </div>
       </div>

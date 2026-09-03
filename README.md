@@ -68,6 +68,14 @@ Yêu cầu để ký và notarize:
 Pipeline nằm trong `scripts/release/`: `build-mac.sh` (typecheck → vite build → electron-builder → ký/notarize → DMG), `notarize.sh`, `build-dmg.sh`.
 `npm run build` chỉ tạo `.app` (ký nếu có identity, không notarize, không DMG) để thử nhanh.
 
+### 4. Đa ngôn ngữ (Tiếng Việt & English)
+
+Ứng dụng hỗ trợ giao diện song ngữ Tiếng Việt (mặc định) và Tiếng Anh (English).
+Để chuyển đổi ngôn ngữ:
+1. Mở **Cài đặt** (biểu tượng bánh răng ở góc trên bên phải hoặc phím tắt).
+2. Vào mục **Giao diện & Ngôn ngữ** (Appearance & Language).
+3. Chọn ngôn ngữ mong muốn (**Tiếng Việt** hoặc **English**). Thay đổi có hiệu lực ngay lập tức cho cả Renderer và Main Process mà không cần khởi động lại ứng dụng.
+
 ---
 
 ## Cấu trúc thư mục

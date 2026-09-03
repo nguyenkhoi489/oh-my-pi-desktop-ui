@@ -1,26 +1,27 @@
 import type { OmpCommandInfo } from '../types/index.ts';
+import { tm } from '../../shared/i18n/index.ts';
 
 export const DEMO_COMMANDS: OmpCommandInfo[] = [
-  { name: 'model', description: 'Chọn hoặc hiển thị model đang hoạt động', inputHint: '<provider/model>' },
-  { name: 'thinking', description: 'Cài đặt mức độ suy nghĩ (off/low/medium/high/max)', inputHint: '<level>' },
-  { name: 'compact', description: 'Nén ngữ cảnh phiên hội thoại hiện tại', inputHint: '[instructions]' },
-  { name: 'handoff', description: 'Tạo tài liệu bàn giao ngữ cảnh phiên làm việc hiện tại', inputHint: '[instructions]' },
-  { name: 'share', description: 'Chia sẻ phiên làm việc hiện tại qua liên kết mã hoá', inputHint: '[--gist]' },
-  { name: 'join', description: 'Tham gia phiên làm việc cộng tác (collab) qua liên kết', inputHint: '<link>' },
-  { name: 'help', description: 'Hiển thị trợ giúp danh sách lệnh' },
+  { name: 'model', description: tm('command.model.desc'), inputHint: '<provider/model>' },
+  { name: 'thinking', description: tm('command.thinking.desc'), inputHint: '<level>' },
+  { name: 'compact', description: tm('command.compact.desc'), inputHint: '[instructions]' },
+  { name: 'handoff', description: tm('command.handoff.desc'), inputHint: '[instructions]' },
+  { name: 'share', description: tm('command.share.desc'), inputHint: '[--gist]' },
+  { name: 'join', description: tm('command.join.desc'), inputHint: '<link>' },
+  { name: 'help', description: tm('command.help.desc') },
   {
     name: 'security',
-    description: 'Kiểm tra bảo mật và rà soát lỗ hổng',
+    description: tm('command.security.desc'),
     subcommands: [
-      { name: 'scan', description: 'Quét lỗ hổng nhanh trong codebase' },
-      { name: 'audit', description: 'Kiểm tra bảo mật toàn diện STRIDE + OWASP' },
+      { name: 'scan', description: tm('command.security.scan.desc') },
+      { name: 'audit', description: tm('command.security.audit.desc') },
     ],
   },
-  { name: 'skill:ak-brainstorm', description: 'Brainstorm ý tưởng & kiến trúc trước khi code' },
-  { name: 'skill:ak-cook', description: 'Thực thi tính năng theo workflow có cấu trúc' },
-  { name: 'skill:ak-debug', description: 'Debug và phân tích nguyên nhân gốc rễ trước khi sửa' },
-  { name: 'skill:ak-code-review', description: 'Review chất lượng code và tìm lỗi tiềm ẩn' },
-  { name: 'skill:ak-git', description: 'Thao tác git commit chuẩn conventional' },
+  { name: 'skill:ak-brainstorm', description: tm('command.skill.brainstorm.desc') },
+  { name: 'skill:ak-cook', description: tm('command.skill.cook.desc') },
+  { name: 'skill:ak-debug', description: tm('command.skill.debug.desc') },
+  { name: 'skill:ak-code-review', description: tm('command.skill.codeReview.desc') },
+  { name: 'skill:ak-git', description: tm('command.skill.git.desc') },
 ];
 
 export interface CommandMenuItem {

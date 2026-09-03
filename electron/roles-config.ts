@@ -1,3 +1,4 @@
+import { tm } from '../shared/i18n/index.ts';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
@@ -72,7 +73,7 @@ export async function readModelRolesConfig(customPath?: string): Promise<ModelRo
       filePath: targetPath,
       isWritable,
       error: !isWritable
-        ? `Không có quyền ghi vào file ${targetPath}. Hãy chạy lệnh sau trong Terminal để cấp quyền: sudo chown $USER ${targetPath}`
+        ? tm('electron.roles.permissionError', { path: targetPath })
         : undefined,
     };
   } catch (err: any) {
@@ -85,7 +86,7 @@ export async function readModelRolesConfig(customPath?: string): Promise<ModelRo
         roles: {},
         filePath: targetPath,
         isWritable: false,
-        error: `Không có quyền truy cập file ${targetPath}. Hãy chạy lệnh sau trong Terminal để cấp quyền: sudo chown $USER ${targetPath}`,
+        error: tm('electron.roles.permissionError', { path: targetPath }),
       };
     }
 
@@ -93,12 +94,12 @@ export async function readModelRolesConfig(customPath?: string): Promise<ModelRo
       roles: {},
       filePath: targetPath,
       isWritable,
-      error: `Lỗi đọc cấu hình: ${err?.message || String(err)}`,
+      error: tm('electron.roles.readConfigError', { detail: err?.message || String(err) }),
     };
   }
 }
 
-// Chỉ ghi đè key modelRoles, giữ nguyên mọi key và comment khác của config.yml
+// Override only modelRoles key, preserve other keys and comments in config.yml
 export async function writeModelRolesConfig(
   roles: Record<string, string>,
   customPath?: string
@@ -128,7 +129,7 @@ export async function writeModelRolesConfig(
       return {
         success: false,
         filePath: targetPath,
-        error: `File config.yml hiện tại bị lỗi cú pháp, không thể cập nhật an toàn: ${doc.errors[0].message}`,
+        error: tm('electron.roles.syntaxError', { detail: doc.errors[0].message }),
       };
     }
 
@@ -140,7 +141,7 @@ export async function writeModelRolesConfig(
 
     const yamlContent = doc.toString();
 
-    // Kiểm tra tính toàn vẹn bằng cách parse lại trước khi ghi
+    // Validate integrity before writing
     YAML.parse(yamlContent);
 
     await fs.writeFile(targetPath, yamlContent, 'utf-8');
@@ -155,14 +156,14 @@ export async function writeModelRolesConfig(
       return {
         success: false,
         filePath: targetPath,
-        error: `Không có quyền ghi vào file ${targetPath}. Hãy chạy lệnh sau trong Terminal để cấp quyền: sudo chown $USER ${targetPath}`,
+        error: tm('electron.roles.permissionError', { path: targetPath }),
       };
     }
 
     return {
       success: false,
       filePath: targetPath,
-      error: `Lỗi khi lưu cấu hình config.yml: ${err?.message || String(err)}`,
+      error: tm('electron.roles.saveConfigError', { detail: err?.message || String(err) }),
     };
   }
 }

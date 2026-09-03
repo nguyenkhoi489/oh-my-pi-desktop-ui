@@ -3,6 +3,7 @@ import { Sparkles, Terminal, X, Hash, ChevronRight } from 'lucide-react';
 import { OmpCommandInfo } from '../../types';
 import { useCommandCatalog } from '../../hooks/useCommandCatalog';
 import { CommandMenuItem } from '../../utils/commandMenu';
+import { useI18n } from '../../i18n/I18nProvider';
 
 export interface OmnibarModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export const OmnibarModal: React.FC<OmnibarModalProps> = ({
   onSubmit,
   availableCommands,
 }) => {
+  const { t } = useI18n();
   const [prompt, setPrompt] = useState<string>('');
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
@@ -28,19 +30,19 @@ export const OmnibarModal: React.FC<OmnibarModalProps> = ({
     query: prompt,
   });
 
-  // Map index cho các item để truy xuất O(1)
+  // Map index for items for O(1) lookup
   const itemIndexMap = useMemo(() => {
     const map = new Map<CommandMenuItem, number>();
     filteredItems.forEach((item, idx) => map.set(item, idx));
     return map;
   }, [filteredItems]);
 
-  // Reset index khi query hoặc isOpen thay đổi
+  // Reset index when query or isOpen changes
   useEffect(() => {
     setSelectedIndex(0);
   }, [prompt, isOpen]);
 
-  // Tự động focus input khi modal mở
+  // Auto-focus input when modal opens
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => {
@@ -52,7 +54,7 @@ export const OmnibarModal: React.FC<OmnibarModalProps> = ({
     }
   }, [isOpen]);
 
-  // Cuộn item đang chọn vào view
+  // Scroll active item into view
   useEffect(() => {
     if (activeItemRef.current) {
       activeItemRef.current.scrollIntoView({
@@ -100,16 +102,16 @@ export const OmnibarModal: React.FC<OmnibarModalProps> = ({
 
     if (e.key === 'Enter') {
       e.preventDefault();
-      // Nếu có item trong danh sách và prompt bắt đầu bằng '/' hoặc query khớp
+      // If list has items and prompt starts with '/' or query matches
       if (filteredItems.length > 0 && selectedIndex >= 0 && filteredItems[selectedIndex]) {
-        // Nếu user gõ '/' hoặc query đang lọc command, chọn command được highlight
+        // If user types '/' or query is filtering commands, select highlighted command
         if (prompt.startsWith('/') || filteredItems.length < 50) {
           handleSelectAndSubmit(filteredItems[selectedIndex]);
           return;
         }
       }
 
-      // Nếu không, submit trực tiếp nội dung prompt người dùng đã gõ
+      // Otherwise submit raw user prompt text directly
       if (prompt.trim()) {
         onSubmit(prompt);
         setPrompt('');
@@ -130,14 +132,14 @@ export const OmnibarModal: React.FC<OmnibarModalProps> = ({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Gõ lệnh (/model, /compact, /skill:...) hoặc nhập yêu cầu..."
+            placeholder={t('omnibar.placeholder')}
             className="flex-1 bg-transparent text-sm outline-none text-slate-900 dark:text-zinc-100 placeholder-slate-400 dark:placeholder-zinc-500 font-sans"
           />
           <button
             type="button"
             onClick={onClose}
             className="p-1 rounded-lg hover:bg-surface-highlight text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer ml-2"
-            title="Đóng (ESC)"
+            title={t('omnibar.closeTitle')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -147,7 +149,7 @@ export const OmnibarModal: React.FC<OmnibarModalProps> = ({
         <div className="p-2 space-y-2 overflow-y-auto flex-1">
           {filteredItems.length === 0 ? (
             <div className="p-6 text-center text-xs text-slate-400">
-              Không tìm thấy lệnh hoặc skill nào phù hợp. Nhấn ↵ để gửi như yêu cầu thông thường.
+              {t('omnibar.noMatch')}
             </div>
           ) : (
             groups.map((grp) => (
@@ -230,14 +232,14 @@ export const OmnibarModal: React.FC<OmnibarModalProps> = ({
         <div className="px-4 py-2 bg-surface border-t border-border flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 shrink-0">
           <div className="flex items-center gap-1.5">
             <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-background border border-border rounded">↑↓</kbd>
-            <span className="text-[11px]">chọn lệnh</span>
+            <span className="text-[11px]">{t('omnibar.selectNav')}</span>
             <span className="mx-1 text-slate-300 dark:text-zinc-600">·</span>
             <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-background border border-border rounded">↵</kbd>
-            <span className="text-[11px]">thực thi</span>
+            <span className="text-[11px]">{t('omnibar.executeNav')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-background border border-border rounded">ESC</kbd>
-            <span className="text-[11px]">đóng</span>
+            <span className="text-[11px]">{t('omnibar.closeNav')}</span>
           </div>
         </div>
       </div>

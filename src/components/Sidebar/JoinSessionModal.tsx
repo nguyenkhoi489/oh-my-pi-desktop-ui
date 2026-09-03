@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../../i18n/I18nProvider';
 import {
   X,
   Users,
@@ -20,6 +21,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
   onClose,
   onJoinedSuccess,
 }) => {
+  const { t } = useI18n();
   const [link, setLink] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +35,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
     if (!cleanLink || isLoading) return;
 
     if (!window.electronAPI?.joinSession) {
-      setError('API joinSession không khả dụng trong môi trường này.');
+      setError(t('join.apiUnavailable'));
       return;
     }
 
@@ -44,7 +46,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
     try {
       const res = await window.electronAPI.joinSession(cleanLink);
       if (res.success) {
-        setSuccessMsg(res.message || 'Tham gia phiên làm việc thành công!');
+        setSuccessMsg(res.message || t('join.success'));
         if (onJoinedSuccess) {
           onJoinedSuccess();
         }
@@ -52,10 +54,10 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
           onClose();
         }, 1500);
       } else {
-        setError(res.error || 'Không thể tham gia session từ liên kết này.');
+        setError(res.error || t('join.errorMsg'));
       }
     } catch (err: any) {
-      setError(err?.message || 'Lỗi ngoại lệ khi tham gia session.');
+      setError(err?.message || t('join.exceptionError'));
     } finally {
       setIsLoading(false);
     }
@@ -75,7 +77,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
                 Tham gia Collab Session
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400">
-                Nhập liên kết chia sẻ hoặc mã relay
+                {t('join.subtitle')}
               </p>
             </div>
           </div>
@@ -91,7 +93,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
         <form onSubmit={handleJoin} className="p-5 space-y-4 text-xs text-slate-600 dark:text-zinc-300">
           <div className="space-y-1.5">
             <label className="block text-xs font-medium text-slate-700 dark:text-zinc-200">
-              Liên kết Collab hoặc Mã phòng (/join)
+              {t('join.linkLabel')}
             </label>
             <div className="relative flex items-center">
               <LinkIcon className="absolute left-3 w-4 h-4 text-slate-400 dark:text-zinc-500 pointer-events-none" />
@@ -99,14 +101,14 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
                 type="text"
                 value={link}
                 onChange={(e) => setLink(e.target.value)}
-                placeholder="relay.example.sh/abc123#key hoặc https://..."
+                placeholder={t('join.placeholder')}
                 autoFocus
                 disabled={isLoading}
                 className="w-full pl-9 pr-3 py-2 rounded-lg bg-surface border border-border text-xs text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 outline-none font-mono"
               />
             </div>
             <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
-              Bạn có thể dán link được host chia sẻ qua lệnh <code className="px-1 py-0.5 rounded bg-surface border border-border">omp share</code> hoặc <code className="px-1 py-0.5 rounded bg-surface border border-border">/collab</code>.
+              {t('join.linkHint', { cmd1: 'omp share', cmd2: '/collab' })}
             </p>
           </div>
 
@@ -133,7 +135,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
               onClick={onClose}
               className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-zinc-400 hover:bg-surface-highlight transition-colors cursor-pointer"
             >
-              Huỷ
+              {t('join.cancel')}
             </button>
             <button
               type="submit"
@@ -141,7 +143,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors shadow-sm cursor-pointer"
             >
               {isLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-              <span>{isLoading ? 'Đang tham gia...' : 'Tham gia'}</span>
+              <span>{isLoading ? t('join.joiningStatus') : t('join.joinBtn')}</span>
             </button>
           </div>
         </form>

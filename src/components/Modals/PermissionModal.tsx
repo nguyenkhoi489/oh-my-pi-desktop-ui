@@ -4,7 +4,7 @@ import { OmpUiRequest } from '../../types';
 import { SelectView } from './permission/SelectView';
 import { ConfirmView } from './permission/ConfirmView';
 import { InputView } from './permission/InputView';
-
+import { useI18n } from '../../i18n/I18nProvider';
 export interface PermissionModalProps {
   request: OmpUiRequest | null;
   queueLength?: number;
@@ -22,9 +22,10 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
   onRespondInput,
   onDismiss,
 }) => {
+  const { t } = useI18n();
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
-  // Sync timeout countdown when request changes (chỉ khi có timeout thật từ engine)
+  // Sync timeout countdown when request changes
   useEffect(() => {
     if (!request) {
       setTimeLeft(null);
@@ -42,7 +43,7 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
     }
   }, [request?.id, request?.timeout]);
 
-  // Bộ đếm giây trung thực
+  // Countdown seconds timer
   useEffect(() => {
     if (timeLeft === null || timeLeft <= 0) return;
 
@@ -53,7 +54,7 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
     return () => clearInterval(timer);
   }, [timeLeft]);
 
-  // ESC key dismissal cho các UI request thông thường (select, confirm, input, editor)
+  // ESC key dismissal for standard UI requests (select, confirm, input, editor)
   useEffect(() => {
     if (!request) return;
 
@@ -81,8 +82,8 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
         }`}
         title={
           timeLeft === 0
-            ? 'Đã hết thời gian chờ engine xử lý'
-            : `Engine tự xử lý sau ${timeLeft}s`
+            ? t('permission.timeoutExpired')
+            : t('permission.timeoutCountdown', { timeLeft })
         }
       >
         <Clock className="w-3 h-3" />
@@ -101,7 +102,7 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 truncate">
-                {request.title || 'Lựa chọn tùy chọn'}
+                {request.title || t('permission.selectTitle')}
               </h3>
               {queueLength > 1 && (
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-border text-slate-500 dark:text-zinc-400 shrink-0">
@@ -110,7 +111,7 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
               )}
             </div>
             <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5 truncate">
-              {request.message || 'Vui lòng chọn một tùy chọn bên dưới để tiếp tục:'}
+              {request.message || t('permission.selectMessage')}
             </p>
           </div>
           {renderTimeoutBadge()}
@@ -127,7 +128,7 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 truncate">
-                {request.title || 'Xác nhận hành động'}
+                {request.title || t('permission.confirmTitle')}
               </h3>
               {queueLength > 1 && (
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-border text-slate-500 dark:text-zinc-400 shrink-0">
@@ -136,7 +137,7 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
               )}
             </div>
             <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5 truncate">
-              {request.message || 'Vui lòng xác nhận để tiếp tục:'}
+              {request.message || t('permission.confirmMessage')}
             </p>
           </div>
           {renderTimeoutBadge()}
@@ -158,7 +159,7 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100 truncate">
               {request.title ||
-                (request.method === 'editor' ? 'Chỉnh sửa nội dung' : 'Nhập thông tin')}
+                (request.method === 'editor' ? t('permission.editorTitle') : t('permission.inputTitle'))}
             </h3>
             {queueLength > 1 && (
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-border text-slate-500 dark:text-zinc-400 shrink-0">
@@ -167,7 +168,7 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
             )}
           </div>
           <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5 truncate">
-            {request.message || 'Vui lòng cung cấp nội dung cần thiết:'}
+            {request.message || t('permission.inputMessage')}
           </p>
         </div>
         {renderTimeoutBadge()}

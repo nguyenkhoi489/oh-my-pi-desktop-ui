@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../../i18n/I18nProvider';
 import {
   X,
   Share2,
@@ -24,6 +25,7 @@ export const ShareSessionModal: React.FC<ShareSessionModalProps> = ({
   onClose,
   session,
 }) => {
+  const { t } = useI18n();
   const [useGist, setUseGist] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -47,10 +49,10 @@ export const ShareSessionModal: React.FC<ShareSessionModalProps> = ({
         // Fallback neu link nam trong raw text
         setShareUrl(res.rawOutput);
       } else {
-        setError(res.error || 'Không thể tạo liên kết chia sẻ session');
+        setError(res.error || t('share.error'));
       }
     } catch (err: any) {
-      setError(err?.message || 'Lỗi ngoại lệ khi chia sẻ session');
+      setError(err?.message || t('share.exceptionError'));
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +76,7 @@ export const ShareSessionModal: React.FC<ShareSessionModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-100">
-                Chia sẻ phiên làm việc
+                {t('share.title')}
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400 truncate max-w-xs">
                 {session.title || session.id}
@@ -96,10 +98,10 @@ export const ShareSessionModal: React.FC<ShareSessionModalProps> = ({
             <Lock className="w-4 h-4 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <p className="font-medium text-slate-800 dark:text-zinc-200">
-                Bảo mật & Mã hoá
+                {t('share.securityTitle')}
               </p>
               <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300/90">
-                Nội dung session được mã hoá đầu cuối (end-to-end). Bất kỳ ai có đường dẫn kèm mã khoá đều có thể xem lịch sử hội thoại của phiên này.
+                {t('share.securityDesc')}
               </p>
             </div>
           </div>
@@ -115,10 +117,10 @@ export const ShareSessionModal: React.FC<ShareSessionModalProps> = ({
             <div className="flex-1">
               <div className="flex items-center gap-1.5 font-medium text-slate-800 dark:text-zinc-200">
                 <GitBranch className="w-3.5 h-3.5" />
-                <span>Lưu trữ trên GitHub Gist ẩn (--gist)</span>
+                <span>{t('share.gistLabel')}</span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                Tải nội dung lên secret gist cá nhân thay vì máy chủ chia sẻ OMP mặc định.
+                {t('share.gistDesc')}
               </p>
             </div>
           </label>
@@ -127,7 +129,7 @@ export const ShareSessionModal: React.FC<ShareSessionModalProps> = ({
           {shareUrl && (
             <div className="space-y-2 pt-1 animate-fade-in">
               <label className="block text-xs font-semibold text-slate-700 dark:text-zinc-200">
-                Liên kết chia sẻ của bạn:
+                {t('share.yourLink')}
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -141,7 +143,7 @@ export const ShareSessionModal: React.FC<ShareSessionModalProps> = ({
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-sm transition-colors cursor-pointer shrink-0"
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? 'Đã chép' : 'Sao chép'}</span>
+                  <span>{copied ? t('share.copied') : t('share.copy')}</span>
                 </button>
               </div>
             </div>
@@ -162,7 +164,7 @@ export const ShareSessionModal: React.FC<ShareSessionModalProps> = ({
             onClick={onClose}
             className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-zinc-400 hover:bg-surface-highlight transition-colors cursor-pointer"
           >
-            Đóng
+            {t('share.close')}
           </button>
 
           {!shareUrl ? (
@@ -172,7 +174,7 @@ export const ShareSessionModal: React.FC<ShareSessionModalProps> = ({
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors shadow-sm cursor-pointer"
             >
               {isLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-              <span>{isLoading ? 'Đang tạo liên kết...' : 'Tạo liên kết chia sẻ'}</span>
+              <span>{isLoading ? t('share.creating') : t('share.createBtn')}</span>
             </button>
           ) : (
             <a
@@ -181,7 +183,7 @@ export const ShareSessionModal: React.FC<ShareSessionModalProps> = ({
               rel="noreferrer"
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors cursor-pointer"
             >
-              <span>Mở liên kết</span>
+              <span>{t('share.openLink')}</span>
               <ExternalLink className="w-3 h-3" />
             </a>
           )}

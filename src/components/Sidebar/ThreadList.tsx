@@ -5,6 +5,8 @@ import { OmpSessionInfo, OmpAgentStatus } from '../../types';
 import { ImportSessionModal } from './ImportSessionModal';
 import { ShareSessionModal } from './ShareSessionModal';
 import { JoinSessionModal } from './JoinSessionModal';
+import { useI18n } from '../../i18n/I18nProvider';
+import { tm } from '../../../shared/i18n';
 export function formatRelativeTime(dateInput?: string | number | Date): string {
   if (!dateInput) return '';
   const date = new Date(dateInput);
@@ -13,17 +15,17 @@ export function formatRelativeTime(dateInput?: string | number | Date): string {
   if (isNaN(diffMs)) return '';
 
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'Vừa xong';
+  if (diffSec < 60) return tm('threads.time.justNow');
 
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m trước`;
+  if (diffMin < 60) return tm('threads.time.minutesAgo', { min: diffMin });
 
   const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour}h trước`;
+  if (diffHour < 24) return tm('threads.time.hoursAgo', { hour: diffHour });
 
   const diffDay = Math.floor(diffHour / 24);
-  if (diffDay === 1) return 'Hôm qua';
-  if (diffDay < 7) return `${diffDay}d trước`;
+  if (diffDay === 1) return tm('threads.time.yesterday');
+  if (diffDay < 7) return tm('threads.time.daysAgo', { day: diffDay });
 
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
@@ -52,6 +54,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
   onDeleteSession,
   onExportSession,
 }) => {
+  const { t } = useI18n();
   const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI);
   const isBusy = status !== 'idle';
   const [editingSessionPath, setEditingSessionPath] = useState<string | null>(null);
@@ -71,7 +74,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
       editInputRef.current.select();
     }
   }, [editingSessionPath]);
-  // Đóng modal xóa phiên bằng phím ESC
+  // Close delete session modal on ESC key
   useEffect(() => {
     if (!sessionToDelete) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -84,9 +87,9 @@ export const ThreadList: React.FC<ThreadListProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [sessionToDelete, isDeleting]);
   const demoThreads = [
-    { id: '1', title: 'Hoàn thiện hàm validateUser JWT', active: true, time: '2m trước' },
-    { id: '2', title: 'Refactor cấu trúc auth middleware', active: false, time: '1h trước' },
-    { id: '3', title: 'Sửa lỗi build Vite + TypeScript', active: false, time: 'Hôm qua' },
+    { id: '1', title: t('threads.demo.jwt'), active: true, time: t('threads.time.minutesAgo', { min: 2 }) },
+    { id: '2', title: t('threads.demo.auth'), active: false, time: t('threads.time.hoursAgo', { hour: 1 }) },
+    { id: '3', title: t('threads.demo.vite'), active: false, time: t('threads.time.yesterday') },
   ];
 
   const renderDemoFallback = !isElectron && sessions.length === 0;
@@ -129,7 +132,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                 ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600'
                 : 'hover:bg-surface-highlight text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 cursor-pointer'
             }`}
-            title="Nhập session từ Claude Code / Codex"
+            title={t('threads.importFromOther')}
           >
             <FolderInput className="w-3.5 h-3.5" />
           </button>
@@ -146,7 +149,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                 ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600'
                 : 'hover:bg-surface-highlight text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 cursor-pointer'
             }`}
-            title={isBusy ? 'Đang xử lý...' : 'Tạo phiên mới'}
+            title={isBusy ? t('threads.processing') : t('threads.createNew')}
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
@@ -184,7 +187,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
         ) : sessions.length === 0 ? (
           <div className="px-2 py-4 text-center select-none">
             <MessageSquare className="w-5 h-5 mx-auto text-slate-300 dark:text-zinc-600 mb-1" />
-            <div className="text-[12px] text-slate-400 dark:text-zinc-500">Chưa có phiên làm việc</div>
+            <div className="text-[12px] text-slate-400 dark:text-zinc-500">{t('threads.noSessions')}</div>
           </div>
         ) : (
           sessions.map((session) => {
@@ -232,7 +235,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                       ? 'text-slate-400 dark:text-zinc-500 opacity-60 cursor-not-allowed'
                       : 'text-slate-700 dark:text-zinc-400 hover:bg-surface hover:text-slate-900 dark:hover:text-zinc-200 cursor-pointer'
                 }`}
-                title={isBusy ? 'Đang xử lý prompt...' : effectiveTitle}
+                title={isBusy ? t('threads.processingPrompt') : effectiveTitle}
               >
                 <MessageSquare
                   className={`w-4 h-4 mt-0.5 shrink-0 ${
@@ -260,7 +263,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                           }
                         }}
                         disabled={isRenaming}
-                        placeholder="Nhập tên phiên..."
+                        placeholder={t('threads.renamePlaceholder')}
                         className="w-full text-[12px] px-2 py-1 rounded bg-panel border border-border text-slate-900 dark:text-zinc-100 focus:outline-hidden focus:border-codex-accent font-medium"
                       />
                       <div className="flex items-center justify-end gap-1.5">
@@ -270,7 +273,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                           disabled={isRenaming}
                           className="px-2 py-0.5 rounded text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:hover:text-zinc-300 hover:bg-surface-highlight transition-colors cursor-pointer"
                         >
-                          Hủy
+                          {t('threads.cancel')}
                         </button>
                         <button
                           type="button"
@@ -279,7 +282,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                           className="flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-codex-accent hover:bg-codex-accent/90 text-white transition-colors cursor-pointer disabled:opacity-50"
                         >
                           <Check className="w-3 h-3" />
-                          <span>{isRenaming ? 'Đang lưu...' : 'Lưu'}</span>
+                          <span>{isRenaming ? t('threads.saving') : t('threads.save')}</span>
                         </button>
                       </div>
                     </div>
@@ -311,7 +314,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                           }}
                           disabled={isBusy}
                           className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-opacity cursor-pointer"
-                          title="Đổi tên phiên"
+                          title={t('threads.renameTooltip')}
                         >
                           <Edit2 className="w-3 h-3" />
                         </button>
@@ -328,7 +331,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                           }}
                           disabled={isBusy || isExporting}
                           className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-opacity cursor-pointer"
-                          title="Xuất phiên ra HTML"
+                          title={t('threads.exportHtmlTooltip')}
                         >
                           <Download className="w-3 h-3" />
                         </button>
@@ -340,7 +343,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                           }}
                           disabled={isBusy}
                           className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-opacity cursor-pointer"
-                          title="Chia sẻ phiên làm việc (/share)"
+                          title={t('threads.shareTooltip')}
                         >
                           <Share2 className="w-3 h-3" />
                         </button>
@@ -356,7 +359,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                           }}
                           disabled={isBusy}
                           className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-opacity cursor-pointer"
-                          title="Chia sẻ phiên làm việc (/share)"
+                          title={t('threads.shareTooltip')}
                         >
                           <Share2 className="w-3 h-3" />
                         </button>
@@ -368,7 +371,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                           }}
                           disabled={isBusy}
                           className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition-opacity cursor-pointer"
-                          title="Xóa phiên làm việc"
+                          title={t('threads.deleteTooltip')}
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -401,17 +404,13 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
-                    Xác nhận xóa phiên
+                    {t('threads.confirmDeleteTitle')}
                   </h3>
                   <p className="text-xs text-slate-600 dark:text-zinc-400 mt-1.5 leading-relaxed">
-                    Bạn có chắc chắn muốn xóa phiên làm việc{' '}
-                    <span className="font-semibold text-slate-900 dark:text-zinc-200">
-                      "{sessionToDelete.title || 'New Session'}"
-                    </span>{' '}
-                    không?
+                    {t('threads.confirmDeleteDesc', { title: sessionToDelete.title || 'New Session' })}
                   </p>
                   <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1.5 leading-normal">
-                    Tệp nhật ký và các nhánh subagent liên quan sẽ bị xóa vĩnh viễn khỏi đĩa.
+                    {t('threads.confirmDeleteDisk')}
                   </p>
                 </div>
               </div>
@@ -423,7 +422,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                   disabled={isDeleting}
                   className="px-3.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-surface-highlight transition-colors cursor-pointer"
                 >
-                  Hủy (ESC)
+                  {t('threads.cancelEsc')}
                 </button>
                 <button
                   type="button"
@@ -442,7 +441,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-all cursor-pointer shadow-xs disabled:opacity-50"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>{isDeleting ? 'Đang xóa...' : 'Xóa phiên'}</span>
+                  <span>{isDeleting ? t('threads.deleting') : t('threads.deleteAction')}</span>
                 </button>
               </div>
             </div>

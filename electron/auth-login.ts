@@ -1,3 +1,4 @@
+import { tm } from '../shared/i18n/index.ts';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { BrowserWindow } from 'electron';
@@ -6,7 +7,7 @@ import type { AuthLoginEvent } from './types.ts';
 
 const execFileAsync = promisify(execFile);
 
-// Trích danh sách provider đã xác thực từ output `omp usage --json`
+// Extract authenticated providers list from omp usage --json output
 export function parseAuthenticatedProviders(jsonString: string): string[] {
   try {
     const parsed = JSON.parse(jsonString);
@@ -35,7 +36,7 @@ export async function fetchAuthenticatedProviders(
     return {
       success: false,
       providers: [],
-      error: `Lỗi khi lấy trạng thái đăng nhập: ${err?.message || String(err)}`,
+      error: tm('electron.authLogin.fetchStatusFailed', { detail: err?.message || String(err) }),
     };
   }
 }
@@ -43,7 +44,7 @@ export async function fetchAuthenticatedProviders(
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 const URL_REGEX = /https?:\/\/[^\s"'<>]+/;
 
-// Quản lý một phiên đăng nhập OAuth qua `omp auth-broker login <provider>`
+// Manage OAuth login session via omp auth-broker login <provider>
 export class AuthLoginManager {
   private process: ChildProcess | null = null;
   private window: BrowserWindow | null = null;
@@ -64,7 +65,7 @@ export class AuthLoginManager {
     window: BrowserWindow
   ): { success: boolean; error?: string } {
     if (!providerId || typeof providerId !== 'string') {
-      return { success: false, error: 'Provider id không hợp lệ.' };
+      return { success: false, error: tm('electron.authLogin.invalidProviderId') };
     }
 
     this.cancel();
@@ -82,7 +83,7 @@ export class AuthLoginManager {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
     } catch (err: any) {
-      return { success: false, error: `Không thể khởi chạy omp: ${err?.message || String(err)}` };
+      return { success: false, error: tm('electron.authLogin.spawnFailed', { detail: err?.message || String(err) }) };
     }
 
     this.process = child;
@@ -90,7 +91,7 @@ export class AuthLoginManager {
 
     this.timeout = setTimeout(() => {
       if (this.process === child) {
-        this.stderrBuffer = 'Hết thời gian chờ xác thực (5 phút).';
+        this.stderrBuffer = tm('electron.authLogin.timeout');
         child.kill('SIGTERM');
       }
     }, LOGIN_TIMEOUT_MS);
@@ -125,7 +126,7 @@ export class AuthLoginManager {
     return { success: true };
   }
 
-  // Emit cancelled ngay và tách tiến trình cũ để close handler của nó bị bỏ qua
+  // Emit cancelled immediately and detach old process
   cancel(): { success: boolean } {
     const child = this.process;
     if (child && this.providerId) {
@@ -135,10 +136,10 @@ export class AuthLoginManager {
     return { success: true };
   }
 
-  // Chuyển redirect URL / authorization code người dùng dán vào stdin của CLI
+  // Forward redirect URL / auth code user pasted to CLI stdin
   submitInput(text: string): { success: boolean; error?: string } {
     if (!this.process || !this.process.stdin?.writable) {
-      return { success: false, error: 'Không có phiên đăng nhập nào đang chờ.' };
+      return { success: false, error: tm('electron.authLogin.noPendingSession') };
     }
     this.process.stdin.write(`${text.trim()}\n`);
     return { success: true };
@@ -156,7 +157,7 @@ export class AuthLoginManager {
     this.urlOpened = true;
     const url = match[0];
     this.openUrl(url).catch((err) => {
-      console.error('[AuthLogin] Không mở được trình duyệt:', err);
+      console.error('[AuthLogin] Cannot open browser:', err);
     });
     this.emit({ providerId: this.providerId, status: 'awaiting-browser', url });
   }
@@ -164,7 +165,7 @@ export class AuthLoginManager {
   private buildErrorMessage(code: number | null): string {
     const stderrTail = this.stderrBuffer.trim().split('\n').slice(-3).join('\n').trim();
     if (stderrTail) return stderrTail;
-    return `Đăng nhập thất bại (exit code ${code ?? 'unknown'}).`;
+    return tm('electron.authLogin.loginFailed', { code: String(code ?? 'unknown') });
   }
 
   private finish(event: AuthLoginEvent): void {

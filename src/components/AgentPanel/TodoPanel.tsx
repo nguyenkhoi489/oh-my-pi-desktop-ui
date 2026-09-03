@@ -10,13 +10,14 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { OmpTodoPhase, OmpTodoItem, OmpTodoStatus } from '../../types';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface TodoPanelProps {
   phases?: OmpTodoPhase[];
   todos?: OmpTodoItem[];
 }
 
-// Map trạng thái todo sang icon và style hiển thị
+// Map todo status to icon and display style
 function renderTodoStatusIcon(status: OmpTodoStatus) {
   switch (status) {
     case 'done':
@@ -36,7 +37,7 @@ function renderTodoStatusIcon(status: OmpTodoStatus) {
   }
 }
 
-// Style văn bản theo trạng thái todo
+// Style text according to todo status
 function getTodoTextStyle(status: OmpTodoStatus): string {
   switch (status) {
     case 'done':
@@ -57,22 +58,22 @@ function getTodoTextStyle(status: OmpTodoStatus): string {
 }
 
 const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [] }) => {
+  const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const activeTaskRef = useRef<HTMLDivElement | null>(null);
-
-  // Chuẩn hóa danh sách phase và task
+  // Normalize phases and tasks list
   const normalizedPhases = useMemo<OmpTodoPhase[]>(() => {
     if (Array.isArray(phases) && phases.length > 0) {
       return phases.filter((p) => Array.isArray(p.tasks) && p.tasks.length > 0);
     }
     if (Array.isArray(todos) && todos.length > 0) {
       const phaseMap = new Map<string, OmpTodoItem[]>();
-      for (const t of todos) {
-        const name = typeof t.phase === 'string' && t.phase ? t.phase : 'Kế hoạch thực hiện';
+      for (const todoItem of todos) {
+        const name = typeof todoItem.phase === 'string' && todoItem.phase ? todoItem.phase : t('todos.title');
         if (!phaseMap.has(name)) {
           phaseMap.set(name, []);
         }
-        phaseMap.get(name)!.push(t);
+        phaseMap.get(name)!.push(todoItem);
       }
       return Array.from(phaseMap.entries()).map(([name, tasks]) => ({
         name,
@@ -82,7 +83,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [] 
     return [];
   }, [phases, todos]);
 
-  // Đếm tổng số task và số task đã hoàn thành
+  // Count total tasks and completed tasks
   const { totalTasks, completedTasks, inProgressCount } = useMemo(() => {
     let total = 0;
     let completed = 0;
@@ -102,7 +103,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [] 
     return { totalTasks: total, completedTasks: completed, inProgressCount: inProgress };
   }, [normalizedPhases]);
 
-  // Tự động cuộn tới mục đang thực hiện khi danh sách mở rộng
+  // Auto-scroll to active task when expanded
   useEffect(() => {
     if (isExpanded && inProgressCount > 0 && activeTaskRef.current) {
       activeTaskRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -117,7 +118,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [] 
 
   return (
     <div className="border-b border-border bg-surface/80 backdrop-blur-sm shrink-0 select-none">
-      {/* Header thanh tiến độ Todo */}
+      {/* Todo progress bar header */}
       <div
         onClick={() => setIsExpanded((prev) => !prev)}
         className="px-3.5 py-2 flex items-center justify-between cursor-pointer hover:bg-surface-highlight/50 transition-colors"
@@ -125,7 +126,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [] 
         <div className="flex items-center gap-2 min-w-0">
           <ListTodo className="w-4 h-4 text-codex-accent shrink-0" />
           <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 truncate">
-            Tiến độ thực hiện
+            {t('todos.progress')}
           </span>
           <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-surface-highlight font-mono font-medium text-slate-600 dark:text-zinc-400">
             {completedTasks}/{totalTasks}
@@ -143,7 +144,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [] 
           <button
             type="button"
             className="p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"
-            aria-label={isExpanded ? 'Thu gọn danh sách todo' : 'Mở rộng danh sách todo'}
+            aria-label={isExpanded ? t('todos.collapse') : t('todos.expand')}
           >
             {isExpanded ? (
               <ChevronUp className="w-3.5 h-3.5" />
@@ -154,7 +155,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [] 
         </div>
       </div>
 
-      {/* Danh sách các phase và task khi mở rộng */}
+      {/* Expanded phases and tasks list */}
       {isExpanded && (
         <div className="px-3.5 pb-2.5 pt-0.5 max-h-48 overflow-y-auto space-y-2 border-t border-border/40 text-xs">
           {normalizedPhases.map((phase, pIdx) => (
@@ -184,7 +185,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [] 
                         </span>
                         {task.reason && (
                           <div className="text-[11px] text-amber-600 dark:text-amber-400/90 mt-0.5 italic">
-                            Lý do: {task.reason}
+                            {t('todos.reason', { reason: task.reason })}
                           </div>
                         )}
                       </div>

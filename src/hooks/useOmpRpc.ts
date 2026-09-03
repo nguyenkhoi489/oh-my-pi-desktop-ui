@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { tm } from '../../shared/i18n';
 import {
   OmpAgentStatus,
   ChatMessage,
@@ -26,6 +27,16 @@ import {
   OmpRetryState,
   GlobalUsageResult,
   GlobalStatsResult,
+  FetchGlobalUsageOptions,
+  FetchUsageHistoryOptions,
+  UsageHistoryResult,
+  FetchUsageClientsOptions,
+  UsageClientsResult,
+  InvalidateUsageOptions,
+  UsageInvalidateResult,
+  StartStatsDashboardOptions,
+  StatsDashboardResult,
+  StatsDashboardStatus,
   FetchEngineConfigOptions,
   SetEngineConfigOptions,
   ResetEngineConfigOptions,
@@ -33,9 +44,32 @@ import {
   EngineConfigListResult,
   EngineConfigMutationResult,
   EngineConfigPathResult,
+  StorageGcOptions,
+  StorageGcResponse,
+  ImageBackendsAction,
+  ImageBackendsOptions,
+  ImageBackendsResponse,
+  SshHostAddInput,
+  SshHostsListResponse,
+  SshHostMutationResponse,
+  GrievancesListOptions,
+  GrievancesListResponse,
+  GrievancesCleanOptions,
+  GrievancesCleanResponse,
+  GrievancesPushResponse,
+  CommitRunOptions,
+  CleanseRunOptions,
+  GitStatusResult,
+  BrowserRelayInstallOptions,
+  BrowserRelayStartOptions,
+  BrowserRelayStatus,
+  BrowserRelayInstallResult,
+  SayOptions,
+  SayStatusEvent,
 } from '../types';
 import { reconcileFollowUpQueue, type FollowUpQueueItem } from '../utils/followUpQueue';
 import { DEMO_MESSAGES, DEMO_INITIAL_DIFF } from '../mock/demoData';
+import { stripAnsi } from '../../shared/text/strip-ansi';
 export function useOmpRpc() {
   const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI);
   const [status, setStatus] = useState<OmpAgentStatus>('idle');
@@ -50,6 +84,9 @@ export function useOmpRpc() {
 
   // Subagents Hub state (Phase 3)
   const [subagents, setSubagents] = useState<OmpSubagentInfo[]>([]);
+
+  // Text-to-Speech State (Phase 17)
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
 
   // Notifications & Status Surfacing (Phase 1)
   const [notifications, setNotifications] = useState<OmpNotification[]>([]);
@@ -222,7 +259,7 @@ export function useOmpRpc() {
         if (res.state.approvalMode !== undefined) {
           setApprovalMode(res.state.approvalMode);
         }
-        // Bỏ qua khi còn follow_up đang gửi để get_state cũ không nuốt item vừa xếp
+        // Ignore when follow_up is still sending so stale get_state does not consume queued item
         if (res.state.queuedMessageCount !== undefined && pendingFollowUpsRef.current === 0) {
           const { queue, consumedIds } = reconcileFollowUpQueue(
             followUpQueueRef.current,
@@ -620,7 +657,7 @@ export function useOmpRpc() {
         refreshSessions();
         refreshCommands();
       } else if (leftIdle && followUpQueueRef.current.length > 0) {
-        // Engine vừa tự chạy tin follow-up trong hàng đợi, đồng bộ lại queuedMessageCount
+        // Engine automatically ran follow-up message from queue, resync queuedMessageCount
         refreshEngineState();
       }
     });
@@ -756,15 +793,41 @@ export function useOmpRpc() {
 
     const unsubCommandOutput = window.electronAPI.onOmpCommandOutput
       ? window.electronAPI.onOmpCommandOutput((data) => {
-          const text = typeof data === 'string' ? data : (data?.text || '');
-          if (!text) return;
-          const sysMsg: ChatMessage = {
-            id: `msg-cmd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            role: 'system',
-            content: text,
-            timestamp: Date.now(),
-          };
-          setMessages((prev) => [...prev, sysMsg]);
+          const rawText = typeof data === 'string' ? data : (data?.text || '');
+          if (!rawText) return;
+          const cmdId =
+            typeof data === 'object' && data !== null && 'id' in data && typeof (data as any).id === 'string'
+              ? (data as any).id
+              : undefined;
+
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (cmdId && last && last.role === 'system' && (last as any).cmdId === cmdId) {
+              const updatedRaw = (((last as any).rawContent as string) || last.content) + rawText;
+              const clean = stripAnsi(updatedRaw);
+              if (!clean.trim()) return prev;
+              const next = [...prev];
+              next[next.length - 1] = {
+                ...last,
+                content: clean,
+                cmdId,
+                rawContent: updatedRaw,
+              } as any;
+              return next;
+            }
+
+            const clean = stripAnsi(rawText);
+            if (!clean.trim()) return prev;
+
+            const sysMsg: ChatMessage = {
+              id: `msg-cmd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              role: 'system',
+              content: clean,
+              timestamp: Date.now(),
+              ...(cmdId ? { cmdId, rawContent: rawText } : {}),
+            } as any;
+            return [...prev, sysMsg];
+          });
         })
       : () => {};
 
@@ -778,6 +841,11 @@ export function useOmpRpc() {
     const unsubRetry = window.electronAPI.onOmpRetryState
       ? window.electronAPI.onOmpRetryState((state) => {
           setRetryState(state || { isRetrying: false });
+        })
+      : () => {};
+    const unsubSay = window.electronAPI.onSayStatus
+      ? window.electronAPI.onSayStatus((sayStatus: SayStatusEvent) => {
+          setIsSpeaking(Boolean(sayStatus?.speaking));
         })
       : () => {};
     refreshCommands();
@@ -805,6 +873,7 @@ export function useOmpRpc() {
       unsubCommandOutput();
       unsubTodos();
       unsubRetry();
+      unsubSay();
     };
   }, [flushTokens, refreshEngineState, refreshCommands]);
 
@@ -825,7 +894,7 @@ export function useOmpRpc() {
         timestamp: Date.now(),
       };
 
-      // Hiển thị card đính kèm (kèm thumbnail ảnh) ngay trước tin nhắn người dùng
+      // Show attachment card (with image thumbnail) immediately before user message
       const newMessages: ChatMessage[] = [];
       if (contextFiles && contextFiles.length > 0) {
         newMessages.push({
@@ -860,7 +929,7 @@ export function useOmpRpc() {
         setTimeout(() => {
           setCurrentThinking({
             id: 'think-' + Date.now(),
-            thought: `Đang phân tích: "${prompt}"\nĐọc cây cú pháp AST và tạo bản patch tối ưu...`,
+            thought: tm('mock.thought', { prompt }),
             timestamp: Date.now(),
             completed: true,
           });
@@ -882,7 +951,7 @@ export function useOmpRpc() {
             setActiveToolCalls([mockTool]);
             setStatus('streaming');
 
-            const reply = `Tôi đã hoàn thành xử lý cho yêu cầu: "${prompt}". Đã cập nhật file với các kiểm tra hợp lệ.`;
+            const reply = tm('mock.reply', { prompt });
             let idx = 0;
             const timer = setInterval(() => {
               if (idx < reply.length) {
@@ -1049,7 +1118,7 @@ export function useOmpRpc() {
       pendingFollowUpsRef.current += 1;
       try {
         const res = await window.electronAPI.followUpOmp(message, { files: contextFiles });
-        if (!res.success) throw new Error(res.error || 'follow_up bị engine từ chối');
+        if (!res.success) throw new Error(res.error || tm('rpc.followUpRejected'));
       } catch (err) {
         console.error('[useOmpRpc] Failed to queue follow-up via Electron IPC:', err);
         const remaining = followUpQueueRef.current.filter((item) => item.id !== itemId);
@@ -1163,14 +1232,19 @@ export function useOmpRpc() {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
-  // Đẩy toast cục bộ từ renderer (không đến từ engine)
+  // Push local toast from renderer (not from engine)
   const pushNotification = useCallback(
-    (message: string, notifyType: OmpNotification['notifyType'] = 'info') => {
+    (
+      message: string,
+      notifyType: OmpNotification['notifyType'] = 'info',
+      action?: OmpNotification['action']
+    ) => {
       const notif: OmpNotification = {
         id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         message,
         notifyType,
         timestamp: Date.now(),
+        action,
       };
       setNotifications((prev) => {
         const next = [...prev, notif];
@@ -1179,7 +1253,7 @@ export function useOmpRpc() {
       if (notifyType !== 'error') {
         setTimeout(() => {
           setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
-        }, 6000);
+        }, 8000);
       }
     },
     []
@@ -1200,17 +1274,20 @@ export function useOmpRpc() {
     }
   }, []);
 
-  const getGlobalUsage = useCallback(async (forceRefresh?: boolean): Promise<GlobalUsageResult> => {
-    if (!window.electronAPI?.getGlobalUsage) {
-      return { success: false, error: 'electronAPI.getGlobalUsage is unavailable' };
-    }
-    try {
-      return await window.electronAPI.getGlobalUsage(forceRefresh);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return { success: false, error: msg || 'Failed to fetch global usage' };
-    }
-  }, []);
+  const getGlobalUsage = useCallback(
+    async (options?: boolean | FetchGlobalUsageOptions): Promise<GlobalUsageResult> => {
+      if (!window.electronAPI?.getGlobalUsage) {
+        return { success: false, error: 'electronAPI.getGlobalUsage is unavailable' };
+      }
+      try {
+        return await window.electronAPI.getGlobalUsage(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg || 'Failed to fetch global usage' };
+      }
+    },
+    []
+  );
 
   const getGlobalStats = useCallback(async (forceRefresh?: boolean): Promise<GlobalStatsResult> => {
     if (!window.electronAPI?.getGlobalStats) {
@@ -1221,6 +1298,121 @@ export function useOmpRpc() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg || 'Failed to fetch global stats' };
+    }
+  }, []);
+
+  const getUsageHistory = useCallback(
+    async (options?: FetchUsageHistoryOptions): Promise<UsageHistoryResult> => {
+      if (!window.electronAPI?.getUsageHistory) {
+        return { success: false, error: 'electronAPI.getUsageHistory is unavailable' };
+      }
+      try {
+        return await window.electronAPI.getUsageHistory(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg || 'Failed to fetch usage history' };
+      }
+    },
+    []
+  );
+
+  const getUsageClients = useCallback(
+    async (options?: FetchUsageClientsOptions): Promise<UsageClientsResult> => {
+      if (!window.electronAPI?.getUsageClients) {
+        return { success: false, error: 'electronAPI.getUsageClients is unavailable' };
+      }
+      try {
+        return await window.electronAPI.getUsageClients(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg || 'Failed to fetch usage clients' };
+      }
+    },
+    []
+  );
+
+  const invalidateUsage = useCallback(
+    async (options?: InvalidateUsageOptions): Promise<UsageInvalidateResult> => {
+      if (!window.electronAPI?.invalidateUsage) {
+        return { success: false, error: 'electronAPI.invalidateUsage is unavailable' };
+      }
+      try {
+        return await window.electronAPI.invalidateUsage(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg || 'Failed to invalidate usage cache' };
+      }
+    },
+    []
+  );
+
+  const startStatsDashboard = useCallback(
+    async (options?: StartStatsDashboardOptions): Promise<StatsDashboardResult> => {
+      if (!window.electronAPI?.startStatsDashboard) {
+        return {
+          success: false,
+          status: { running: false, status: 'error' },
+          error: 'electronAPI.startStatsDashboard is unavailable',
+        };
+      }
+      try {
+        return await window.electronAPI.startStatsDashboard(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          status: { running: false, status: 'error' },
+          error: msg || 'Failed to start stats dashboard',
+        };
+      }
+    },
+    []
+  );
+
+  const stopStatsDashboard = useCallback(async (): Promise<StatsDashboardResult> => {
+    if (!window.electronAPI?.stopStatsDashboard) {
+      return {
+        success: false,
+        status: { running: false, status: 'error' },
+        error: 'electronAPI.stopStatsDashboard is unavailable',
+      };
+    }
+    try {
+      return await window.electronAPI.stopStatsDashboard();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        status: { running: false, status: 'error' },
+        error: msg || 'Failed to stop stats dashboard',
+      };
+    }
+  }, []);
+
+  const getStatsDashboardStatus = useCallback(async (): Promise<StatsDashboardStatus> => {
+    if (!window.electronAPI?.getStatsDashboardStatus) {
+      return { running: false, status: 'stopped' };
+    }
+    try {
+      return await window.electronAPI.getStatsDashboardStatus();
+    } catch {
+      return { running: false, status: 'stopped' };
+    }
+  }, []);
+
+  const openExternal = useCallback(async (url: string): Promise<{ success: boolean; error?: string }> => {
+    if (!window.electronAPI?.openExternal) {
+      if (typeof window !== 'undefined') {
+        window.open(url, '_blank');
+        return { success: true };
+      }
+      return { success: false, error: 'electronAPI.openExternal is unavailable' };
+    }
+    try {
+      return await window.electronAPI.openExternal(url);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Failed to open external url' };
     }
   }, []);
 
@@ -1283,10 +1475,166 @@ export function useOmpRpc() {
     },
     []
   );
+  const runGc = useCallback(
+    async (options?: StorageGcOptions): Promise<StorageGcResponse> => {
+      if (!window.electronAPI?.runGc) {
+        return { success: false, error: 'electronAPI.runGc is unavailable' };
+      }
+      try {
+        return await window.electronAPI.runGc(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg || 'Failed to run storage GC' };
+      }
+    },
+    []
+  );
+  const runImages = useCallback(
+    async (
+      action: ImageBackendsAction = 'status',
+      options?: ImageBackendsOptions
+    ): Promise<ImageBackendsResponse> => {
+      if (!window.electronAPI?.runImages) {
+        return {
+          success: false,
+          action,
+          error: 'electronAPI.runImages is unavailable',
+        };
+      }
+      try {
+        return await window.electronAPI.runImages(action, options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          action,
+          error: msg || 'Failed to run image backends action',
+        };
+      }
+    },
+    []
+  );
+  const listSshHosts = useCallback(async (): Promise<SshHostsListResponse> => {
+    if (!window.electronAPI?.listSshHosts) {
+      return {
+        success: false,
+        error: 'electronAPI.listSshHosts is unavailable',
+      };
+    }
+    try {
+      return await window.electronAPI.listSshHosts();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        error: msg || 'Failed to list SSH hosts',
+      };
+    }
+  }, []);
+  const addSshHost = useCallback(
+    async (input: SshHostAddInput): Promise<SshHostMutationResponse> => {
+      if (!window.electronAPI?.addSshHost) {
+        return {
+          success: false,
+          error: 'electronAPI.addSshHost is unavailable',
+        };
+      }
+      try {
+        return await window.electronAPI.addSshHost(input);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: msg || 'Failed to add SSH host',
+        };
+      }
+    },
+    []
+  );
+  const removeSshHost = useCallback(
+    async (name: string, scope: 'project' | 'user'): Promise<SshHostMutationResponse> => {
+      if (!window.electronAPI?.removeSshHost) {
+        return {
+          success: false,
+          error: 'electronAPI.removeSshHost is unavailable',
+        };
+      }
+      try {
+        return await window.electronAPI.removeSshHost(name, scope);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: msg || 'Failed to remove SSH host',
+        };
+      }
+    },
+    []
+  );
+  const listGrievances = useCallback(
+    async (options?: GrievancesListOptions): Promise<GrievancesListResponse> => {
+      if (!window.electronAPI?.listGrievances) {
+        return {
+          success: false,
+          error: 'electronAPI.listGrievances is unavailable',
+        };
+      }
+      try {
+        return await window.electronAPI.listGrievances(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: msg || 'Failed to list grievances',
+        };
+      }
+    },
+    []
+  );
+  const cleanGrievances = useCallback(
+    async (options: GrievancesCleanOptions): Promise<GrievancesCleanResponse> => {
+      if (!window.electronAPI?.cleanGrievances) {
+        return {
+          success: false,
+          error: 'electronAPI.cleanGrievances is unavailable',
+        };
+      }
+      try {
+        return await window.electronAPI.cleanGrievances(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: msg || 'Failed to clean grievances',
+        };
+      }
+    },
+    []
+  );
+  const pushGrievances = useCallback(
+    async (options?: { profile?: string | null }): Promise<GrievancesPushResponse> => {
+      if (!window.electronAPI?.pushGrievances) {
+        return {
+          success: false,
+          error: 'electronAPI.pushGrievances is unavailable',
+        };
+      }
+      try {
+        return await window.electronAPI.pushGrievances(options);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: msg || 'Failed to push grievances',
+        };
+      }
+    },
+    []
+  );
   const changeApprovalMode = useCallback(
     async (mode: OmpApprovalMode): Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }> => {
       if (status !== 'idle') {
-        const confirmed = window.confirm('Đổi chế độ phê duyệt sẽ dừng lượt xử lý hiện tại. Bạn có chắc chắn muốn tiếp tục?');
+        const confirmed = window.confirm(tm('rpc.confirmChangeApprovalMode'));
         if (!confirmed) {
           return { success: false, error: 'User cancelled approval mode change' };
         }
@@ -1318,7 +1666,7 @@ export function useOmpRpc() {
   const compact = useCallback(
     async (customInstructions?: string): Promise<{ success: boolean; error?: string }> => {
       if (status !== 'idle') {
-        return { success: false, error: 'Không thể nén context khi agent đang hoạt động' };
+        return { success: false, error: tm('rpc.compactBusyError') };
       }
       setIsCompacting(true);
       if (window.electronAPI) {
@@ -1429,11 +1777,153 @@ export function useOmpRpc() {
       try {
         return await window.electronAPI.handoff();
       } catch (err: any) {
-        return { success: false, error: err?.message || 'Lỗi gọi lệnh handoff' };
+        return { success: false, error: err?.message || tm('rpc.handoffError') };
       }
     }
-    return { success: false, error: 'Chức năng handoff chỉ hỗ trợ khi kết nối engine OMP' };
+    return { success: false, error: tm('rpc.handoffEngineOnly') };
   }, []);
+
+  const runCommitAssistant = useCallback(
+    async (options: CommitRunOptions): Promise<{ success: boolean; error?: string }> => {
+      if (window.electronAPI?.runCommit) {
+        try {
+          return await window.electronAPI.runCommit(options);
+        } catch (err: any) {
+          return { success: false, error: err?.message || tm('rpc.commitAssistantError') };
+        }
+      }
+      return { success: false, error: tm('rpc.commitElectronOnly') };
+    },
+    []
+  );
+
+  const cancelCommitAssistant = useCallback(async (): Promise<{ success: boolean }> => {
+    if (window.electronAPI?.cancelCommit) {
+      try {
+        return await window.electronAPI.cancelCommit();
+      } catch {
+        return { success: false };
+      }
+    }
+    return { success: false };
+  }, []);
+
+  const runCleanse = useCallback(
+    async (options: CleanseRunOptions): Promise<{ success: boolean; error?: string }> => {
+      if (window.electronAPI?.runCleanse) {
+        try {
+          return await window.electronAPI.runCleanse(options);
+        } catch (err: any) {
+          return { success: false, error: err?.message || tm('rpc.cleanseRunnerError') };
+        }
+      }
+      return { success: false, error: tm('rpc.cleanseRunnerElectronOnly') };
+    },
+    []
+  );
+
+  const cancelCleanse = useCallback(async (): Promise<{ success: boolean }> => {
+    if (window.electronAPI?.cancelCleanse) {
+      try {
+        return await window.electronAPI.cancelCleanse();
+      } catch {
+        return { success: false };
+      }
+    }
+    return { success: false };
+  }, []);
+
+  const checkCommitStatus = useCallback(
+    async (cwd?: string): Promise<GitStatusResult> => {
+      if (window.electronAPI?.getCommitStatus) {
+        try {
+          return await window.electronAPI.getCommitStatus(cwd);
+        } catch (err: any) {
+          return { isGit: false, isDirty: false, error: err?.message || tm('rpc.gitStatusError') };
+        }
+      }
+      return { isGit: false, isDirty: false, error: tm('rpc.gitStatusElectronOnly') };
+    },
+    []
+  );
+  const installBrowserRelay = useCallback(
+    async (options?: BrowserRelayInstallOptions): Promise<BrowserRelayInstallResult> => {
+      if (window.electronAPI?.installBrowserRelay) {
+        try {
+          return await window.electronAPI.installBrowserRelay(options);
+        } catch (err: any) {
+          return { success: false, error: err?.message || tm('rpc.relayExtensionInstallError') };
+        }
+      }
+      return { success: false, error: tm('rpc.electronOnly') };
+    },
+    []
+  );
+
+  const startBrowserRelay = useCallback(
+    async (options?: BrowserRelayStartOptions): Promise<{ success: boolean; port?: number; url?: string; error?: string }> => {
+
+      if (window.electronAPI?.startBrowserRelay) {
+        try {
+          return await window.electronAPI.startBrowserRelay(options);
+        } catch (err: any) {
+          return { success: false, error: err?.message || tm('rpc.relayStartError') };
+        }
+      }
+      return { success: false, error: tm('rpc.electronOnly') };
+    },
+    []
+  );
+
+  const stopBrowserRelay = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    if (window.electronAPI?.stopBrowserRelay) {
+      try {
+        return await window.electronAPI.stopBrowserRelay();
+      } catch (err: any) {
+        return { success: false, error: err?.message || tm('rpc.relayStopError') };
+      }
+    }
+    return { success: false, error: tm('rpc.electronOnly') };
+  }, []);
+
+  const getBrowserRelayStatus = useCallback(async (): Promise<BrowserRelayStatus> => {
+    if (window.electronAPI?.getBrowserRelayStatus) {
+      try {
+        return await window.electronAPI.getBrowserRelayStatus();
+      } catch (err: any) {
+        return { running: false, source: 'none', detail: err?.message || tm('rpc.relayStatusError') };
+      }
+    }
+    return { running: false, source: 'none', detail: tm('rpc.electronOnly') };
+  }, []);
+  const startSay = useCallback(
+    async (text: string, options?: SayOptions): Promise<{ success: boolean; error?: string; missingModel?: boolean }> => {
+      if (window.electronAPI?.startSay) {
+        try {
+          return await window.electronAPI.startSay(text, options);
+        } catch (err: any) {
+          return { success: false, error: err?.message || tm('rpc.startSayError') };
+        }
+      }
+      return { success: false, error: tm('rpc.startSayUnavailable') };
+    },
+    []
+  );
+
+  const stopSay = useCallback(
+    async (): Promise<{ success: boolean; error?: string }> => {
+      if (window.electronAPI?.stopSay) {
+        try {
+          return await window.electronAPI.stopSay();
+        } catch (err: any) {
+          return { success: false, error: err?.message || tm('rpc.stopSayError') };
+        }
+      }
+      return { success: false, error: tm('rpc.stopSayUnavailable') };
+    },
+    []
+  );
+
 
   return {
     status,
@@ -1495,10 +1985,25 @@ export function useOmpRpc() {
     getSessionStats,
     getGlobalUsage,
     getGlobalStats,
+    getUsageHistory,
+    getUsageClients,
+    invalidateUsage,
+    startStatsDashboard,
+    stopStatsDashboard,
+    getStatsDashboardStatus,
+    openExternal,
     getEngineConfig,
     setEngineConfigValue,
     resetEngineConfigValue,
     getEngineConfigPath,
+    runGc,
+    runImages,
+    listSshHosts,
+    addSshHost,
+    removeSshHost,
+    listGrievances,
+    cleanGrievances,
+    pushGrievances,
     approvalMode,
     setApprovalMode: changeApprovalMode,
     changeApprovalMode,
@@ -1518,5 +2023,17 @@ export function useOmpRpc() {
     setFastMode,
     getLastAssistantText,
     handoff,
+    runCommitAssistant,
+    cancelCommitAssistant,
+    checkCommitStatus,
+    runCleanse,
+    cancelCleanse,
+    installBrowserRelay,
+    startBrowserRelay,
+    stopBrowserRelay,
+    getBrowserRelayStatus,
+    isSpeaking,
+    startSay,
+    stopSay,
   };
 }

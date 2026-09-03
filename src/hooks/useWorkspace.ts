@@ -44,7 +44,7 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
     return null;
   };
 
-  // Đọc lại nội dung artifact đang chọn khi chưa nạp hoặc vừa bị đánh dấu cần đọc lại
+  // Reload selected artifact when not loaded or marked for reload
   useEffect(() => {
     const api = window.electronAPI;
     if (!api || !selectedArtifactId) return;
@@ -67,7 +67,7 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
       .finally(() => hydratingRef.current.delete(targetId));
   }, [selectedArtifactId, artifacts]);
 
-  // Cập nhật danh sách artifacts khi cây thư mục thay đổi, giữ nội dung cũ nhưng đánh dấu cần đọc lại
+  // Update artifacts list when file tree changes, keep content but mark for reload
   const syncArtifactsFromFiles = useCallback((dirFiles: WorkspaceFile[]) => {
     if (!isElectron) {
       setArtifacts(DEMO_ARTIFACTS);
@@ -104,7 +104,7 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
     markArtifactStale((art) => art.id === targetId);
   }, [selectedArtifactId, markArtifactStale]);
 
-  // Gọi khi engine vừa ghi file để artifact tương ứng được đọc lại
+  // Called when engine writes file so corresponding artifact is reloaded
   const invalidateArtifactByPath = useCallback((filePath: string) => {
     markArtifactStale((art) => art.path === filePath);
   }, [markArtifactStale]);
@@ -117,7 +117,7 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
         const name = folderPath.split('/').filter(Boolean).pop() || 'workspace';
         setWorkspaceName(name);
         
-        // Khởi động engine song song với việc scan thư mục để rút ngắn thời gian chờ
+        // Start engine in parallel with directory scan to reduce latency
         const startPromise = window.electronAPI.startOmpProcess(folderPath);
 
         const dirFiles = await window.electronAPI.readDirectory(folderPath);

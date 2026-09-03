@@ -40,7 +40,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       } catch (err) {
-        console.warn('[I18nProvider] Không thể nạp ngôn ngữ ban đầu:', err);
+        console.warn('[I18nProvider] Failed to load initial language:', err);
       }
     };
     initLocale();
@@ -52,7 +52,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (window.electronAPI?.setSettings) {
       window.electronAPI.setSettings({ language: newLocale }).catch((err) => {
-        console.error('[I18nProvider] Lỗi lưu language vào settings-store:', err);
+        console.error('[I18nProvider] Failed to save language to settings-store:', err);
       });
     } else {
       try {

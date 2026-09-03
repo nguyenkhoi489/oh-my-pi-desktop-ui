@@ -26,10 +26,10 @@ export const ROLE_THINKING_LEVELS: RoleThinkingLevel[] = [
 
 const LEVEL_SET = new Set<string>(ROLE_THINKING_LEVELS);
 
-// Ký tự cho biết giá trị role là pattern nâng cao, không phải một model đơn lẻ
+// Characters indicating advanced role pattern, not a single model
 const ADVANCED_VALUE_CHARS = ['*', '?', '[', ','];
 
-// Tách "provider/model[:level]" theo đúng luật của OMP CLI; null nếu là giá trị nâng cao
+// Split "provider/model[:level]" per OMP CLI spec; null if advanced pattern
 export function parseModelRoleSpec(raw: string): ModelRoleSpec | null {
   const value = (raw || '').trim();
   if (!value) return null;

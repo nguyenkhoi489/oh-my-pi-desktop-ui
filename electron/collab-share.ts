@@ -1,3 +1,4 @@
+import { tm } from '../shared/i18n/index.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { buildExtendedPath } from './models-config.ts';
@@ -22,19 +23,19 @@ export interface JoinSessionResult {
   error?: string;
 }
 
-// Trích xuất link chia sẻ từ output CLI
+// Extract share URL from CLI output
 export function extractShareUrl(text: string): string | null {
   if (!text) return null;
-  // Tìm url https:// hoặc http://
+  // Find https:// or http:// url
   const urlMatch = text.match(/https?:\/\/[^\s"'<>\)]+/i);
   if (urlMatch) {
-    // Làm sạch ký tự cuối nếu bị dính dấu chấm hoặc ngoặc
+    // Trim trailing punctuation
     return urlMatch[0].replace(/[.,;:!?]+$/, '');
   }
   return null;
 }
 
-// Chia sẻ session qua omp share
+// Share session via omp share
 export async function shareSession(
   binaryPath: string,
   sessionIdentifier: string,
@@ -42,7 +43,7 @@ export async function shareSession(
 ): Promise<ShareSessionResult> {
   const cleanId = String(sessionIdentifier || '').trim();
   if (!cleanId) {
-    return { success: false, error: 'Session identifier không được để trống' };
+    return { success: false, error: tm('electron.collab.sessionEmpty') };
   }
 
   const args = ['share', cleanId];
@@ -89,19 +90,19 @@ export async function shareSession(
     return {
       success: false,
       rawOutput: combined || undefined,
-      error: err?.message || 'Lỗi khi chia sẻ session',
+      error: err?.message || tm('electron.collab.shareFailed'),
     };
   }
 }
 
-// Tham gia session collab qua omp join
+// Join collab session via omp join
 export async function joinCollabSession(
   binaryPath: string,
   link: string
 ): Promise<JoinSessionResult> {
   const cleanLink = String(link || '').trim();
   if (!cleanLink) {
-    return { success: false, error: 'Đường dẫn liên kết không được để trống' };
+    return { success: false, error: tm('electron.collab.linkEmpty') };
   }
 
   try {
@@ -117,7 +118,7 @@ export async function joinCollabSession(
     const combined = `${stdout}\n${stderr}`.trim();
     return {
       success: true,
-      message: 'Đã tham gia session thành công',
+      message: tm('electron.collab.joinSuccess'),
       rawOutput: combined,
     };
   } catch (err: any) {
@@ -125,7 +126,7 @@ export async function joinCollabSession(
     return {
       success: false,
       rawOutput: combined || undefined,
-      error: err?.message || 'Lỗi khi tham gia session',
+      error: err?.message || tm('electron.collab.joinFailed'),
     };
   }
 }

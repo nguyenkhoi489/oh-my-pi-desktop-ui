@@ -11,7 +11,7 @@ interface MarkdownRendererProps {
 const markedInstance = new Marked({
   gfm: true,
   breaks: true,
-  // Tắt indented code block: chỉ ```fence``` mới thành code, tránh prose thụt lề bị hiểu nhầm
+  // Disable indented code blocks: only fenced code blocks become code
   tokenizer: {
     code() {
       return undefined;

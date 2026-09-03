@@ -1,3 +1,4 @@
+import { tm } from '../shared/i18n/index.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
@@ -6,6 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import YAML from 'yaml';
 
+import type { OmpFoundModel, FindModelsResult } from './types.ts';
 const execFileAsync = promisify(execFile);
 
 export interface CustomModelCost {
@@ -91,6 +93,8 @@ export interface ModelsConfigWriteResult {
 export interface LoginProviderItem {
   id: string;
   name: string;
+  available?: boolean;
+  authenticated?: boolean;
 }
 
 let loginProvidersCache: LoginProviderItem[] | null = null;
@@ -261,7 +265,7 @@ export function serializeModelsYaml(providers: CustomProviderConfig[]): string {
       providerEntry.authHeader = p.authHeader;
     }
 
-    // auth apiKey là mặc định của OMP nên chỉ ghi khi khác mặc định
+    // auth apiKey is default in OMP, so only write when different from default
     if (p.auth === 'none' || p.auth === 'oauth') {
       providerEntry.auth = p.auth;
     }
@@ -342,7 +346,7 @@ export async function readModelsConfig(customPath?: string): Promise<ModelsConfi
       filePath: targetPath,
       isWritable,
       error: !isWritable
-        ? `Không có quyền ghi vào file ${targetPath}. Hãy chạy lệnh sau trong Terminal để cấp quyền: sudo chown $USER ${targetPath}`
+        ? tm('electron.models.permissionError', { path: targetPath })
         : undefined,
     };
   } catch (err: any) {
@@ -359,7 +363,7 @@ export async function readModelsConfig(customPath?: string): Promise<ModelsConfi
         providers: [],
         filePath: targetPath,
         isWritable: false,
-        error: `Không có quyền truy cập file ${targetPath}. Hãy chạy lệnh sau trong Terminal để cấp quyền: sudo chown $USER ${targetPath}`,
+        error: tm('electron.models.permissionError', { path: targetPath }),
       };
     }
 
@@ -367,7 +371,7 @@ export async function readModelsConfig(customPath?: string): Promise<ModelsConfi
       providers: [],
       filePath: targetPath,
       isWritable,
-      error: `Lỗi đọc cấu hình: ${err?.message || String(err)}`,
+      error: tm('electron.models.readConfigError', { detail: err?.message || String(err) }),
     };
   }
 }
@@ -389,7 +393,7 @@ export async function writeModelsConfig(
 
     const yamlContent = serializeModelsYaml(providers);
 
-    // Kiểm tra tính toàn vẹn bằng cách parse lại trước khi ghi
+    // Validate integrity before writing
     YAML.parse(yamlContent);
 
     await fs.writeFile(targetPath, yamlContent, 'utf-8');
@@ -404,19 +408,19 @@ export async function writeModelsConfig(
       return {
         success: false,
         filePath: targetPath,
-        error: `Không có quyền ghi vào file ${targetPath}. Hãy chạy lệnh sau trong Terminal để cấp quyền: sudo chown $USER ${targetPath}`,
+        error: tm('electron.models.permissionError', { path: targetPath }),
       };
     }
 
     return {
       success: false,
       filePath: targetPath,
-      error: `Lỗi khi lưu cấu hình models.yml: ${err?.message || String(err)}`,
+      error: tm('electron.models.saveConfigError', { detail: err?.message || String(err) }),
     };
   }
 }
 
-// Mở rộng PATH với các vị trí cài đặt phổ biến trên macOS
+  // Extend PATH with standard installation locations on macOS
 export function buildExtendedPath(): string {
   const homedir = os.homedir();
   return [
@@ -467,7 +471,7 @@ export async function fetchLoginProviders(
     return {
       success: false,
       providers: [],
-      error: 'Không tìm thấy đường dẫn file nhị phân omp để lấy danh sách login services.',
+      error: tm('electron.models.binaryNotFoundForServices'),
     };
   }
 
@@ -486,7 +490,127 @@ export async function fetchLoginProviders(
     return {
       success: false,
       providers: [],
-      error: `Lỗi khi lấy danh sách auth-broker list: ${err?.message || String(err)}`,
+      error: tm('electron.models.listAuthBrokerError', { detail: err?.message || String(err) }),
+    };
+  }
+}
+
+  // Parse JSON output from omp models find <pattern> --json
+export function parseFindModelsJson(stdout: string): OmpFoundModel[] {
+  if (!stdout || !stdout.trim()) return [];
+
+  function normalizeModels(rawArray: unknown[]): OmpFoundModel[] {
+    const models: OmpFoundModel[] = [];
+    for (const item of rawArray) {
+      if (!item || typeof item !== 'object') continue;
+      const typed = item as Record<string, unknown>;
+      const provider = typeof typed.provider === 'string' ? typed.provider : '';
+      const id = typeof typed.id === 'string' ? typed.id : '';
+      if (!id) continue;
+
+      const selector =
+        typeof typed.selector === 'string' && typed.selector.trim()
+          ? typed.selector
+          : provider
+            ? `${provider}/${id}`
+            : id;
+
+      const costRaw = typed.cost && typeof typed.cost === 'object' ? (typed.cost as Record<string, unknown>) : undefined;
+      const cost = costRaw
+        ? {
+            ...(typeof costRaw.input === 'number' ? { input: costRaw.input } : {}),
+            ...(typeof costRaw.output === 'number' ? { output: costRaw.output } : {}),
+            ...(typeof costRaw.cacheRead === 'number' ? { cacheRead: costRaw.cacheRead } : {}),
+            ...(typeof costRaw.cacheWrite === 'number' ? { cacheWrite: costRaw.cacheWrite } : {}),
+          }
+        : undefined;
+
+      models.push({
+        provider,
+        id,
+        selector,
+        ...(typeof typed.name === 'string' ? { name: typed.name } : {}),
+        ...(typeof typed.contextWindow === 'number' ? { contextWindow: typed.contextWindow } : {}),
+        ...(typeof typed.maxTokens === 'number' ? { maxTokens: typed.maxTokens } : {}),
+        ...(typeof typed.reasoning === 'boolean' ? { reasoning: typed.reasoning } : {}),
+        ...(Array.isArray(typed.thinking) ? { thinking: typed.thinking.map(String) } : {}),
+        ...(Array.isArray(typed.input) ? { input: typed.input as ('text' | 'image' | string)[] } : {}),
+        ...(cost && Object.keys(cost).length > 0 ? { cost } : {}),
+      });
+    }
+    return models;
+  }
+
+  try {
+    const direct = JSON.parse(stdout.trim());
+    if (direct && typeof direct === 'object') {
+      if (Array.isArray(direct.models)) {
+        return normalizeModels(direct.models);
+      }
+      if (Array.isArray(direct)) {
+        return normalizeModels(direct);
+      }
+    }
+  } catch {
+  // Fallback parse when output contains text/logs outside JSON
+  }
+
+  const firstBrace = stdout.indexOf('{');
+  const lastBrace = stdout.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      const candidate = stdout.slice(firstBrace, lastBrace + 1);
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.models)) {
+        return normalizeModels(parsed.models);
+      }
+    } catch {
+  // Ignore fallback error
+    }
+  }
+
+  return [];
+}
+
+  // Execute omp models find <pattern> --json to search models in catalog
+export async function findModels(
+  binaryPath?: string,
+  pattern?: string,
+  options?: { profile?: string }
+): Promise<FindModelsResult> {
+  const trimmedPattern = (pattern || '').trim();
+  if (!trimmedPattern) {
+    return { success: true, models: [] };
+  }
+
+  if (!binaryPath) {
+    return {
+      success: false,
+      models: [],
+      error: tm('electron.models.binaryNotFound'),
+    };
+  }
+
+  const args = ['models', 'find', trimmedPattern, '--json'];
+  if (options?.profile && options.profile.trim()) {
+    args.push('--profile', options.profile.trim());
+  }
+
+  try {
+    const { stdout } = await execFileAsync(binaryPath, args, {
+      env: { ...process.env, PATH: buildExtendedPath() },
+      encoding: 'utf-8',
+      timeout: 15000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+
+    const models = parseFindModelsJson(stdout);
+    return { success: true, models };
+  } catch (err: any) {
+    return {
+      success: false,
+      models: [],
+      error: tm('electron.models.findModelsError', { detail: err?.message || String(err) }),
     };
   }
 }

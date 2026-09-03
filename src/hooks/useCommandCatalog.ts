@@ -16,7 +16,7 @@ export interface UseCommandCatalogResult {
   groups: { name: string; items: CommandMenuItem[] }[];
 }
 
-// Hook dùng chung quản lý và lọc danh mục lệnh/skills giữa CommandMenu và Omnibar
+// Shared hook to manage and filter commands/skills catalog between CommandMenu and Omnibar
 export function useCommandCatalog({
   availableCommands,
   query = '',

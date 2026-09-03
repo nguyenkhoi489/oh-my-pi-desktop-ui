@@ -24,7 +24,7 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
   'image/avif': 'avif',
 };
 
-// Kiểm tra đường dẫn hoặc tên file có phải là định dạng hình ảnh hợp lệ
+// Check if file path or name is a valid image format
 export function isImageFile(filenameOrPath: string): boolean {
   if (!filenameOrPath || typeof filenameOrPath !== 'string') return false;
   const cleanPath = filenameOrPath.split('?')[0].split('#')[0].trim();
@@ -34,7 +34,7 @@ export function isImageFile(filenameOrPath: string): boolean {
   return IMAGE_EXTENSIONS.has(ext);
 }
 
-// Trích xuất phần mở rộng hình ảnh từ MIME type hoặc tên file
+// Extract image extension from MIME type or file name
 export function getImageExtension(mimeType: string, filename?: string): string {
   if (filename) {
     const cleanName = filename.split('?')[0].split('#')[0].trim();
@@ -70,7 +70,7 @@ export interface ExtractedImageAttachment {
   blob: Blob;
 }
 
-// Trích xuất buffer và blob ảnh từ sự kiện dán clipboard
+// Extract image buffer and blob from clipboard paste event
 export async function extractImageFromClipboard(
   clipboardData: DataTransfer | null | undefined
 ): Promise<ExtractedImageAttachment | null> {
@@ -122,8 +122,8 @@ export interface ExtractedDropFile {
   path?: string;
 }
 
-// Bóc tách danh sách tệp từ sự kiện kéo thả
-// resolvePath: lấy đường dẫn thật của File (Electron >= 32 đã bỏ File.path)
+// Extract files from drag and drop event
+// resolvePath: get real path of File (Electron >= 32 removed File.path)
 export function extractFilesFromDrop(
   dataTransfer: DataTransfer | null | undefined,
   resolvePath?: (file: File) => string | undefined
@@ -145,7 +145,7 @@ export function extractFilesFromDrop(
   return result;
 }
 
-// Chuyển đổi đường dẫn tuyệt đối thành đường dẫn tương đối trong workspace
+// Convert absolute path to relative path in workspace
 export function computeRelativePath(fullPath: string, workspacePath?: string): string {
   if (!fullPath) return '';
   if (!workspacePath) return fullPath;
@@ -163,7 +163,7 @@ export function computeRelativePath(fullPath: string, workspacePath?: string): s
   return fullPath;
 }
 
-// Định dạng hiển thị kích thước ảnh
+// Format image size for display
 export function formatImageDimensions(width: number, height: number): string {
   return `${width} × ${height}px`;
 }

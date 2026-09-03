@@ -22,6 +22,7 @@ export interface AppSettings {
   profile?: string;
   hostToolsEnabled?: boolean;
   launchOptions?: OmpLaunchOptions;
+  statsDashboardPort?: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -124,6 +125,12 @@ export class SettingsStore {
     if (raw.launchOptions && typeof raw.launchOptions === 'object') {
       clean.launchOptions = sanitizeLaunchOptions(raw.launchOptions);
     }
+    if (raw.statsDashboardPort != null) {
+      const port = Number(raw.statsDashboardPort);
+      if (Number.isInteger(port) && port >= 1024 && port <= 65535) {
+        clean.statsDashboardPort = port;
+      }
+    }
     return clean;
   }
 
@@ -213,6 +220,11 @@ export class SettingsStore {
           ? sanitizeLaunchOptions(partial.launchOptions)
           : undefined;
     }
+    if ('statsDashboardPort' in partial) {
+      const port = Number(partial.statsDashboardPort);
+      next.statsDashboardPort =
+        Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : undefined;
+    }
 
     this.settings = next;
     this.save();
@@ -230,7 +242,7 @@ export class SettingsStore {
         }
       }
     } catch (err) {
-      console.warn('[SettingsStore] Không thể đọc settings.json, dùng giá trị mặc định:', err);
+      console.warn('[SettingsStore] Cannot read settings.json, using defaults:', err);
     }
     this.settings = { ...DEFAULT_SETTINGS };
     return { ...this.settings };
@@ -245,7 +257,7 @@ export class SettingsStore {
       fs.writeFileSync(this.filePath, JSON.stringify(this.settings, null, 2), 'utf-8');
       return true;
     } catch (err) {
-      console.error('[SettingsStore] Không thể ghi settings.json:', err);
+      console.error('[SettingsStore] Cannot write settings.json:', err);
       return false;
     }
   }

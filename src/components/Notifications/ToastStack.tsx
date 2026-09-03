@@ -1,5 +1,6 @@
 import React from 'react';
 import { Info, AlertTriangle, AlertCircle, X, Bell } from 'lucide-react';
+import { useI18n } from '../../i18n/I18nProvider';
 import { OmpNotification } from '../../types';
 
 interface ToastStackProps {
@@ -11,6 +12,7 @@ export const ToastStack: React.FC<ToastStackProps> = ({
   notifications,
   onDismiss,
 }) => {
+  const { t } = useI18n();
   if (!notifications || notifications.length === 0) {
     return null;
   }
@@ -52,6 +54,20 @@ export const ToastStack: React.FC<ToastStackProps> = ({
               <p className="text-xs leading-relaxed text-slate-800 dark:text-zinc-200 break-words">
                 {notif.message}
               </p>
+              {notif.action && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      notif.action?.onClick();
+                      onDismiss(notif.id);
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-blue-600 hover:bg-blue-500 text-white transition-colors cursor-pointer shadow-xs"
+                  >
+                    {notif.action.label}
+                  </button>
+                </div>
+              )}
               {notif.timestamp > 0 && (
                 <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono mt-0.5 block">
                   {new Date(notif.timestamp).toLocaleTimeString([], {
@@ -66,7 +82,7 @@ export const ToastStack: React.FC<ToastStackProps> = ({
             <button
               onClick={() => onDismiss(notif.id)}
               className="shrink-0 p-1 rounded-md hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-              title="Đóng thông báo"
+              title={t('toast.close')}
               aria-label="Close"
             >
               <X className="w-3.5 h-3.5" />

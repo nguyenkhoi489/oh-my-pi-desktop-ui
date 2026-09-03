@@ -1,3 +1,4 @@
+import { tm } from '../../shared/i18n';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ChatMessage, OmpSubagentInfo } from '../types';
 
@@ -62,7 +63,7 @@ export function useSubagentTranscript({
       try {
         const electronAPI = typeof window !== 'undefined' ? window.electronAPI : undefined;
         if (!electronAPI?.getSubagentMessages) {
-          // Trình duyệt không có Electron API
+          // Browser environment without Electron API
           if (isInitial) {
             setMessages([]);
             setError(null);
@@ -77,7 +78,7 @@ export function useSubagentTranscript({
           fromByte: currentByte,
         });
 
-        // Bỏ qua kết quả nếu subagent đã thay đổi trong lúc fetch
+        // Ignore result if subagent changed during fetch
         if (activeSubagentIdRef.current !== subagentId) {
           return;
         }
@@ -108,9 +109,9 @@ export function useSubagentTranscript({
           fromByteRef.current = nextByte;
           setError(null);
         } else if (!res.success) {
-          // Lưu error nếu chưa có message nào
+          // Record error if no messages yet
           if (fromByteRef.current === 0) {
-            setError(res.error || 'Không thể tải transcript của subagent');
+            setError(res.error || tm('subagent.fetchError'));
           }
         }
       } catch (err: unknown) {
@@ -128,7 +129,7 @@ export function useSubagentTranscript({
     [isOpen, subagentId, sessionFile, initialSessionFile]
   );
 
-  // Khi mở drawer hoặc đổi subagent -> reset và fetch trang đầu
+  // Reset and fetch first page on drawer open or subagent change
   useEffect(() => {
     if (isOpen && subagentId) {
       setMessages([]);
@@ -142,7 +143,7 @@ export function useSubagentTranscript({
     }
   }, [isOpen, subagentId, initialSessionFile, fetchTranscript, clear]);
 
-  // Polling tail khi subagent đang chạy và drawer đang mở
+  // Poll tail when subagent is running and drawer is open
   useEffect(() => {
     if (!isOpen || !subagentId || !isRunning) {
       return;

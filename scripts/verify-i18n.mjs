@@ -163,6 +163,91 @@ try {
     assert(sanitized2.language === 'vi', 'Switch back to vi succeeds');
   }
 
+  // ----------------------------------------------------
+  // Test 6: Zero Vietnamese characters in src/ (Phase 18)
+  // ----------------------------------------------------
+  console.log('\n[Test 6] Zero Vietnamese characters in src/');
+  {
+    const vietnamesePattern = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ]/;
+    const srcDir = path.resolve('src');
+    const violatingFiles = [];
+
+    function walk(dir) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(fullPath);
+        } else if (entry.isFile() && /\.(ts|tsx)$/.test(entry.name)) {
+          const content = fs.readFileSync(fullPath, 'utf8');
+          if (vietnamesePattern.test(content)) {
+            violatingFiles.push(path.relative(process.cwd(), fullPath));
+          }
+        }
+      }
+    }
+
+    walk(srcDir);
+    assert(
+      violatingFiles.length === 0,
+      `No Vietnamese characters found in src/ files (found in: ${violatingFiles.join(', ')})`
+    );
+  }
+  // ----------------------------------------------------
+  // Test 7: Zero Vietnamese characters in electron/ (Phase 19)
+  // ----------------------------------------------------
+  console.log('\n[Test 7] Zero Vietnamese characters in electron/');
+  {
+    const vietnamesePattern = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ]/;
+    const electronDir = path.resolve('electron');
+    const violatingFiles = [];
+
+    function walk(dir) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(fullPath);
+        } else if (entry.isFile() && /\.(ts|tsx|js|mjs)$/.test(entry.name)) {
+          const content = fs.readFileSync(fullPath, 'utf8');
+          if (vietnamesePattern.test(content)) {
+            violatingFiles.push(path.relative(process.cwd(), fullPath));
+          }
+        }
+      }
+    }
+
+    walk(electronDir);
+    assert(
+      violatingFiles.length === 0,
+      `No Vietnamese characters found in electron/ files (found in: ${violatingFiles.join(', ')})`
+    );
+  }
+
+  // ----------------------------------------------------
+  // Test 8: Dynamic locale switching in Main Process (Phase 19)
+  // ----------------------------------------------------
+  console.log('\n[Test 8] Dynamic locale switching in Main Process');
+  {
+    setCurrentLocale('vi');
+    assert(getCurrentLocale() === 'vi', 'Current locale is vi');
+    assert(tm('electron.main.invalidUrl') === 'URL không hợp lệ', 'tm() translates vi message');
+    assert(
+      tm('electron.main.logoutFailed', { detail: 'test' }) === 'Lỗi khi đăng xuất: test',
+      'tm() interpolates params in vi'
+    );
+
+    setCurrentLocale('en');
+    assert(getCurrentLocale() === 'en', 'Current locale is en');
+    assert(
+      tm('electron.main.logoutFailed', { detail: 'test' }) === 'Error logging out: test',
+      'tm() interpolates params in en'
+    );
+
+    // Reset back to DEFAULT_LOCALE
+    setCurrentLocale(DEFAULT_LOCALE);
+  }
+
   console.log(`\n====================================================`);
   console.log(`i18n Foundation Verification: ${passed} passed, ${failed} failed.`);
   console.log(`====================================================\n`);

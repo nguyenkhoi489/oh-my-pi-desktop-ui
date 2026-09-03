@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Bot, Cpu, Loader2 } from 'lucide-react';
 import { OmpSubagentInfo } from '../../types';
 import { SubagentTranscript } from '../AgentPanel/SubagentTranscript';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface SubagentHubProps {
   subagents?: OmpSubagentInfo[];
@@ -9,6 +10,7 @@ interface SubagentHubProps {
 }
 
 export const SubagentHub: React.FC<SubagentHubProps> = ({ subagents = [], onSelectSubagent }) => {
+  const { t } = useI18n();
   const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null);
 
   const activeSelectedSubagent = useMemo(() => {
@@ -44,7 +46,7 @@ export const SubagentHub: React.FC<SubagentHubProps> = ({ subagents = [], onSele
               key={subagent.id}
               onClick={handleClick}
               className="flex flex-col gap-1 p-2 rounded-lg bg-surface border border-border hover:border-blue-500/50 hover:bg-surface-highlight text-slate-900 dark:text-zinc-100 shadow-xs select-none cursor-pointer transition-all group"
-              title="Nhấn để xem transcript chi tiết"
+              title={t('subagent.viewTranscript')}
             >
               <div className="flex items-center justify-between gap-1.5">
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">

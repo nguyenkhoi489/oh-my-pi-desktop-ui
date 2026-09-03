@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import { OmpUiRequest } from '../../../types';
 import { handleSelectKeyNav } from '../../../utils/permissionNav';
-
+import { useI18n } from '../../../i18n/I18nProvider';
 export interface SelectViewProps {
   request: OmpUiRequest;
   onSelect: (value: string) => void;
@@ -14,6 +14,7 @@ export const SelectView: React.FC<SelectViewProps> = ({
   onSelect,
   onCancel,
 }) => {
+  const { t } = useI18n();
   const options = request.options || [];
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
@@ -25,7 +26,7 @@ export const SelectView: React.FC<SelectViewProps> = ({
   // Keyboard navigation: ↑/↓ + Enter + 1-9
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Bỏ qua nếu đang tương tác với input khác
+      // Ignore if interacting with another input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
@@ -100,7 +101,7 @@ export const SelectView: React.FC<SelectViewProps> = ({
 
       <div className="flex items-center justify-between pt-2 border-t border-border/50">
         <span className="text-[10.5px] text-slate-400 dark:text-zinc-500">
-          Phím tắt: <kbd className="font-mono text-[10px] px-1 py-0.5 rounded bg-surface border border-border">↑↓</kbd> di chuyển · <kbd className="font-mono text-[10px] px-1 py-0.5 rounded bg-surface border border-border">↵</kbd> chọn · <kbd className="font-mono text-[10px] px-1 py-0.5 rounded bg-surface border border-border">1-9</kbd> chọn nhanh
+          {t('permission.select.shortcutHint')}
         </span>
 
         <button
@@ -109,7 +110,7 @@ export const SelectView: React.FC<SelectViewProps> = ({
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300 border border-border transition-colors cursor-pointer"
         >
           <X className="w-3.5 h-3.5" />
-          <span>Hủy (ESC)</span>
+          <span>{t('permission.cancelEsc')}</span>
         </button>
       </div>
     </div>

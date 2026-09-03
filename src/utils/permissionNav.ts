@@ -1,4 +1,4 @@
-// Logic điều hướng bàn phím cho Select view trong Permission modal
+// Keyboard navigation logic for Select view in Permission modal
 export interface SelectNavResult {
   nextIndex: number;
   submitIndex?: number;
@@ -37,7 +37,7 @@ export function handleSelectKeyNav(
     };
   }
 
-  // Phím số 1-9 chọn trực tiếp và xác nhận
+  // Numeric keys 1-9 select and confirm immediately
   if (/^[1-9]$/.test(key)) {
     const num = parseInt(key, 10);
     const targetIdx = num - 1;

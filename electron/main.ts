@@ -2,6 +2,11 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
+import os from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import { fileURLToPath } from 'url';
 import { OmpBridge } from './omp-bridge.ts';
 import type {
@@ -13,18 +18,37 @@ import type {
   SetEngineConfigOptions,
   ResetEngineConfigOptions,
   EngineConfigPathOptions,
+  FetchGlobalUsageOptions,
+  FetchUsageHistoryOptions,
+  FetchUsageClientsOptions,
+  InvalidateUsageOptions,
+  StartStatsDashboardOptions,
+  StorageGcOptions,
 } from './types.ts';
 import { getSettingsStore, type AppSettings } from './settings-store.ts';
 import {
   readModelsConfig,
   writeModelsConfig,
   fetchLoginProviders,
+  findModels,
+  buildExtendedPath,
 } from './models-config.ts';
 import { AuthLoginManager, fetchAuthenticatedProviders } from './auth-login.ts';
 import { readModelRolesConfig, writeModelRolesConfig } from './roles-config.ts';
-import { fetchGlobalUsage, fetchGlobalStats } from './usage-stats.ts';
+import {
+  fetchGlobalUsage,
+  fetchGlobalStats,
+  fetchUsageHistory,
+  fetchUsageClients,
+  invalidateUsage,
+} from './usage-stats.ts';
+import { StatsDashboardManager } from './stats-dashboard.ts';
 import { listImportCandidates, importForeignSession } from './session-import.ts';
 import { EngineMaintenanceManager } from './engine-maintenance.ts';
+import { CommitAssistantManager, isGitDirty, type CommitRunOptions } from './commit-assistant.ts';
+import { CleanseRunnerManager, type CleanseRunOptions } from './cleanse-runner.ts';
+import { BrowserRelayManager, type BrowserRelayInstallOptions, type BrowserRelayStartOptions } from './browser-relay.ts';
+import { SayManager, type SayOptions } from './tts-say.ts';
 import { shareSession, joinCollabSession, type ShareSessionOptions } from './collab-share.ts';
 import { OpsManager } from './ops-manager.ts';
 import { ExtensionManager } from './extension-manager.ts';
@@ -35,7 +59,14 @@ import {
   resetEngineConfigValue,
   getEngineConfigPath,
 } from './engine-config.ts';
-import { setCurrentLocale } from '../shared/i18n/index.ts';
+import { runGc } from './storage-gc.ts';
+import { runImages } from './image-backends.ts';
+import { listSshHosts, addSshHost, removeSshHost } from './ssh-hosts.ts';
+import type { SshHostAddInput } from './types.ts';
+import { listGrievances, cleanGrievances, pushGrievances } from './grievances.ts';
+import type { GrievancesListOptions, GrievancesCleanOptions } from './types.ts';
+import type { ImageBackendsAction, ImageBackendsOptions } from './types.ts';
+import { setCurrentLocale, tm } from '../shared/i18n/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,7 +77,15 @@ const authLoginManager = new AuthLoginManager((url) => shell.openExternal(url));
 const engineMaintenanceManager = new EngineMaintenanceManager();
 const opsManager = new OpsManager();
 const extensionManager = new ExtensionManager();
-
+const statsDashboardManager = new StatsDashboardManager();
+const commitAssistantManager = new CommitAssistantManager();
+const cleanseRunnerManager = new CleanseRunnerManager();
+const browserRelayManager = new BrowserRelayManager();
+const sayManager = new SayManager((status) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('omp:say-status', status);
+  }
+});
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 function createWindow() {
@@ -75,7 +114,7 @@ function createWindow() {
     },
   });
 
-  // Chặn phím tắt DevTools khi chạy production
+  // Block DevTools shortcuts in production
   if (!isDev) {
     mainWindow.webContents.on('before-input-event', (event, input) => {
       if (input.key === 'F12') {
@@ -93,6 +132,12 @@ function createWindow() {
 
   const settingsStore = getSettingsStore();
   ompBridge = new OmpBridge(mainWindow, settingsStore);
+  ompBridge.setOpenUrlHandler((url) => shell.openExternal(url));
+  ompBridge.setInteractiveFallback(async (providerId) => {
+    const binPath = await resolveOmpBinaryPath();
+    if (!binPath || !mainWindow) return { success: false, error: 'Cannot launch fallback CLI' };
+    return authLoginManager.start(binPath, providerId, mainWindow);
+  });
   const initialSettings = settingsStore.get();
   if (initialSettings.language) {
     setCurrentLocale(initialSettings.language);
@@ -111,12 +156,27 @@ function createWindow() {
     mainWindow = null;
     authLoginManager.dispose();
     engineMaintenanceManager.dispose();
-    if (ompBridge) {
-      ompBridge.stopProcess();
-    }
+    commitAssistantManager.dispose();
+    cleanseRunnerManager.dispose();
+    browserRelayManager.dispose();
+    sayManager.dispose();
+    disposeAll();
   });
 }
 
+function disposeAll() {
+  authLoginManager.dispose();
+  engineMaintenanceManager.dispose();
+  opsManager.dispose();
+  statsDashboardManager.dispose();
+  commitAssistantManager.dispose();
+  cleanseRunnerManager.dispose();
+  browserRelayManager.dispose();
+  sayManager.dispose();
+  if (ompBridge) {
+    ompBridge.stopProcess();
+  }
+}
 // IPC Handlers: OMP Discovery & Process
 ipcMain.handle('omp:check-installation', async () => {
   if (!ompBridge) return { installed: false, error: 'Bridge uninitialized' };
@@ -135,7 +195,7 @@ ipcMain.handle('fs:select-binary', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
-    title: 'Chọn file nhị phân OMP (omp / pi / oh-my-pi)',
+    title: tm('electron.main.selectBinaryTitle'),
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
@@ -242,6 +302,12 @@ ipcMain.handle('omp:models-config-write', async (_, payload: { providers: any[] 
   return writeModelsConfig(payload?.providers || []);
 });
 
+ipcMain.handle('omp:models-find', async (_, pattern: string) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  const profile = getSettingsStore().get().profile;
+  return findModels(binaryPath, pattern, { profile });
+});
+
 // IPC Handlers: Model Roles trong ~/.omp/agent/config.yml
 ipcMain.handle('omp:model-roles-read', async () => {
   return readModelRolesConfig();
@@ -262,36 +328,99 @@ async function resolveOmpBinaryPath(): Promise<string | undefined> {
 }
 
 ipcMain.handle('omp:login-providers', async () => {
+  if (ompBridge && ompBridge.isRunning()) {
+    const res = await ompBridge.getLoginProviders();
+    if (res.success && res.providers) {
+      return res;
+    }
+  }
   const binaryPath = await resolveOmpBinaryPath();
-  return fetchLoginProviders(binaryPath);
+  const listRes = await fetchLoginProviders(binaryPath);
+  if (!listRes.success || !listRes.providers) {
+    return listRes;
+  }
+  if (binaryPath) {
+    const authRes = await fetchAuthenticatedProviders(binaryPath);
+    if (authRes.success && Array.isArray(authRes.providers)) {
+      const authedSet = new Set(authRes.providers);
+      return {
+        success: true,
+        providers: listRes.providers.map((p) => ({
+          ...p,
+          available: p.available ?? true,
+          authenticated: authedSet.has(p.id),
+        })),
+      };
+    }
+  }
+  return listRes;
 });
 
-// IPC Handlers: OAuth Login qua auth-broker
+// IPC Handlers: OAuth Login & Logout
 ipcMain.handle('omp:auth-login-start', async (_, providerId: string) => {
   const binaryPath = await resolveOmpBinaryPath();
   if (!binaryPath) {
-    return { success: false, error: 'Không tìm thấy file nhị phân omp để đăng nhập.' };
+    return { success: false, error: tm('electron.main.binaryNotFoundForLogin') };
   }
   if (!mainWindow) {
-    return { success: false, error: 'Cửa sổ ứng dụng chưa sẵn sàng.' };
+    return { success: false, error: tm('electron.main.windowNotReady') };
   }
-  return authLoginManager.start(binaryPath, providerId, mainWindow);
+
+  if (ompBridge && ompBridge.isRunning()) {
+    return ompBridge.startAuthLogin(providerId);
+  }
+
+  return {
+    success: false,
+    error: tm('electron.main.engineNotRunningForRpcLogin'),
+  };
 });
 
 ipcMain.handle('omp:auth-status', async () => {
   const binaryPath = await resolveOmpBinaryPath();
   if (!binaryPath) {
-    return { success: false, providers: [], error: 'Không tìm thấy file nhị phân omp.' };
+    return { success: false, providers: [], error: tm('electron.main.binaryNotFound') };
   }
   return fetchAuthenticatedProviders(binaryPath);
 });
 
 ipcMain.handle('omp:auth-login-cancel', async () => {
+  if (ompBridge && ompBridge.hasActiveAuthLogin()) {
+    return ompBridge.cancelAuthLogin();
+  }
   return authLoginManager.cancel();
 });
 
 ipcMain.handle('omp:auth-login-input', async (_, text: string) => {
+  if (ompBridge && ompBridge.hasActiveAuthLogin()) {
+    return ompBridge.submitAuthLoginInput(String(text ?? ''));
+  }
   return authLoginManager.submitInput(String(text ?? ''));
+});
+
+ipcMain.handle('omp:auth-logout', async (_, providerId: string) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  if (!binaryPath) {
+    return { success: false, error: tm('electron.main.binaryNotFound') };
+  }
+  if (!providerId || typeof providerId !== 'string') {
+    return { success: false, error: tm('electron.main.invalidProviderId') };
+  }
+  try {
+    await execFileAsync(binaryPath, ['auth-broker', 'logout', providerId.trim()], {
+      env: { ...process.env, PATH: buildExtendedPath() },
+      encoding: 'utf-8',
+      timeout: 10000,
+    });
+    return { success: true };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: tm('electron.main.logoutFailed', { detail: errorMsg }) };
+  }
+});
+
+ipcMain.handle('omp:is-engine-running', () => {
+  return ompBridge ? ompBridge.isRunning() : false;
 });
 
 // IPC Handlers: Model Catalog & Engine State (Phase 2 Additions)
@@ -326,14 +455,60 @@ ipcMain.handle('omp:session-stats', async () => {
 });
 
 // IPC Handlers: Global Usage & Stats (Phase 7 Parity)
-ipcMain.handle('omp:global-usage', async (_, forceRefresh?: boolean) => {
+ipcMain.handle('omp:global-usage', async (_, options?: boolean | FetchGlobalUsageOptions) => {
   const binaryPath = await resolveOmpBinaryPath();
-  return fetchGlobalUsage(binaryPath, { forceRefresh: Boolean(forceRefresh) });
+  return fetchGlobalUsage(binaryPath, options);
 });
 
 ipcMain.handle('omp:global-stats', async (_, forceRefresh?: boolean) => {
   const binaryPath = await resolveOmpBinaryPath();
   return fetchGlobalStats(binaryPath, { forceRefresh: Boolean(forceRefresh) });
+});
+
+ipcMain.handle('omp:usage-history', async (_, options?: FetchUsageHistoryOptions) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  return fetchUsageHistory(binaryPath, options);
+});
+
+ipcMain.handle('omp:usage-clients', async (_, options?: FetchUsageClientsOptions) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  return fetchUsageClients(binaryPath, options);
+});
+
+ipcMain.handle('omp:usage-invalidate', async (_, options?: InvalidateUsageOptions) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  return invalidateUsage(binaryPath, options);
+});
+
+ipcMain.handle('omp:stats-dashboard-start', async (_, options?: StartStatsDashboardOptions) => {
+  const binaryPath = await resolveOmpBinaryPath();
+  const defaultPort = getSettingsStore().get().statsDashboardPort;
+  const port = options?.port || defaultPort;
+  return statsDashboardManager.start(binaryPath, { ...options, port });
+});
+
+ipcMain.handle('omp:stats-dashboard-stop', async () => {
+  return statsDashboardManager.stop();
+});
+
+ipcMain.handle('omp:stats-dashboard-status', async () => {
+  return statsDashboardManager.status();
+});
+
+ipcMain.handle('shell:open-external', async (_, url: string) => {
+  if (typeof url !== 'string' || !url.trim()) {
+    return { success: false, error: tm('electron.main.invalidUrl') };
+  }
+  try {
+    const parsed = new URL(url.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:' && parsed.protocol !== 'chrome:') {
+      return { success: false, error: tm('electron.main.unsupportedProtocol', { protocol: parsed.protocol }) };
+    }
+    await shell.openExternal(url.trim());
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || tm('electron.main.cannotOpenUrlExternal') };
+  }
 });
 
 // IPC Handlers: Engine Configuration (Phase 2 Parity)
@@ -472,7 +647,7 @@ ipcMain.handle('omp:export-session', async () => {
   const defaultTitle = state.state?.sessionName || 'session';
   const cleanTitle = defaultTitle.replace(/[/\\?%*:|"<>]/g, '-').trim() || 'session';
   const result = await dialog.showSaveDialog(win || (undefined as any), {
-    title: 'Xuất phiên làm việc ra HTML',
+    title: tm('electron.main.exportHtmlTitle'),
     defaultPath: `${cleanTitle}.html`,
     filters: [{ name: 'HTML Files', extensions: ['html'] }],
   });
@@ -482,7 +657,7 @@ ipcMain.handle('omp:export-session', async () => {
   const filePath = result.filePath;
   const res = await ompBridge.exportHtml(filePath);
   if (res.success) {
-    ompBridge.emitNotification(`Đã xuất phiên làm việc ra: ${path.basename(filePath)}`, 'info');
+    ompBridge.emitNotification(tm('electron.main.exportedHtmlNotification', { file: path.basename(filePath) }), 'info');
     shell.showItemInFolder(filePath);
     return { success: true, path: filePath };
   }
@@ -496,7 +671,7 @@ ipcMain.handle('omp:list-import-candidates', async (_, source?: 'claude' | 'code
     const candidates = await listImportCandidates(source, currentCwd);
     return { success: true, candidates };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Lỗi quét session' };
+    return { success: false, error: err.message || tm('electron.main.scanSessionFailed') };
   }
 });
 
@@ -510,7 +685,7 @@ ipcMain.handle('omp:import-session', async (_, candidate: any, targetCwd?: strin
     const result = await importForeignSession(candidate, cwd, sessionDir);
     return result;
   } catch (err: any) {
-    return { success: false, error: err.message || 'Lỗi import session' };
+    return { success: false, error: err.message || tm('electron.main.importSessionFailed') };
   }
 });
 
@@ -547,13 +722,86 @@ ipcMain.handle('omp:maintenance-list-tiny-models', async () => {
 
 ipcMain.handle('omp:maintenance-run-task', async (_, taskId: string, args: string[]) => {
   const win = mainWindow || BrowserWindow.getFocusedWindow();
-  if (!win) return { success: false, error: 'Không tìm thấy cửa sổ ứng dụng' };
+  if (!win) return { success: false, error: tm('electron.main.appWindowNotFound') };
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
   return engineMaintenanceManager.startTask(taskId, binary, args, win);
 });
 
 ipcMain.handle('omp:maintenance-cancel-task', async () => {
   return engineMaintenanceManager.cancelTask();
+});
+
+// IPC Handlers: Commit Assistant (Phase 14)
+ipcMain.handle('omp:commit-run', async (_, opts: CommitRunOptions) => {
+  const win = mainWindow || BrowserWindow.getFocusedWindow();
+  if (!win) return { success: false, error: tm('electron.main.appWindowNotFound') };
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return commitAssistantManager.runCommit(binary, opts, win);
+});
+
+ipcMain.handle('omp:commit-cancel', async () => {
+  return commitAssistantManager.cancelCommit();
+});
+
+ipcMain.handle('omp:commit-status', async (_, cwd?: string) => {
+  let targetCwd = cwd;
+  if (!targetCwd && ompBridge) {
+    const state = await ompBridge.getState().catch(() => null);
+    targetCwd = state?.state?.cwd as string | undefined;
+  }
+  return isGitDirty(targetCwd);
+});
+
+// IPC Handlers: Cleanse Runner (Phase 15)
+ipcMain.handle('omp:cleanse-run', async (_, opts: CleanseRunOptions) => {
+  const win = mainWindow || BrowserWindow.getFocusedWindow();
+  if (!win) return { success: false, error: tm('electron.main.appWindowNotFound') };
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  let targetCwd = opts?.cwd;
+  if (!targetCwd && ompBridge) {
+    const state = await ompBridge.getState().catch(() => null);
+    targetCwd = state?.state?.cwd as string | undefined;
+  }
+  return cleanseRunnerManager.runCleanse(binary, { ...opts, cwd: targetCwd }, win);
+});
+
+ipcMain.handle('omp:cleanse-cancel', async () => {
+  return cleanseRunnerManager.cancelCleanse();
+});
+
+// IPC Handlers: Browser Relay Service (Phase 16)
+ipcMain.handle('omp:browser-relay-install', async (_, options?: BrowserRelayInstallOptions) => {
+  const win = mainWindow || BrowserWindow.getFocusedWindow();
+  if (!win) return { success: false, error: tm('electron.main.appWindowNotFound') };
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return browserRelayManager.installRelay(binary, win, options);
+});
+
+ipcMain.handle('omp:browser-relay-start', async (_, options?: BrowserRelayStartOptions) => {
+  const settings = await getSettingsStore().get();
+  const binary = settings.customBinaryPath || 'omp';
+  return browserRelayManager.startRelay(binary, options, settings.profile);
+});
+
+ipcMain.handle('omp:browser-relay-stop', async () => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return browserRelayManager.stopRelay(binary);
+});
+
+ipcMain.handle('omp:browser-relay-status', async () => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return browserRelayManager.getStatus(binary);
+});
+
+// IPC Handlers: Text-to-Speech (Phase 17)
+ipcMain.handle('omp:say-start', async (_, text: string, options?: SayOptions) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return sayManager.speak(binary, text, options);
+});
+
+ipcMain.handle('omp:say-stop', async () => {
+  sayManager.stop();
+  return { success: true };
 });
 
 // IPC Handlers: Background Process & Worktree Managers (Phase 13)
@@ -572,6 +820,24 @@ ipcMain.handle('omp:ps-logs', async (_, name: string, options?: { lines?: number
   return opsManager.getProcessLogs(binary, name, options);
 });
 
+ipcMain.handle('omp:ps-info', async (_, name: string, options?: { global?: string }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return opsManager.info(binary, name, options);
+});
+
+ipcMain.handle('omp:ps-logs-follow-start', async (_, name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return opsManager.startLogFollow(binary, name, options || {}, (line) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('omp:ps-log-line', { name, line });
+    }
+  });
+});
+
+ipcMain.handle('omp:ps-logs-follow-stop', async () => {
+  return opsManager.stopLogFollow();
+});
+
 ipcMain.handle('omp:worktree-list', async () => {
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
   return opsManager.listWorktrees(binary);
@@ -580,6 +846,95 @@ ipcMain.handle('omp:worktree-list', async () => {
 ipcMain.handle('omp:worktree-clear', async (_, options?: { all?: boolean; dryRun?: boolean }) => {
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
   return opsManager.clearWorktrees(binary, options);
+});
+
+// IPC Handlers: Storage GC (Phase 10)
+ipcMain.handle('omp:gc-run', async (_, options?: StorageGcOptions) => {
+  if (options?.apply && ompBridge && ompBridge.isStreaming()) {
+    return {
+      success: false,
+      error: tm('electron.main.gcStreamingBusy'),
+    };
+  }
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  const settingsProfile = getSettingsStore().get().profile;
+  const bridgeProfile = ompBridge && ompBridge.isRunning() ? ompBridge.getProfile().profile : undefined;
+  const profile = options?.profile !== undefined ? options.profile : (bridgeProfile || settingsProfile || 'default');
+  return runGc(binary, { ...options, profile });
+});
+
+// IPC Handlers: Image Backends (Phase 11)
+ipcMain.handle('omp:images-run', async (_, action?: ImageBackendsAction, options?: ImageBackendsOptions) => {
+  const act: ImageBackendsAction = action || 'status';
+  if (act === 'purge' && options?.apply && ompBridge && ompBridge.isStreaming()) {
+    return {
+      success: false,
+      action: act,
+      error: tm('electron.main.imagesStreamingBusy'),
+    };
+  }
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  const settingsProfile = getSettingsStore().get().profile;
+  const bridgeProfile = ompBridge && ompBridge.isRunning() ? ompBridge.getProfile().profile : undefined;
+  const profile = options?.profile !== undefined ? options.profile : (bridgeProfile || settingsProfile || 'default');
+  const dir = options?.dir || (ompBridge ? ompBridge.getWorkspacePath() : null) || process.cwd();
+  return runImages(binary, act, { ...options, dir, profile });
+});
+
+// IPC Handlers: SSH Hosts (Phase 12)
+ipcMain.handle('omp:ssh-list', async () => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  const settingsProfile = getSettingsStore().get().profile;
+  const bridgeProfile = ompBridge && ompBridge.isRunning() ? ompBridge.getProfile().profile : undefined;
+  const profile = bridgeProfile || settingsProfile || 'default';
+  const dir = (ompBridge ? ompBridge.getWorkspacePath() : null) || process.cwd();
+  return listSshHosts(binary, dir, profile);
+});
+
+ipcMain.handle('omp:ssh-add', async (_, input: SshHostAddInput) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  const settingsProfile = getSettingsStore().get().profile;
+  const bridgeProfile = ompBridge && ompBridge.isRunning() ? ompBridge.getProfile().profile : undefined;
+  const profile = bridgeProfile || settingsProfile || 'default';
+  const dir = (ompBridge ? ompBridge.getWorkspacePath() : null) || process.cwd();
+  return addSshHost(binary, dir, input, profile);
+});
+
+ipcMain.handle('omp:ssh-remove', async (_, name: string, scope: 'project' | 'user') => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  const settingsProfile = getSettingsStore().get().profile;
+  const bridgeProfile = ompBridge && ompBridge.isRunning() ? ompBridge.getProfile().profile : undefined;
+  const profile = bridgeProfile || settingsProfile || 'default';
+  const dir = (ompBridge ? ompBridge.getWorkspacePath() : null) || process.cwd();
+  return removeSshHost(binary, dir, name, scope, profile);
+});
+
+// IPC Handlers: Grievances (Phase 13)
+ipcMain.handle('omp:grievances-list', async (_, options?: GrievancesListOptions) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  const settingsProfile = getSettingsStore().get().profile;
+  const bridgeProfile = ompBridge && ompBridge.isRunning() ? ompBridge.getProfile().profile : undefined;
+  const profile = options?.profile !== undefined ? options.profile : (bridgeProfile || settingsProfile || 'default');
+  const dir = (ompBridge ? ompBridge.getWorkspacePath() : null) || process.cwd();
+  return listGrievances(binary, { ...options, profile }, dir);
+});
+
+ipcMain.handle('omp:grievances-clean', async (_, options: GrievancesCleanOptions) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  const settingsProfile = getSettingsStore().get().profile;
+  const bridgeProfile = ompBridge && ompBridge.isRunning() ? ompBridge.getProfile().profile : undefined;
+  const profile = options?.profile !== undefined ? options.profile : (bridgeProfile || settingsProfile || 'default');
+  const dir = (ompBridge ? ompBridge.getWorkspacePath() : null) || process.cwd();
+  return cleanGrievances(binary, { ...options, profile }, dir);
+});
+
+ipcMain.handle('omp:grievances-push', async (_, options?: { profile?: string | null }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  const settingsProfile = getSettingsStore().get().profile;
+  const bridgeProfile = ompBridge && ompBridge.isRunning() ? ompBridge.getProfile().profile : undefined;
+  const profile = options?.profile !== undefined ? options.profile : (bridgeProfile || settingsProfile || 'default');
+  const dir = (ompBridge ? ompBridge.getWorkspacePath() : null) || process.cwd();
+  return pushGrievances(binary, { profile }, dir);
 });
 
 // IPC Handlers: Plugin & Agents Managers (Phase 14, 15 & Expansion)
@@ -675,7 +1030,7 @@ ipcMain.handle('omp:profile-list', async () => {
     const profiles = await listProfiles();
     return { success: true, profiles };
   } catch (err: any) {
-    return { success: false, error: err?.message || 'Lỗi khi lấy danh sách profiles' };
+    return { success: false, error: err?.message || tm('electron.main.listProfilesFailed') };
   }
 });
 
@@ -711,7 +1066,7 @@ ipcMain.handle('fs:select-folder', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
-    title: 'Chọn Thư Mục Dự Án cho OMP Agent',
+    title: tm('electron.main.selectProjectDirTitle'),
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
@@ -723,7 +1078,7 @@ ipcMain.handle(
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
-      title: options?.title || 'Chọn file',
+      title: options?.title || tm('electron.main.selectFileTitle'),
       filters: options?.filters,
     });
     if (result.canceled || result.filePaths.length === 0) return null;
@@ -852,10 +1207,14 @@ ipcMain.handle('fs:delete-file', async (_, filePath: string) => {
   }
 });
 
-// Hiện file/thư mục trong Finder
+// Reveal file/directory in Finder
 ipcMain.handle('fs:reveal-in-finder', async (_, filePath: string) => {
   try {
-    shell.showItemInFolder(path.resolve(filePath));
+    let resolved = filePath;
+    if (resolved.startsWith('~/')) {
+      resolved = path.join(os.homedir(), resolved.slice(2));
+    }
+    shell.showItemInFolder(path.resolve(resolved));
     return true;
   } catch (err) {
     console.error('Error revealing in finder:', err);
@@ -892,7 +1251,7 @@ ipcMain.handle(
       return { success: true, filePath: targetPath, relativePath };
     } catch (err: any) {
       console.error('Error saving image attachment:', err);
-      return { success: false, filePath: '', error: err?.message || 'Không thể lưu file đính kèm' };
+      return { success: false, filePath: '', error: err?.message || tm('electron.main.saveAttachmentFailed') };
     }
   }
 );
@@ -909,26 +1268,26 @@ const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   avif: 'image/avif',
 };
 
-// Đọc file ảnh trên đĩa thành data URL để renderer hiển thị thumbnail
+// Read image file from disk to data URL for renderer thumbnail display
 ipcMain.handle('fs:read-image-base64', async (_, filePath: string) => {
   try {
     if (!filePath) {
-      return { success: false, error: 'Thiếu đường dẫn file ảnh' };
+      return { success: false, error: tm('electron.main.missingImagePath') };
     }
     const wsPath = ompBridge?.getWorkspacePath();
     if (!path.isAbsolute(filePath) && !wsPath) {
-      return { success: false, error: 'Chưa mở workspace để phân giải đường dẫn tương đối' };
+      return { success: false, error: tm('electron.main.workspaceNotOpenForRelativePath') };
     }
     const absPath = path.isAbsolute(filePath) ? filePath : path.join(wsPath!, filePath);
     const ext = path.extname(absPath).replace(/^\./, '').toLowerCase();
     const mime = IMAGE_MIME_BY_EXTENSION[ext];
     if (!mime) {
-      return { success: false, error: `Định dạng ảnh không được hỗ trợ: .${ext}` };
+      return { success: false, error: tm('electron.main.unsupportedImageFormat', { ext }) };
     }
     const data = await fs.readFile(absPath);
     return { success: true, dataUrl: `data:${mime};base64,${data.toString('base64')}` };
   } catch (err: any) {
-    return { success: false, error: err?.message || 'Không thể đọc file ảnh' };
+    return { success: false, error: err?.message || tm('electron.main.readImageFailed') };
   }
 });
 
@@ -940,6 +1299,10 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  disposeAll();
 });
 
 app.on('window-all-closed', () => {

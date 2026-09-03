@@ -17,6 +17,7 @@ import { ArtifactDocument } from '../../types';
 import { DEMO_ARTIFACTS } from '../../mock/demoData';
 import { MarkdownRenderer } from '../Common/MarkdownRenderer';
 import { stripMarkdownFrontmatter } from '../../utils/artifactDiscovery';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface ArtifactViewerProps {
   artifacts?: ArtifactDocument[];
@@ -32,6 +33,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
   onSelectArtifact,
   onReloadArtifact,
 }) => {
+  const { t } = useI18n();
   const [internalArtifactId, setInternalArtifactId] = useState<string>(artifacts[0]?.id || '');
   const [viewMode, setViewMode] = useState<'preview' | 'document' | 'source'>('preview');
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
@@ -41,7 +43,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
   const activeId = controlledArtifactId !== undefined ? controlledArtifactId : internalArtifactId;
   const currentArtifact = artifacts.find((a) => a.id === activeId) || artifacts[0];
 
-  // Đồng bộ viewMode mặc định theo loại artifact khi active artifact thay đổi
+  // Sync default viewMode by artifact type when active artifact changes
   useEffect(() => {
     if (currentArtifact) {
       if (currentArtifact.type === 'markdown' || currentArtifact.type === 'plan') {
@@ -70,9 +72,9 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:text-zinc-500 text-xs">
         <Sparkles className="w-8 h-8 text-slate-300 dark:text-zinc-600 mb-2 stroke-[1.5]" />
-        <p className="font-medium text-slate-600 dark:text-zinc-400">Chưa có Artifact nào được phát hiện</p>
+        <p className="font-medium text-slate-600 dark:text-zinc-400">{t('artifact.emptyTitle')}</p>
         <p className="mt-1 text-slate-400 dark:text-zinc-500 max-w-sm">
-          Tạo các file .html, .svg trong docs/ hoặc file markdown trong plans/ để tự động hiển thị tại đây.
+          {t('artifact.emptyDesc')}
         </p>
       </div>
     );
@@ -224,13 +226,13 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
         {isLoading && (
           <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-zinc-500">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span>Đang đọc {currentArtifact.title}...</span>
+            <span>{t('artifact.reading', { title: currentArtifact.title })}</span>
           </div>
         )}
 
         {isEmptyContent && (
           <div className="text-xs text-slate-400 dark:text-zinc-500">
-            File trống hoặc không đọc được: {currentArtifact.title}
+            {t('artifact.emptyOrUnreadable', { title: currentArtifact.title })}
           </div>
         )}
 

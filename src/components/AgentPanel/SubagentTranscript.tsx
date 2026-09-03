@@ -19,6 +19,7 @@ import { useSubagentTranscript } from '../../hooks/useSubagentTranscript';
 import { ThinkingCard } from './ThinkingCard';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRenderer } from '../Common/MarkdownRenderer';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface SubagentTranscriptProps {
   subagent: OmpSubagentInfo | null;
@@ -31,6 +32,7 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
   isOpen,
   onClose,
 }) => {
+  const { t } = useI18n();
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -49,7 +51,7 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
 
   const isRunning = subagent?.status === 'running' || subagent?.status === 'started';
 
-  // Lắng nghe phím Escape để đóng drawer
+  // Listen for Escape key to close drawer
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -61,14 +63,14 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Tự động cuộn xuống cuối khi có tin nhắn mới
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (autoScroll && scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [messages, autoScroll]);
 
-  // Kiểm tra vị trí cuộn của người dùng để bật/tắt autoscroll thông minh
+  // Track user scroll position for auto-scroll
   const handleScroll = () => {
     if (!scrollContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
@@ -165,7 +167,7 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
               onClick={() => refresh()}
               disabled={isLoading}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-surface-highlight transition-colors disabled:opacity-50"
-              title="Làm mới transcript"
+              title={t('subagent.refreshTranscript')}
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
@@ -173,7 +175,7 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-surface-highlight transition-colors"
-              title="Đóng nhật ký (Esc)"
+              title={t('subagent.closeTranscript')}
             >
               <X className="w-4 h-4" />
             </button>
@@ -185,7 +187,7 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
           <div className="px-4 py-2.5 bg-surface/50 border-b border-border text-xs text-slate-600 dark:text-zinc-300 leading-relaxed shrink-0">
             <div className="font-semibold text-slate-700 dark:text-zinc-200 mb-0.5 flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5 text-blue-500" />
-              <span>Nhiệm vụ:</span>
+              <span>{t('subagent.taskLabel')}</span>
             </div>
             <div className="line-clamp-3 whitespace-pre-wrap font-sans pl-5 text-[11.5px]">
               {subagent.description || subagent.task}
@@ -202,7 +204,7 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
           {isLoading && messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-400 dark:text-zinc-500 p-8">
               <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-              <span className="text-sm font-medium">Đang tải nhật ký subagent...</span>
+              <span className="text-sm font-medium">{t('subagent.loading')}</span>
             </div>
           )}
 
@@ -210,10 +212,10 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
             <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 flex items-start gap-3 my-4">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
               <div className="flex flex-col gap-1 text-xs leading-relaxed">
-                <span className="font-semibold text-[13px]">Không thể đọc transcript subagent</span>
+                <span className="font-semibold text-[13px]">{t('subagent.loadError')}</span>
                 <span>{error}</span>
                 <span className="text-slate-400 dark:text-zinc-500 mt-1">
-                  Nếu subagent vừa được khởi chạy hoặc event bus chưa sẵn sàng, hãy thử nhấn nút Làm mới.
+                  {t('subagent.readErrorHint')}
                 </span>
               </div>
             </div>
@@ -223,10 +225,10 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
             <div className="h-full flex flex-col items-center justify-center gap-2 text-slate-400 dark:text-zinc-500 p-8 text-center">
               <Terminal className="w-8 h-8 text-slate-400 dark:text-zinc-600" />
               <span className="text-sm font-semibold text-slate-600 dark:text-zinc-400">
-                Chưa có thông điệp nào
+                {t('subagent.empty')}
               </span>
               <span className="text-xs max-w-sm">
-                Subagent đang được khởi tạo hoặc chưa phát sinh dữ liệu ra file nhật ký.
+                {t('subagent.noMessagesDesc')}
               </span>
             </div>
           )}
@@ -309,11 +311,11 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
             ) : (
               <span className="flex items-center gap-1 text-slate-400">
                 <Cpu className="w-3 h-3" />
-                <span>Tĩnh</span>
+                <span>{t('subagent.staticStatus')}</span>
               </span>
             )}
             <span>•</span>
-            <span>{messages.length} thông điệp</span>
+            <span>{t('subagent.messagesCount', { count: messages.length })}</span>
             <span>•</span>
             <span>{formattedByteSize}</span>
           </div>
@@ -323,7 +325,7 @@ export const SubagentTranscript: React.FC<SubagentTranscriptProps> = ({
               onClick={scrollToBottom}
               className="flex items-center gap-1 text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 font-medium cursor-pointer"
             >
-              <span>Cuộn xuống</span>
+              <span>{t('subagent.scrollToBottom')}</span>
               <ArrowDown className="w-3 h-3" />
             </button>
           )}

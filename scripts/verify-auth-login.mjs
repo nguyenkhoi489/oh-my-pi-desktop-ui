@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { AuthLoginManager, parseAuthenticatedProviders } from '../electron/auth-login.ts';
+import { OmpBridge } from '../electron/omp-bridge.ts';
 
 let passed = 0;
 let failed = 0;
@@ -222,6 +223,29 @@ try {
       parseAuthenticatedProviders('{"other": true}').length === 0,
       'Thiếu reports -> danh sách rỗng'
     );
+  }
+
+  console.log('\n[Test 6] OmpBridge Auth & Login Methods (Offline & State Guard)');
+  {
+    const { window } = createFakeWindow();
+    const bridge = new OmpBridge(window);
+
+    assert(bridge.isRunning() === false, 'bridge.isRunning() trả về false khi offline');
+    assert(bridge.hasActiveAuthLogin() === false, 'hasActiveAuthLogin() trả về false ban đầu');
+    assert(bridge.getActiveAuthLoginProviderId() === null, 'getActiveAuthLoginProviderId() trả về null');
+
+    const provRes = await bridge.getLoginProviders();
+    assert(provRes.success === false, 'getLoginProviders() trả về false khi offline');
+    assert(Boolean(provRes.error), 'getLoginProviders() trả về thông báo lỗi offline');
+
+    const loginRes = await bridge.startAuthLogin('anthropic');
+    assert(loginRes.success === false, 'startAuthLogin() trả về false khi offline');
+
+    const inputRes = bridge.submitAuthLoginInput('123456');
+    assert(inputRes.success === false, 'submitAuthLoginInput() báo lỗi khi không có active login');
+
+    const cancelRes = bridge.cancelAuthLogin();
+    assert(cancelRes.success === true, 'cancelAuthLogin() an toàn khi không có active login');
   }
 
   console.log(`\n=== Auth Login Verification Suite Complete: ${passed} passed, ${failed} failed ===`);

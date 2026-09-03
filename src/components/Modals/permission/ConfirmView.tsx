@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check, X } from 'lucide-react';
 import { OmpUiRequest } from '../../../types';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 export interface ConfirmViewProps {
   request: OmpUiRequest;
@@ -13,6 +14,7 @@ export const ConfirmView: React.FC<ConfirmViewProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useI18n();
   return (
     <div className="space-y-4">
       <div className="p-4 rounded-xl bg-surface border border-border text-xs text-slate-700 dark:text-zinc-300 leading-relaxed">
@@ -25,7 +27,7 @@ export const ConfirmView: React.FC<ConfirmViewProps> = ({
           onClick={onCancel}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-slate-700 dark:hover:text-zinc-300 transition-colors cursor-pointer"
         >
-          <span>Hủy (ESC)</span>
+          <span>{t('permission.cancelEsc')}</span>
         </button>
 
         <div className="flex items-center gap-2.5">
@@ -35,7 +37,7 @@ export const ConfirmView: React.FC<ConfirmViewProps> = ({
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300 border border-border transition-colors cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
-            <span>Từ chối</span>
+            <span>{t('permission.deny')}</span>
           </button>
 
           <button
@@ -44,7 +46,7 @@ export const ConfirmView: React.FC<ConfirmViewProps> = ({
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white shadow-sm transition-all cursor-pointer"
           >
             <Check className="w-3.5 h-3.5" />
-            <span>Xác nhận</span>
+            <span>{t('permission.approve')}</span>
           </button>
         </div>
       </div>

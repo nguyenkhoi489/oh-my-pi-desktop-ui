@@ -1,3 +1,4 @@
+import { tm } from '../shared/i18n/index.ts';
 import electronPkg from 'electron';
 import fs from 'fs';
 import path from 'path';
@@ -42,7 +43,7 @@ export class HostToolRegistry {
     this.registerBuiltinTools();
   }
 
-  // Đăng ký tool
+  // Register tool
   public register(tool: HostToolDefinition) {
     this.tools.set(tool.name, tool);
   }
@@ -69,7 +70,7 @@ export class HostToolRegistry {
     }));
   }
 
-  // Thực thi tool có bảo vệ timeout và signal
+  // Execute tool with timeout and signal protection
   public async executeTool(
     name: string,
     args: any,
@@ -134,18 +135,18 @@ export class HostToolRegistry {
     }
   }
 
-  // Đăng ký các tool mặc định của Desktop
+  // Register default tools of Desktop
   private registerBuiltinTools() {
-    // 1. notify_user: Gửi notification macOS
+    // 1. notify_user: Send macOS notification
     this.register({
       name: 'notify_user',
       label: 'Notify User',
-      description: 'Gửi thông báo desktop (macOS notification) cho người dùng.',
+      description: tm('electron.hostTools.notifyUser.desc'),
       parameters: {
         type: 'object',
         properties: {
-          title: { type: 'string', description: 'Tiêu đề thông báo' },
-          message: { type: 'string', description: 'Nội dung thông báo cần gửi' },
+          title: { type: 'string', description: tm('electron.hostTools.notifyUser.titleDesc') },
+          message: { type: 'string', description: tm('electron.hostTools.notifyUser.messageDesc') },
         },
         required: ['message'],
       },
@@ -159,98 +160,100 @@ export class HostToolRegistry {
           });
           notif.show();
         }
-        return `Đã gửi thông báo đến người dùng: [${title}] ${body}`;
+        return tm('electron.hostTools.notifyUser.sent', { title, body });
       },
     });
 
-    // 2. open_in_browser: Mở URL trong trình duyệt mặc định
+    // 2. open_in_browser: Open URL in default browser
     this.register({
       name: 'open_in_browser',
       label: 'Open URL in Browser',
-      description: 'Mở một liên kết web trong trình duyệt mặc định của hệ thống.',
+      description: tm('electron.hostTools.openInBrowser.desc'),
       parameters: {
         type: 'object',
         properties: {
-          url: { type: 'string', description: 'Đường dẫn URL hợp lệ cần mở (https://...)' },
+          url: { type: 'string', description: tm('electron.hostTools.openInBrowser.urlDesc') },
         },
         required: ['url'],
       },
       execute: async (args: { url: string }) => {
         const targetUrl = String(args.url || '').trim();
         if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-          throw new Error('Chỉ chấp nhận mở các đường dẫn URL bắt đầu bằng http:// hoặc https://');
+          throw new Error(tm('electron.hostTools.openInBrowser.invalidProtocol'));
         }
         await shell.openExternal(targetUrl);
-        return `Đã mở URL trong trình duyệt: ${targetUrl}`;
+        return tm('electron.hostTools.openInBrowser.opened', { url: targetUrl });
       },
     });
 
-    // 3. reveal_file: Hiển thị file trong Finder
+    // 3. reveal_file: Show file in Finder
     this.register({
       name: 'reveal_file',
       label: 'Reveal in Finder',
-      description: 'Hiển thị file hoặc thư mục chỉ định trong trình quản lý tệp Finder của macOS.',
+      description: tm('electron.hostTools.revealFile.desc'),
       parameters: {
         type: 'object',
         properties: {
-          filePath: { type: 'string', description: 'Đường dẫn file cần hiển thị' },
+          filePath: { type: 'string', description: tm('electron.hostTools.revealFile.filePathDesc') },
         },
         required: ['filePath'],
       },
       execute: async (args: { filePath: string }) => {
         const targetPath = String(args.filePath || '').trim();
-        if (!targetPath) throw new Error('Đường dẫn filePath không được để trống');
+        if (!targetPath) throw new Error(tm('electron.hostTools.revealFile.emptyPath'));
         shell.showItemInFolder(targetPath);
-        return `Đã mở Finder tại vị trí: ${targetPath}`;
+        return tm('electron.hostTools.revealFile.opened', { path: targetPath });
       },
     });
 
-    // 4. open_in_app: Mở file trong app
+    // 4. open_in_app: Open file in app
     this.register({
       name: 'open_in_app',
       label: 'Open in Desktop App',
-      description: 'Yêu cầu Desktop hiển thị một file hoặc đường dẫn trong trình xem mã nguồn.',
+      description: tm('electron.hostTools.openInApp.desc'),
       parameters: {
         type: 'object',
         properties: {
-          filePath: { type: 'string', description: 'Đường dẫn file cần mở' },
-          line: { type: 'number', description: 'Dòng cần trỏ tới (tuỳ chọn)' },
+          filePath: { type: 'string', description: tm('electron.hostTools.openInApp.filePathDesc') },
+          line: { type: 'number', description: tm('electron.hostTools.openInApp.lineDesc') },
         },
         required: ['filePath'],
       },
       execute: async (args: { filePath: string; line?: number }) => {
         const p = String(args.filePath || '').trim();
-        if (!p) throw new Error('Đường dẫn filePath không được để trống');
-        if (!this.openInApp) throw new Error('Desktop chưa sẵn sàng nhận yêu cầu mở file');
+        if (!p) throw new Error(tm('electron.hostTools.openInApp.emptyPath'));
+        if (!this.openInApp) throw new Error(tm('electron.hostTools.openInApp.notReady'));
         const line = typeof args.line === 'number' && args.line > 0 ? Math.floor(args.line) : undefined;
         this.openInApp({ kind: 'file', target: p, line });
-        return `Đã gửi yêu cầu mở file tới Desktop: ${p}${line ? ` (dòng ${line})` : ''}`;
+        return line
+          ? tm('electron.hostTools.openInApp.openedWithLine', { path: p, line: String(line) })
+          : tm('electron.hostTools.openInApp.opened', { path: p });
       },
     });
 
-    // 5. pick_file: Mở native file picker dialog
+    // 5. pick_file: Open native file picker dialog
     this.register({
       name: 'pick_file',
       label: 'Pick File Dialog',
-      description: 'Mở hộp thoại chọn tệp của macOS để người dùng chọn một file hoặc thư mục.',
+      description: tm('electron.hostTools.pickFile.desc'),
       timeoutMs: PICK_FILE_TIMEOUT_MS,
       parameters: {
         type: 'object',
         properties: {
-          title: { type: 'string', description: 'Tiêu đề hộp thoại' },
-          defaultPath: { type: 'string', description: 'Đường dẫn mặc định ban đầu' },
+          title: { type: 'string', description: tm('electron.hostTools.pickFile.titleDesc') },
+          defaultPath: { type: 'string', description: tm('electron.hostTools.pickFile.defaultPathDesc') },
         },
       },
       execute: async (args: { title?: string; defaultPath?: string }) => {
         const res = await dialog.showOpenDialog({
-          title: args.title || 'Chọn tệp cho OMP Agent',
+          title: args.title || tm('electron.hostTools.pickFile.defaultTitle'),
           defaultPath: args.defaultPath,
           properties: ['openFile', 'showHiddenFiles'],
         });
         if (res.canceled || res.filePaths.length === 0) {
-          return 'Người dùng đã huỷ chọn tệp';
+          return tm('electron.hostTools.pickFile.canceled');
         }
-        return `Người dùng đã chọn tệp: ${res.filePaths[0]}`;
+        return tm('electron.hostTools.pickFile.selected', { path: res.filePaths[0] });
       },
     });
   }
@@ -272,7 +275,7 @@ async function statOrNull(filePath: string): Promise<fs.Stats | null> {
   }
 }
 
-// Trả lời host_uri_request của engine cho các scheme Desktop đăng ký
+// Reply to host_uri_request of engine for registered Desktop schemes
 export class HostUriRouter {
   private openInApp?: (request: HostOpenRequest) => void;
   private resolvePath: (target: string) => string;
@@ -297,25 +300,25 @@ export class HostUriRouter {
     try {
       const scheme = url.split('://')[0]?.toLowerCase() || '';
       if (operation !== 'read') {
-        return { isError: true, error: `Scheme ${scheme}:// chỉ hỗ trợ đọc, không hỗ trợ ${operation}` };
+        return { isError: true, error: tm('electron.hostTools.uri.readOnlyScheme', { scheme, op: operation }) };
       }
       if (scheme === 'ompapp') return await this.handleOmpApp(url, signal);
       if (scheme === 'vscode' || scheme === 'cursor') return await this.handleEditorLink(scheme, url, signal);
-      return { isError: true, error: `Desktop không hỗ trợ scheme ${scheme}://` };
+      return { isError: true, error: tm('electron.hostTools.uri.unsupportedScheme', { scheme }) };
     } catch (err: any) {
       return { isError: true, error: err?.message || String(err) };
     }
   }
 
-  // Chỉ cho phép dạng vscode://file/<path> để tránh deep-link lạ (ssh-remote, extension...)
+  // Only allow vscode://file/<path> format to prevent deep-link issues
   private async handleEditorLink(scheme: string, url: string, signal?: AbortSignal): Promise<HostUriResultPayload> {
     if (!url.startsWith(`${scheme}://file/`)) {
-      throw new Error(`Chỉ hỗ trợ dạng ${scheme}://file/<đường dẫn>`);
+      throw new Error(tm('electron.hostTools.uri.editorLinkFormat', { scheme }));
     }
     assertNotAborted(signal, url);
-    this.notify(`Model yêu cầu mở ${url}`);
+    this.notify(tm('electron.hostTools.uri.modelRequestedOpen', { url }));
     await shell.openExternal(url);
-    return { content: `Đã mở ${url} bằng ${scheme}`, contentType: 'text/plain', immutable: true };
+    return { content: tm('electron.hostTools.uri.openedWithEditor', { url, scheme }), contentType: 'text/plain', immutable: true };
   }
 
   private async handleOmpApp(url: string, signal?: AbortSignal): Promise<HostUriResultPayload> {
@@ -323,37 +326,37 @@ export class HostUriRouter {
     const slash = rest.indexOf('/');
     const kind = slash === -1 ? rest : rest.slice(0, slash);
     const target = decodeURIComponent(slash === -1 ? '' : rest.slice(slash + 1));
-    if (!target) throw new Error(`Thiếu đích trong ${url}`);
+    if (!target) throw new Error(tm('electron.hostTools.uri.missingDestination', { url }));
 
     if (kind === 'session') {
       assertNotAborted(signal, url);
       this.requireOpenInApp()({ kind: 'session', target });
-      return { content: `Đã mở session ${target} trong Desktop`, contentType: 'text/plain', immutable: true };
+      return { content: tm('electron.hostTools.uri.openedSession', { target }), contentType: 'text/plain', immutable: true };
     }
 
     if (kind === 'file') {
       const { filePart, line } = splitTrailingLine(target);
       const absolutePath = await this.locateFile(filePart);
       const stat = await statOrNull(absolutePath);
-      if (!stat) throw new Error(`Không tìm thấy file ${filePart}`);
-      if (!stat.isFile()) throw new Error(`${filePart} không phải là file`);
-      if (stat.size > MAX_URI_FILE_BYTES) throw new Error(`${filePart} vượt quá ${MAX_URI_FILE_BYTES} bytes`);
+      if (!stat) throw new Error(tm('electron.hostTools.uri.fileNotFound', { path: filePart }));
+      if (!stat.isFile()) throw new Error(tm('electron.hostTools.uri.notAFile', { path: filePart }));
+      if (stat.size > MAX_URI_FILE_BYTES) throw new Error(tm('electron.hostTools.uri.fileTooLarge', { path: filePart, maxBytes: String(MAX_URI_FILE_BYTES) }));
       const buffer = await fs.promises.readFile(absolutePath);
-      if (buffer.includes(0)) throw new Error(`${filePart} là file nhị phân, không đọc được dạng text`);
+      if (buffer.includes(0)) throw new Error(tm('electron.hostTools.uri.binaryFileError', { path: filePart }));
       assertNotAborted(signal, url);
       this.requireOpenInApp()({ kind: 'file', target: absolutePath, line });
       return {
         content: buffer.toString('utf-8'),
         contentType: 'text/plain',
         immutable: true,
-        notes: [`Đã mở ${absolutePath} trong Desktop`],
+        notes: [tm('electron.hostTools.uri.openedInDesktop', { path: absolutePath })],
       };
     }
 
-    throw new Error(`ompapp://${kind} không được hỗ trợ (chỉ session/file)`);
+    throw new Error(tm('electron.hostTools.uri.unsupportedKind', { kind }));
   }
 
-  // ompapp://file/Users/x/a.txt (một dấu /) vẫn là đường dẫn tuyệt đối nếu không có trong workspace
+  // ompapp://file/Users/x/a.txt is absolute path if not in workspace
   private async locateFile(filePart: string): Promise<string> {
     const resolved = this.resolvePath(filePart);
     if (filePart.startsWith('/') || (await statOrNull(resolved))) return resolved;
@@ -362,7 +365,7 @@ export class HostUriRouter {
   }
 
   private requireOpenInApp(): (request: HostOpenRequest) => void {
-    if (!this.openInApp) throw new Error('Desktop chưa sẵn sàng nhận yêu cầu mở');
+    if (!this.openInApp) throw new Error(tm('electron.hostTools.uri.notReady'));
     return this.openInApp;
   }
 }
@@ -371,7 +374,7 @@ function assertNotAborted(signal: AbortSignal | undefined, url: string) {
   if (signal?.aborted) throw new Error(`Host URI read for ${url} was aborted`);
 }
 
-// Tách hậu tố :<số dòng> ở cuối, giữ nguyên dấu ':' nằm trong tên file
+// Extract trailing :<line number>, preserving ':' in file names
 function splitTrailingLine(target: string): { filePart: string; line?: number } {
   const colon = target.lastIndexOf(':');
   if (colon === -1) return { filePart: target };

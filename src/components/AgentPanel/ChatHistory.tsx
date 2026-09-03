@@ -19,6 +19,8 @@ import { MarkdownRenderer } from '../Common/MarkdownRenderer';
 import { isImageFile } from '../../utils/imageAttachment';
 import { ImageLightboxModal } from './ImageLightboxModal';
 import { AttachmentImage } from '../Common/AttachmentImage';
+import { stripAnsi } from '../../../shared/text/strip-ansi';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface ChatHistoryProps {
   messages: ChatMessage[];
@@ -31,19 +33,21 @@ interface ChatHistoryProps {
 }
 
 const SystemMessageCard: React.FC<{ content: string; timestamp?: number }> = ({ content }) => {
+  const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
 
-  const lines = useMemo(() => content.split('\n'), [content]);
-  const isLong = lines.length > 8 || content.length > 400;
+  const cleanContent = useMemo(() => stripAnsi(content), [content]);
+  const lines = useMemo(() => cleanContent.split('\n'), [cleanContent]);
+  const isLong = lines.length > 8 || cleanContent.length > 400;
 
   const displayContent = useMemo(() => {
-    if (!isLong || isExpanded) return content;
+    if (!isLong || isExpanded) return cleanContent;
     return lines.slice(0, 6).join('\n') + '\n...';
-  }, [content, lines, isLong, isExpanded]);
+  }, [cleanContent, lines, isLong, isExpanded]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(content);
+    navigator.clipboard.writeText(cleanContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -60,7 +64,7 @@ const SystemMessageCard: React.FC<{ content: string; timestamp?: number }> = ({ 
           </span>
           {isLong && (
             <span className="text-[10.5px] text-slate-400 dark:text-zinc-500">
-              ({lines.length} dòng)
+              {t('chatHistory.linesCount', { count: lines.length })}
             </span>
           )}
         </div>
@@ -69,12 +73,12 @@ const SystemMessageCard: React.FC<{ content: string; timestamp?: number }> = ({ 
           type="button"
           onClick={handleCopy}
           className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 text-[11px] flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-surface-highlight transition-colors cursor-pointer"
-          title="Sao chép kết quả"
+          title={t('chatHistory.copyResult')}
         >
           {copied ? (
             <>
               <Check className="w-3 h-3 text-emerald-500" />
-              <span className="text-emerald-500 text-[10.5px]">Đã chép</span>
+              <span className="text-emerald-500 text-[10.5px]">{t('chatHistory.copied')}</span>
             </>
           ) : (
             <>
@@ -98,12 +102,12 @@ const SystemMessageCard: React.FC<{ content: string; timestamp?: number }> = ({ 
           {isExpanded ? (
             <>
               <ChevronUp className="w-3 h-3" />
-              <span>Thu gọn output</span>
+              <span>{t('chatHistory.collapseOutput')}</span>
             </>
           ) : (
             <>
               <ChevronDown className="w-3 h-3" />
-              <span>Xem đầy đủ ({lines.length} dòng)</span>
+              <span>{t('chatHistory.viewFullLines', { count: lines.length })}</span>
             </>
           )}
         </button>
@@ -121,6 +125,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
   onBranchSession,
   onOpenFile,
 }) => {
+  const { t } = useI18n();
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const handleCopyMessage = (text: string, msgId: string) => {
@@ -132,7 +137,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
   const bottomRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef<boolean>(true);
 
-  // Chỉ coi là "bám đáy" khi người dùng đang ở gần cuối
+  // Consider stuck-to-bottom only when user is near bottom
   const handleScroll = () => {
     const el = containerRef.current;
     if (!el) return;
@@ -174,7 +179,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                         type="button"
                         onClick={() => setLightboxImage({ url: file.path, name: file.name || file.path })}
                         className="flex items-center gap-2.5 p-1.5 pr-3 rounded-xl bg-surface border border-border hover:border-blue-500/50 hover:bg-surface-highlight text-xs transition-all cursor-pointer shadow-xs group text-left"
-                        title={`Xem ảnh ${file.path} phóng to`}
+                        title={t('chatHistory.viewImageZoom', { path: file.path })}
                       >
                         <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-surface-highlight border border-border/60 flex items-center justify-center relative">
                           <AttachmentImage
@@ -191,7 +196,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                             {file.name || file.path}
                           </span>
                           <span className="text-[10px] text-slate-400 dark:text-zinc-500 uppercase font-sans">
-                            Ảnh đính kèm
+                            {t('chatHistory.imageAttachment')}
                           </span>
                         </div>
                       </button>
@@ -253,7 +258,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                         ? 'opacity-40 cursor-not-allowed text-slate-400'
                         : 'text-slate-400 hover:text-blue-500 hover:bg-surface-highlight cursor-pointer'
                     }`}
-                    title={status !== 'idle' ? 'Đang xử lý...' : 'Tạo nhánh mới từ tin nhắn này'}
+                    title={status !== 'idle' ? t('chatHistory.processing') : t('chatHistory.branchFromMessage')}
                   >
                     <GitBranch className="w-3 h-3" />
                     <span>Branch</span>
@@ -291,12 +296,12 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                 type="button"
                 onClick={() => handleCopyMessage(msg.content, msg.id)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 text-[11px] flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-surface-highlight transition-colors cursor-pointer"
-                title="Sao chép phản hồi"
+                title={t('chatHistory.copyResponse')}
               >
                 {copiedMsgId === msg.id ? (
                   <>
                     <Check className="w-3 h-3 text-emerald-500" />
-                    <span className="text-emerald-500 text-[10.5px]">Đã chép</span>
+                    <span className="text-emerald-500 text-[10.5px]">{t('chatHistory.copied')}</span>
                   </>
                 ) : (
                   <>
@@ -360,7 +365,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
 
       <div ref={bottomRef} />
 
-      {/* Lightbox Modal xem ảnh đính kèm */}
+      {/* Image Lightbox Modal */}
       <ImageLightboxModal
         isOpen={!!lightboxImage}
         imageUrl={lightboxImage?.url || ''}

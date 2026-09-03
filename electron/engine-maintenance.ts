@@ -1,4 +1,6 @@
-import { spawn, execFile, type ChildProcess } from 'node:child_process';
+import { tm } from '../shared/i18n/index.ts';
+import { execFile } from 'node:child_process';
+import { StreamingTaskRunner } from './streaming-task-runner.ts';
 import { promisify } from 'node:util';
 import type { BrowserWindow } from 'electron';
 import { buildExtendedPath } from './models-config.ts';
@@ -11,7 +13,7 @@ import type {
 
 const execFileAsync = promisify(execFile);
 
-// Parse kết quả kiểm tra cập nhật từ `omp update --check`
+// Parse update check output from `omp update --check`
 export function parseUpdateCheckOutput(output: string): EngineUpdateCheckResult {
   let currentVersion = 'unknown';
   let hasUpdate = false;
@@ -42,7 +44,7 @@ export function parseUpdateCheckOutput(output: string): EngineUpdateCheckResult 
   };
 }
 
-// Parse danh sách tiny models từ `omp tiny-models list`
+// Parse tiny models list from `omp tiny-models list`
 export function parseTinyModelsOutput(output: string): TinyModelItem[] {
   const lines = output.split('\n');
   const items: TinyModelItem[] = [];
@@ -72,13 +74,11 @@ export function parseTinyModelsOutput(output: string): TinyModelItem[] {
   return items;
 }
 
-// Quản lý kiểm tra và thực thi các tác vụ bảo trì engine (1 slot duy nhất)
+// Manage and execute engine maintenance tasks (single slot)
 export class EngineMaintenanceManager {
-  private activeProcess: ChildProcess | null = null;
-  private activeTaskId: string | null = null;
-  private window: BrowserWindow | null = null;
+  private runner = new StreamingTaskRunner('omp:maintenance-output');
 
-  // Kiểm tra phiên bản hiện tại và cập nhật mới
+  // Check current version and new updates
   async checkUpdate(binaryPath: string): Promise<EngineUpdateCheckResult> {
     try {
       const { stdout, stderr } = await execFileAsync(binaryPath, ['update', '--check'], {
@@ -98,16 +98,16 @@ export class EngineMaintenanceManager {
         success: false,
         currentVersion: 'unknown',
         hasUpdate: false,
-        error: err?.message || 'Lỗi kiểm tra cập nhật',
+        error: err?.message || tm('electron.maintenance.checkUpdateFailed'),
       };
     }
   }
 
-  // Kiểm tra trạng thái các component tuỳ chọn (Python, Speech)
+  // Check optional components status (Python, Speech)
   async checkComponents(binaryPath: string): Promise<{ success: boolean; components?: EngineComponentStatus[]; error?: string }> {
     const components: EngineComponentStatus[] = [];
 
-    // Kiểm tra Python
+    // Check Python
     try {
       const { stdout } = await execFileAsync(binaryPath, ['setup', 'python', '--check', '--json'], {
         env: { ...process.env, PATH: buildExtendedPath() },
@@ -116,20 +116,20 @@ export class EngineMaintenanceManager {
       components.push({
         id: 'python',
         name: 'Python Environment',
-        description: 'Môi trường thực thi code Python và Jupyter Notebooks',
+        description: tm('electron.maintenance.pythonDesc'),
         isInstalled: Boolean(parsed.available),
-        details: parsed.pythonPath ? `Đường dẫn: ${parsed.pythonPath}` : undefined,
+        details: parsed.pythonPath ? tm('electron.maintenance.pathPrefix', { path: parsed.pythonPath }) : undefined,
       });
     } catch {
       components.push({
         id: 'python',
         name: 'Python Environment',
-        description: 'Môi trường thực thi code Python và Jupyter Notebooks',
+        description: tm('electron.maintenance.pythonDesc'),
         isInstalled: false,
       });
     }
 
-    // Kiểm tra Speech
+    // Check Speech
     try {
       const { stdout } = await execFileAsync(binaryPath, ['setup', 'speech', '--check', '--json'], {
         env: { ...process.env, PATH: buildExtendedPath() },
@@ -140,7 +140,7 @@ export class EngineMaintenanceManager {
       components.push({
         id: 'speech',
         name: 'Speech (STT / TTS)',
-        description: 'Mô hình chuyển giọng nói thành văn bản và đọc văn bản',
+        description: tm('electron.maintenance.speechDesc'),
         isInstalled: Boolean(sttReady && ttsReady),
         details: `${parsed['Speech-to-Text model']?.status || ''} | ${parsed['Text-to-Speech model']?.status || ''}`,
       });
@@ -148,7 +148,7 @@ export class EngineMaintenanceManager {
       components.push({
         id: 'speech',
         name: 'Speech (STT / TTS)',
-        description: 'Mô hình chuyển giọng nói thành văn bản và đọc văn bản',
+        description: tm('electron.maintenance.speechDesc'),
         isInstalled: false,
       });
     }
@@ -156,7 +156,7 @@ export class EngineMaintenanceManager {
     return { success: true, components };
   }
 
-  // Lấy danh sách tiny models
+  // List tiny models
   async listTinyModels(binaryPath: string): Promise<{ success: boolean; models?: TinyModelItem[]; error?: string }> {
     try {
       const { stdout, stderr } = await execFileAsync(binaryPath, ['tiny-models', 'list'], {
@@ -165,137 +165,29 @@ export class EngineMaintenanceManager {
       const models = parseTinyModelsOutput(`${stdout}\n${stderr}`);
       return { success: true, models };
     } catch (err: any) {
-      return { success: false, error: err?.message || 'Không thể lấy danh sách tiny models' };
+      return { success: false, error: err?.message || tm('electron.maintenance.listTinyModelsFailed') };
     }
   }
 
-  // Chạy một tác vụ bảo trì (stream log ra renderer)
+  // Run maintenance task (stream log to renderer)
   startTask(
     taskId: string,
     binaryPath: string,
     args: string[],
     window: BrowserWindow
   ): { success: boolean; error?: string } {
-    if (this.activeProcess) {
-      return { success: false, error: 'Đang có một tác vụ bảo trì khác đang chạy' };
-    }
-
-    this.activeTaskId = taskId;
-    this.window = window;
-
-    try {
-      const child = spawn(binaryPath, args, {
-        env: {
-          ...process.env,
-          PATH: buildExtendedPath(),
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      this.activeProcess = child;
-
-      this.emit({
-        taskId,
-        type: 'status',
-        status: 'running',
-        text: `Đang chạy: omp ${args.join(' ')}`,
-      });
-
-      child.stdout?.on('data', (chunk) => {
-        const text = chunk.toString();
-        this.emit({
-          taskId,
-          type: 'stdout',
-          text,
-        });
-      });
-
-      child.stderr?.on('data', (chunk) => {
-        const text = chunk.toString();
-        this.emit({
-          taskId,
-          type: 'stderr',
-          text,
-        });
-      });
-
-      child.on('close', (code) => {
-        const isSuccess = code === 0;
-        this.emit({
-          taskId,
-          type: 'status',
-          status: isSuccess ? 'done' : 'error',
-          exitCode: code ?? undefined,
-          text: isSuccess ? 'Tác vụ hoàn thành thành công.' : `Tác vụ kết thúc với mã lỗi: ${code}`,
-        });
-        this.activeProcess = null;
-        this.activeTaskId = null;
-      });
-
-      child.on('error', (err) => {
-        this.emit({
-          taskId,
-          type: 'status',
-          status: 'error',
-          text: `Lỗi khởi chạy tiến trình: ${err.message}`,
-        });
-        this.activeProcess = null;
-        this.activeTaskId = null;
-      });
-
-      return { success: true };
-    } catch (err: any) {
-      this.activeProcess = null;
-      this.activeTaskId = null;
-      return { success: false, error: err?.message || 'Không thể khởi chạy tiến trình' };
-    }
+    return this.runner.startTask(taskId, binaryPath, args, window, {
+      busyError: tm('electron.maintenance.alreadyRunning'),
+      startText: tm('electron.maintenance.running', { command: `omp ${args.join(' ')}` }),
+    });
   }
 
-  // Hủy tác vụ bảo trì đang chạy
+  // Cancel running maintenance task
   cancelTask(): { success: boolean } {
-    if (!this.activeProcess) {
-      return { success: true };
-    }
-
-    const taskId = this.activeTaskId || 'unknown';
-    try {
-      this.activeProcess.kill('SIGTERM');
-      setTimeout(() => {
-        if (this.activeProcess) {
-          try {
-            this.activeProcess.kill('SIGKILL');
-          } catch {}
-          this.activeProcess = null;
-          this.activeTaskId = null;
-        }
-      }, 3000);
-
-      this.emit({
-        taskId,
-        type: 'status',
-        status: 'error',
-        text: 'Tác vụ đã bị người dùng hủy.',
-      });
-
-      return { success: true };
-    } catch {
-      return { success: false };
-    }
+    return this.runner.cancelTask();
   }
 
   dispose(): void {
-    if (this.activeProcess) {
-      try {
-        this.activeProcess.kill('SIGKILL');
-      } catch {}
-      this.activeProcess = null;
-      this.activeTaskId = null;
-    }
-  }
-
-  private emit(event: MaintenanceEvent): void {
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('omp:maintenance-output', event);
-    }
+    this.runner.dispose();
   }
 }

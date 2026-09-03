@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { FileDiffItem, ThemeMode } from '../../types';
 import { getFileInfo } from '../../utils/fileLanguage';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface DiffViewerProps {
   diff: FileDiffItem | null;
@@ -24,6 +25,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   onReject,
   theme = 'light',
 }) => {
+  const { t } = useI18n();
   const [isSideBySide, setIsSideBySide] = useState<boolean>(true);
 
   if (!diff) {
@@ -32,15 +34,15 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
         <div className="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center mb-4">
           <FileCode className="w-7 h-7 text-slate-400 dark:text-zinc-500 stroke-[1.5]" />
         </div>
-        <div className="text-sm font-semibold text-slate-800 dark:text-zinc-300">Không có thay đổi code nào đang chờ review</div>
+        <div className="text-sm font-semibold text-slate-800 dark:text-zinc-300">{t('diff.noChanges')}</div>
         <div className="text-xs text-slate-500 dark:text-zinc-500 mt-1.5 max-w-md leading-relaxed">
-          Khi OMP Agent sinh ra các bản vá code (hash-anchored patches), bạn sẽ thấy diff trực quan hiển thị tại đây để duyệt trước khi ghi file.
+          {t('diff.noChangesDesc')}
         </div>
       </div>
     );
   }
 
-  // Suy ra ngôn ngữ Monaco theo tên file để tô màu đúng loại (md, ts, json…)
+  // Infer Monaco language from file name for syntax highlighting
   const fileName = (diff.relativePath || diff.filePath || '').split('/').pop() || '';
   const language = getFileInfo(fileName).languageId;
 
@@ -68,13 +70,13 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
           {diff.status === 'accepted' && (
             <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md font-medium shrink-0">
               <FileCheck2 className="w-3.5 h-3.5" />
-              Đã chấp nhận
+              {t('diff.accepted')}
             </span>
           )}
           {diff.status === 'rejected' && (
             <span className="flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-md font-medium shrink-0">
               <AlertCircle className="w-3.5 h-3.5" />
-              Đã từ chối
+              {t('diff.rejected')}
             </span>
           )}
         </div>
@@ -84,7 +86,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
           <button
             onClick={() => setIsSideBySide(!isSideBySide)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-700 dark:text-zinc-300 hover:bg-surface-highlight border border-border transition-colors font-medium cursor-pointer"
-            title="Chuyển chế độ Side-by-side / Inline Diff"
+            title={t('diff.toggleSideBySide')}
           >
             <Split className="w-3.5 h-3.5" />
             <span>{isSideBySide ? 'Side by Side' : 'Inline'}</span>
@@ -95,7 +97,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
               <button
                 onClick={onReject}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-colors cursor-pointer"
-                title="Từ chối thay đổi"
+                title={t('diff.rejectTooltip')}
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Discard</span>
@@ -104,7 +106,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
               <button
                 onClick={onAccept}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-codex-accent hover:bg-codex-accent-hover text-white shadow-sm transition-all cursor-pointer"
-                title="Chấp nhận thay đổi (⌘↵)"
+                title={t('diff.acceptTooltip')}
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Accept Changes</span>

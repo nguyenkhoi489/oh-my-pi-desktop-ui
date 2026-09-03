@@ -8,7 +8,7 @@ interface AttachmentImageProps {
   className?: string;
 }
 
-// Ảnh đính kèm: tự phân giải đường dẫn file trên đĩa thành data URL để render
+// Attachment image: resolves file path on disk to data URL for rendering
 export const AttachmentImage: React.FC<AttachmentImageProps> = ({ src, alt, className }) => {
   const resolvedUrl = useImageDataUrl(src);
 

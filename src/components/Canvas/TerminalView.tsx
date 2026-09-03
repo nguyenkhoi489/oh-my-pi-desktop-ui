@@ -12,6 +12,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ThemeMode } from '../../types';
+import { stripAnsi } from '../../../shared/text/strip-ansi';
+import { useI18n } from '../../i18n/I18nProvider';
 
 export interface TerminalCommandBlock {
   id: string;
@@ -19,6 +21,7 @@ export interface TerminalCommandBlock {
   timestamp: number;
   status: 'running' | 'done' | 'aborted' | 'error';
   output: string;
+  rawOutput?: string;
   exitCode?: number;
   durationMs?: number;
   truncated?: boolean;
@@ -31,6 +34,7 @@ interface TerminalViewProps {
 const QUICK_COMMANDS = ['git status -s', 'ls -la', 'pwd', 'git diff --stat'];
 
 export const TerminalView: React.FC<TerminalViewProps> = () => {
+  const { t } = useI18n();
   const [blocks, setBlocks] = useState<TerminalCommandBlock[]>([]);
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -69,9 +73,11 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
         const next = [...prev];
         const lastIdx = next.length - 1;
         if (next[lastIdx].status === 'running') {
+          const newRaw = (next[lastIdx].rawOutput ?? next[lastIdx].output ?? '') + data.text;
           next[lastIdx] = {
             ...next[lastIdx],
-            output: (next[lastIdx].output || '') + data.text,
+            rawOutput: newRaw,
+            output: stripAnsi(newRaw),
           };
         }
         return next;
@@ -116,7 +122,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
             ? {
                 ...b,
                 status: 'error',
-                output: 'Lỗi: runBash API không khả dụng trong môi trường này.',
+                output: t('terminal.apiUnavailable'),
                 durationMs: Date.now() - startTime,
               }
             : b
@@ -138,12 +144,12 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
             return {
               ...b,
               status: 'error',
-              output: b.output ? `${b.output}\n${res.error || 'Lỗi không xác định'}` : res.error || 'Lỗi thực thi lệnh',
+              output: b.output ? `${b.output}\n${res.error || t('terminal.unknownError')}` : res.error || t('terminal.execError'),
               durationMs,
             };
           }
           const data = res.data;
-          const finalOutput = data?.output !== undefined ? data.output : b.output;
+          const finalOutput = data?.output !== undefined ? stripAnsi(data.output) : stripAnsi(b.rawOutput || b.output);
           const exitCode = data?.exitCode ?? 0;
           return {
             ...b,
@@ -163,7 +169,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
             ? {
                 ...b,
                 status: 'error',
-                output: b.output ? `${b.output}\n${err?.message || String(err)}` : err?.message || 'Lỗi ngoại lệ khi chạy lệnh',
+                output: b.output ? `${b.output}\n${err?.message || String(err)}` : err?.message || t('terminal.execException'),
                 durationMs,
               }
             : b
@@ -179,7 +185,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
     }
   };
 
-  // Huỷ lenh đang chay
+  // Abort running command
   const handleAbort = async () => {
     if (!isRunning) return;
     if (window.electronAPI?.abortBash) {
@@ -191,7 +197,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
           ? {
               ...b,
               status: 'aborted',
-              output: b.output ? `${b.output}\n^C [Đã huỷ lệnh]` : '^C [Đã huỷ lệnh]',
+              output: b.output ? `${b.output}\n^C [${t('terminal.cancelledTag')}]` : `^C [${t('terminal.cancelledTag')}]`,
             }
           : b
       )
@@ -239,7 +245,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
   };
 
   const handleCopyBlockOutput = (block: TerminalCommandBlock) => {
-    const textToCopy = `$ ${block.command}\n${block.output || ''}`;
+    const textToCopy = `$ ${block.command}\n${stripAnsi(block.output) || ''}`;
     navigator.clipboard.writeText(textToCopy).catch(() => {});
     setCopiedId(block.id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -255,7 +261,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
             <span>Bash Bridge</span>
           </div>
           <span className="text-[11px] text-slate-500 dark:text-zinc-500 hidden sm:inline">
-            RPC command console — cwd đồng bộ với engine session
+            {t('terminal.desc')}
           </span>
         </div>
 
@@ -264,10 +270,10 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
             <button
               onClick={handleAbort}
               className="flex items-center gap-1 px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 border border-rose-500/20 dark:border-rose-800/50 text-rose-700 dark:text-rose-300 text-xs transition-colors cursor-pointer"
-              title="Huỷ lệnh đang chạy (Ctrl+C)"
+              title={t('terminal.cancelTooltip')}
             >
               <Square className="w-3 h-3 fill-rose-600 dark:fill-rose-400 text-rose-600 dark:text-rose-400" />
-              <span>Dừng (Ctrl+C)</span>
+              <span>{t('terminal.stopBtn')}</span>
             </button>
           )}
 
@@ -275,7 +281,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
             onClick={() => setBlocks([])}
             disabled={blocks.length === 0}
             className="p-1.5 rounded text-slate-400 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-surface-highlight disabled:opacity-40 transition-colors cursor-pointer"
-            title="Xoá lịch sử console"
+            title={t('terminal.clearHistory')}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -291,9 +297,9 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
         {blocks.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500 gap-2 py-12 select-none">
             <Terminal className="w-8 h-8 text-slate-400 dark:text-zinc-600 opacity-60" />
-            <p className="text-xs font-medium text-slate-700 dark:text-zinc-300">Chưa có lệnh nào được thực thi trong phiên này.</p>
+            <p className="text-xs font-medium text-slate-700 dark:text-zinc-300">{t('terminal.noCommands')}</p>
             <p className="text-[11px] text-slate-500 dark:text-zinc-500 max-w-sm text-center">
-              Nhập lệnh shell ở ô bên dưới hoặc bấm vào các lệnh gợi ý để chạy trong ngữ cảnh engine.
+              {t('terminal.noCommandsHint')}
             </p>
 
             <div className="flex flex-wrap gap-1.5 mt-3 justify-center">
@@ -334,7 +340,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
                     {isBlockRunning && (
                       <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/20 dark:border-amber-800/30">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-400 animate-ping" />
-                        <span>Đang chạy...</span>
+                        <span>{t('terminal.runningStatus')}</span>
                       </span>
                     )}
 
@@ -354,7 +360,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
 
                     {isAborted && (
                       <span className="text-slate-600 dark:text-zinc-400 bg-slate-200/60 dark:bg-zinc-800/50 px-1.5 py-0.5 rounded border border-border">
-                        Đã dừng
+                        {t('terminal.stoppedStatus')}
                       </span>
                     )}
 
@@ -368,7 +374,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
                     <button
                       onClick={() => handleCopyBlockOutput(block)}
                       className="p-1 rounded text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-surface-highlight transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
-                      title="Sao chép output"
+                      title={t('terminal.copyOutput')}
                     >
                       {copiedId === block.id ? (
                         <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
@@ -382,17 +388,17 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
                 {/* Output content */}
                 {block.output ? (
                   <pre className="text-slate-800 dark:text-zinc-200 whitespace-pre-wrap break-all leading-relaxed max-h-[360px] overflow-y-auto text-[12px] bg-background/80 dark:bg-[#0c0d12] border border-border/80 p-2.5 rounded-lg">
-                    {block.output}
+                    {stripAnsi(block.output)}
                   </pre>
                 ) : isBlockRunning ? (
-                  <p className="text-slate-500 dark:text-zinc-500 italic text-[11px] py-1">Đang chờ output...</p>
+                  <p className="text-slate-500 dark:text-zinc-500 italic text-[11px] py-1">{t('terminal.waitingOutput')}</p>
                 ) : (
-                  <p className="text-slate-400 dark:text-zinc-600 italic text-[11px] py-1">(Lệnh không có stdout/stderr)</p>
+                  <p className="text-slate-400 dark:text-zinc-600 italic text-[11px] py-1">{t('terminal.noOutput')}</p>
                 )}
 
                 {block.truncated && (
                   <div className="mt-1.5 pt-1.5 border-t border-border/60 text-[10.5px] text-amber-600 dark:text-amber-400/90 italic">
-                    Output vượt quá giới hạn an toàn và đã được cắt bớt để bảo vệ giao diện.
+                    {t('terminal.outputTruncated')}
                   </div>
                 )}
               </div>
@@ -417,7 +423,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isRunning ? "Đang chạy lệnh... (nhấn Ctrl+C để huỷ)" : "Nhập lệnh bash (e.g. git status, ls, npm test)..."}
+            placeholder={isRunning ? t('terminal.runningPlaceholder') : t('terminal.idlePlaceholder')}
             disabled={isRunning}
             className="flex-1 bg-transparent border-0 outline-none text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-600 font-mono text-[12px]"
           />
@@ -427,7 +433,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
               type="button"
               onClick={handleAbort}
               className="p-1 rounded bg-rose-500/10 hover:bg-rose-500/20 dark:bg-rose-950/80 dark:hover:bg-rose-900 border border-rose-500/20 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 transition-colors cursor-pointer"
-              title="Huỷ lệnh (Ctrl+C)"
+              title={t('terminal.cancelTooltipShort')}
             >
               <Square className="w-3.5 h-3.5 fill-rose-600 dark:fill-rose-400 text-rose-600 dark:text-rose-400" />
             </button>
@@ -436,7 +442,7 @@ export const TerminalView: React.FC<TerminalViewProps> = () => {
               type="submit"
               disabled={!input.trim()}
               className="p-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-emerald-950/80 dark:hover:bg-emerald-900 border border-emerald-500/20 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 disabled:opacity-40 transition-colors cursor-pointer"
-              title="Chạy lệnh (Enter)"
+              title={t('terminal.runTooltip')}
             >
               <CornerDownLeft className="w-3.5 h-3.5" />
             </button>

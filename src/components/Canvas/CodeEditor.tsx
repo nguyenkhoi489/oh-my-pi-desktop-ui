@@ -10,6 +10,7 @@ import {
 import { WorkspaceFile, ThemeMode } from '../../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { getFileLanguage, getLanguageLabel, isMarkdownFile } from '../../utils/fileLanguage';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface CodeEditorProps {
   file: WorkspaceFile | null;
@@ -22,6 +23,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   content,
   theme = 'light',
 }) => {
+  const { t } = useI18n();
   const [editorValue, setEditorValue] = useState<string>(content);
   const [markdownMode, setMarkdownMode] = useState<'source' | 'split' | 'preview'>('source');
 
@@ -36,9 +38,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         <div className="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center mb-4">
           <FileCode className="w-7 h-7 text-slate-400 dark:text-zinc-500 stroke-[1.5]" />
         </div>
-        <div className="text-sm font-semibold text-slate-800 dark:text-zinc-300">Chưa chọn file nào để xem</div>
+        <div className="text-sm font-semibold text-slate-800 dark:text-zinc-300">{t('editor.noFileSelectedTitle')}</div>
         <div className="text-xs text-slate-500 dark:text-zinc-500 mt-1.5 max-w-sm">
-          Chọn một file từ cây thư mục bên trái để mở và chỉnh sửa trong trình biên tập Monaco.
+          {t('editor.noFileSelectedDesc')}
         </div>
       </div>
     );
@@ -74,7 +76,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                     ? 'bg-surface text-slate-900 dark:text-zinc-100 font-semibold shadow-xs border border-border'
                     : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
                 }`}
-                title="Xem mã nguồn Markdown"
+                title={t('editor.viewMarkdownSource')}
               >
                 <Code2 className="w-3.5 h-3.5 text-blue-500" />
                 <span>Source</span>
@@ -87,7 +89,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                     ? 'bg-surface text-slate-900 dark:text-zinc-100 font-semibold shadow-xs border border-border'
                     : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
                 }`}
-                title="Chia đôi màn hình: Code & Xem trước song song"
+                title={t('editor.splitView')}
               >
                 <Columns className="w-3.5 h-3.5 text-purple-500" />
                 <span>Split</span>
@@ -100,7 +102,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                     ? 'bg-codex-accent text-white font-semibold shadow-xs'
                     : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
                 }`}
-                title="Xem trước định dạng Markdown"
+                title={t('editor.previewMarkdown')}
               >
                 <Eye className="w-3.5 h-3.5" />
                 <span>Preview</span>

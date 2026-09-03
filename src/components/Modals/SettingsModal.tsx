@@ -25,16 +25,20 @@ import {
   Lock,
   Globe,
   LogIn,
+  LogOut,
   XCircle,
   Eye,
   EyeOff,
   Radio,
   Clock,
-  Square,
-  Zap,
-  User,
   FileCode,
+  User,
+  Zap,
+  Square,
 } from 'lucide-react';
+import { ModelsCatalogSection } from './settings/ModelsCatalogSection.tsx';
+import { LaunchOptionsSection } from './settings/LaunchOptionsSection.tsx';
+import { EngineConfigEditor } from './settings/EngineConfigEditor.tsx';
 import {
   ThemeMode,
   OmpInstallStatus,
@@ -58,8 +62,7 @@ import {
   EngineConfigMutationResult,
   EngineConfigPathResult,
 } from '../../types';
-import { EngineConfigEditor } from './settings/EngineConfigEditor';
-import { LaunchOptionsSection } from './settings/LaunchOptionsSection';
+
 import {
   ModelRoleSpec,
   ROLE_THINKING_LEVELS,
@@ -68,6 +71,7 @@ import {
   parseModelRoleSpec,
 } from '../../utils/model-role-spec';
 import { useI18n } from '../../i18n/I18nProvider';
+import { I18nKey } from '../../../shared/i18n';
 
 const EFFORT_LEVELS: OmpEffortLevel[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -88,7 +92,7 @@ const DISCOVERY_TYPE_OPTIONS: CustomProviderDiscoveryType[] = [
   'litellm',
 ];
 
-// Chuyển headers object <-> textarea dạng "Tên: Giá trị" mỗi dòng
+// Convert headers object <-> textarea as "Name: Value" per line
 const headersToText = (headers?: Record<string, string>): string =>
   headers ? Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join('\n') : '';
 
@@ -113,6 +117,7 @@ interface SettingsModalProps {
   onSelectBinaryFile?: () => Promise<string | null>;
   onSetCustomBinaryPath?: (path: string) => Promise<void | OmpInstallStatus>;
   availableModels: OmpModelInfo[];
+  onRefreshModels?: () => Promise<unknown>;
   thinkingLevel?: OmpThinkingLevel;
   onSelectThinkingLevel?: (level: OmpThinkingLevel) => void;
   onRestartEngine?: () => Promise<void>;
@@ -130,39 +135,39 @@ interface SettingsModalProps {
   getEngineConfigPath?: (options?: EngineConfigPathOptions) => Promise<EngineConfigPathResult>;
 }
 
-const THINKING_LEVELS: { id: OmpThinkingLevel; label: string; desc: string }[] = [
-  { id: 'off', label: 'Tắt (Off)', desc: 'Không sử dụng reasoning block' },
-  { id: 'minimal', label: 'Tối thiểu (Minimal)', desc: 'Chỉ reasoning rất ngắn' },
-  { id: 'low', label: 'Thấp (Low)', desc: 'Reasoning mức cơ bản' },
-  { id: 'medium', label: 'Vừa (Medium)', desc: 'Reasoning cân bằng hiệu năng' },
-  { id: 'high', label: 'Cao (High)', desc: 'Reasoning sâu, kỹ lưỡng' },
-  { id: 'xhigh', label: 'Rất cao (XHigh)', desc: 'Reasoning chuyên sâu cho tác vụ khó' },
-  { id: 'max', label: 'Tối đa (Max)', desc: 'Tối đa ngân sách suy nghĩ của model' },
-  { id: 'auto', label: 'Tự động (Auto)', desc: 'Model tự điều chỉnh mức độ suy nghĩ' },
+const THINKING_LEVELS: { id: OmpThinkingLevel; labelKey: I18nKey; descKey: I18nKey }[] = [
+  { id: 'off', labelKey: 'settings.thinking.off.label', descKey: 'settings.thinking.off.desc' },
+  { id: 'minimal', labelKey: 'settings.thinking.minimal.label', descKey: 'settings.thinking.minimal.desc' },
+  { id: 'low', labelKey: 'settings.thinking.low.label', descKey: 'settings.thinking.low.desc' },
+  { id: 'medium', labelKey: 'settings.thinking.medium.label', descKey: 'settings.thinking.medium.desc' },
+  { id: 'high', labelKey: 'settings.thinking.high.label', descKey: 'settings.thinking.high.desc' },
+  { id: 'xhigh', labelKey: 'settings.thinking.xhigh.label', descKey: 'settings.thinking.xhigh.desc' },
+  { id: 'max', labelKey: 'settings.thinking.max.label', descKey: 'settings.thinking.max.desc' },
+  { id: 'auto', labelKey: 'settings.thinking.auto.label', descKey: 'settings.thinking.auto.desc' },
 ];
 
-const APPROVAL_OPTIONS: { id: OmpApprovalMode; label: string; desc: string }[] = [
-  { id: 'always-ask', label: 'Luôn hỏi (Always Ask)', desc: 'Hỏi xác nhận trước mọi thao tác đọc/ghi file hoặc chạy lệnh' },
-  { id: 'write', label: 'Chỉ hỏi khi ghi (Write)', desc: 'Tự động cấp quyền đọc, chỉ hỏi khi sửa file hoặc chạy lệnh' },
-  { id: 'yolo', label: 'Tự động toàn bộ (Yolo)', desc: 'Tự động cấp tất cả quyền thực thi mà không cần hỏi lại' },
+const APPROVAL_OPTIONS: { id: OmpApprovalMode; labelKey: I18nKey; descKey: I18nKey }[] = [
+  { id: 'always-ask', labelKey: 'settings.approval.alwaysAsk.label', descKey: 'settings.approval.alwaysAsk.desc' },
+  { id: 'write', labelKey: 'settings.approval.write.label', descKey: 'settings.approval.write.desc' },
+  { id: 'yolo', labelKey: 'settings.approval.yolo.label', descKey: 'settings.approval.yolo.desc' },
 ];
 
-const STEERING_MODES: { id: string; label: string; desc: string }[] = [
-  { id: 'default', label: 'Mặc định (Default)', desc: 'Xử lý chỉ đạo theo cấu hình tiêu chuẩn của engine' },
-  { id: 'immediate', label: 'Tức thời (Immediate)', desc: 'Can thiệp trực tiếp ngay khi đang sinh phản hồi' },
-  { id: 'next_turn', label: 'Lượt tiếp theo (Next Turn)', desc: 'Chèn chỉ đạo vào đầu lượt tiếp theo' },
+const STEERING_MODES: { id: string; labelKey: I18nKey; descKey: I18nKey }[] = [
+  { id: 'default', labelKey: 'settings.steering.default.label', descKey: 'settings.steering.default.desc' },
+  { id: 'immediate', labelKey: 'settings.steering.immediate.label', descKey: 'settings.steering.immediate.desc' },
+  { id: 'next_turn', labelKey: 'settings.steering.nextTurn.label', descKey: 'settings.steering.nextTurn.desc' },
 ];
 
-const FOLLOW_UP_MODES: { id: string; label: string; desc: string }[] = [
-  { id: 'default', label: 'Mặc định (Default)', desc: 'Đưa câu hỏi vào hàng đợi xử lý sau khi turn kết thúc' },
-  { id: 'immediate', label: 'Tức thời (Immediate)', desc: 'Ưu tiên kích hoạt ngay khi turn hiện tại sẵn sàng' },
-  { id: 'next_turn', label: 'Lượt tiếp theo (Next Turn)', desc: 'Chờ engine chuyển lượt tuần tự' },
+const FOLLOW_UP_MODES: { id: string; labelKey: I18nKey; descKey: I18nKey }[] = [
+  { id: 'default', labelKey: 'settings.followUp.default.label', descKey: 'settings.followUp.default.desc' },
+  { id: 'immediate', labelKey: 'settings.followUp.immediate.label', descKey: 'settings.followUp.immediate.desc' },
+  { id: 'next_turn', labelKey: 'settings.followUp.nextTurn.label', descKey: 'settings.followUp.nextTurn.desc' },
 ];
 
-const INTERRUPT_MODES: { id: string; label: string; desc: string }[] = [
-  { id: 'default', label: 'Mặc định (Default)', desc: 'Ngắt tiến trình an toàn và giải phóng tài nguyên' },
-  { id: 'immediate', label: 'Tức thời (Immediate)', desc: 'Dừng luồng phản hồi ngay lập tức' },
-  { id: 'next_turn', label: 'Lượt tiếp theo (Next Turn)', desc: 'Đợi hoàn tất bước phụ hiện tại trước khi ngắt' },
+const INTERRUPT_MODES: { id: string; labelKey: I18nKey; descKey: I18nKey }[] = [
+  { id: 'default', labelKey: 'settings.interrupt.default.label', descKey: 'settings.interrupt.default.desc' },
+  { id: 'immediate', labelKey: 'settings.interrupt.immediate.label', descKey: 'settings.interrupt.immediate.desc' },
+  { id: 'next_turn', labelKey: 'settings.interrupt.nextTurn.label', descKey: 'settings.interrupt.nextTurn.desc' },
 ];
 
 const MOCK_CUSTOM_PROVIDERS: CustomProviderConfig[] = [
@@ -192,17 +197,17 @@ const MOCK_CUSTOM_PROVIDERS: CustomProviderConfig[] = [
   },
 ];
 
-// Các role model mà OMP hỗ trợ trong ~/.omp/agent/config.yml (modelRoles)
-const KNOWN_MODEL_ROLES: { id: string; desc: string }[] = [
-  { id: 'default', desc: 'Model chính cho phiên làm việc' },
-  { id: 'smol', desc: 'Tác vụ nhẹ, cần phản hồi nhanh' },
-  { id: 'slow', desc: 'Suy luận sâu, phân tích kỹ lưỡng' },
-  { id: 'plan', desc: 'Lập kế hoạch kiến trúc' },
-  { id: 'advisor', desc: 'Cố vấn khi gặp vấn đề khó' },
-  { id: 'task', desc: 'Subagent thực thi task' },
-  { id: 'commit', desc: 'Sinh commit message' },
-  { id: 'vision', desc: 'Xử lý hình ảnh' },
-  { id: 'tiny', desc: 'Tác vụ siêu nhẹ (tóm tắt, tiêu đề)' },
+// Supported model roles in ~/.omp/agent/config.yml (modelRoles)
+const KNOWN_MODEL_ROLES: { id: string; descKey: I18nKey }[] = [
+  { id: 'default', descKey: 'settings.roles.defaultDesc' },
+  { id: 'smol', descKey: 'settings.roles.smolDesc' },
+  { id: 'slow', descKey: 'settings.roles.slowDesc' },
+  { id: 'plan', descKey: 'settings.roles.planDesc' },
+  { id: 'advisor', descKey: 'settings.roles.advisorDesc' },
+  { id: 'task', descKey: 'settings.roles.taskDesc' },
+  { id: 'commit', descKey: 'settings.roles.commitDesc' },
+  { id: 'vision', descKey: 'settings.roles.visionDesc' },
+  { id: 'tiny', descKey: 'settings.roles.tinyDesc' },
 ];
 
 const MOCK_MODEL_ROLES: Record<string, string> = {
@@ -234,6 +239,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSelectBinaryFile,
   onSetCustomBinaryPath,
   availableModels,
+  onRefreshModels,
   thinkingLevel,
   onSelectThinkingLevel,
   onRestartEngine,
@@ -273,10 +279,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showApiKey, setShowApiKey] = useState<boolean>(false);
   const [headersText, setHeadersText] = useState<string>('');
   const [authedProviders, setAuthedProviders] = useState<string[]>([]);
+  const [isEngineOnline, setIsEngineOnline] = useState<boolean | null>(null);
 
   // State cho Model Roles (config.yml)
   const [modelRoles, setModelRoles] = useState<Record<string, string>>({});
-  // Role đang nhập tay dạng alias/glob thay vì chọn từ danh sách model
+  // Manual role input mode (alias/glob) instead of selecting from model list
   const [rawRoles, setRawRoles] = useState<Set<string>>(new Set());
   const [rolesConfigPath, setRolesConfigPath] = useState<string>('~/.omp/agent/config.yml');
   const [isRolesWritable, setIsRolesWritable] = useState<boolean>(true);
@@ -306,7 +313,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
       }
     } catch (err) {
-      console.warn('[SettingsModal] Lỗi khi tải cài đặt:', err);
+      console.warn('[SettingsModal] Failed to load settings:', err);
     }
   }, []);
 
@@ -324,23 +331,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setConfigError(null);
       }
     } catch (err: any) {
-      console.warn('[SettingsModal] Lỗi khi tải models.yml:', err);
+      console.warn('[SettingsModal] Failed to load models.yml:', err);
       setCustomProviders(MOCK_CUSTOM_PROVIDERS);
     }
 
+    if (window.electronAPI?.isEngineRunning) {
+      try {
+        const running = await window.electronAPI.isEngineRunning();
+        setIsEngineOnline(Boolean(running));
+      } catch {
+        setIsEngineOnline(false);
+      }
+    }
     try {
       if (window.electronAPI?.getLoginProviders) {
         const res = await window.electronAPI.getLoginProviders();
         if (res.success && res.providers) {
           setLoginProviders(res.providers);
+          const authedFromRpc = res.providers.filter((p) => p.authenticated).map((p) => p.id);
+          if (authedFromRpc.length > 0) {
+            setAuthedProviders((prev) => Array.from(new Set([...prev, ...authedFromRpc])));
+          }
         } else {
           setLoginProviders(MOCK_LOGIN_PROVIDERS);
         }
-      } else {
-        setLoginProviders(MOCK_LOGIN_PROVIDERS);
       }
     } catch (err) {
-      console.warn('[SettingsModal] Lỗi khi tải login providers:', err);
+      console.warn('[SettingsModal] Failed to load login providers:', err);
       setLoginProviders(MOCK_LOGIN_PROVIDERS);
     }
   }, []);
@@ -370,7 +387,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setRolesError(null);
       }
     } catch (err) {
-      console.warn('[SettingsModal] Lỗi khi tải model roles:', err);
+      console.warn('[SettingsModal] Failed to load model roles:', err);
       applyLoadedRoles({ ...MOCK_MODEL_ROLES });
     }
     setRolesDirty(false);
@@ -397,13 +414,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           setSettings((prev) => ({ ...prev, profile: res.profile }));
           setHasEngineChanged(true);
         } else {
-          setProfileError(res.error || 'Lỗi chuyển profile');
+          setProfileError(res.error || t('settings.profile.switchError'));
         }
       } else {
         setSettings((prev) => ({ ...prev, profile: newProfile }));
       }
     } catch (err: any) {
-      setProfileError(err?.message || 'Lỗi chuyển profile');
+      setProfileError(err?.message || t('settings.profile.switchError'));
     }
   };
 
@@ -420,17 +437,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           await loadProfiles();
           await handleSwitchProfile(res.profile);
         } else {
-          setProfileError(res.error || 'Lỗi tạo profile');
+          setProfileError(res.error || t('settings.profile.createError'));
         }
       }
     } catch (err: any) {
-      setProfileError(err?.message || 'Lỗi tạo profile');
+      setProfileError(err?.message || t('settings.profile.createError'));
     } finally {
       setIsCreatingProfile(false);
     }
   };
 
-  // Trạng thái đã-đăng-nhập lấy từ `omp usage --json` (chạy nền, mất vài giây)
+  // Authenticated status fetched from `omp usage --json` (background query)
   const refreshAuthStatus = useCallback(async () => {
     try {
       if (window.electronAPI?.getAuthStatus) {
@@ -440,7 +457,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
       }
     } catch (err) {
-      console.warn('[SettingsModal] Lỗi khi kiểm tra trạng thái đăng nhập:', err);
+      console.warn('[SettingsModal] Failed to check login status:', err);
     }
   }, []);
 
@@ -460,7 +477,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, [isOpen, loadSettings, loadProvidersData, loadModelRoles, refreshAuthStatus]);
 
-  // Theo dõi tiến trình đăng nhập OAuth; hủy phiên dở dang khi đóng modal
+  // Monitor OAuth login progress; abort active session on modal close
   useEffect(() => {
     if (!isOpen || !window.electronAPI?.onAuthLoginEvent) return;
     const unsubscribe = window.electronAPI.onAuthLoginEvent((event) => {
@@ -469,6 +486,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       );
       if (event.status === 'success') {
         refreshAuthStatus();
+        loadProvidersData();
       }
     });
     return () => {
@@ -505,10 +523,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       } else {
         localStorage.setItem('omp_settings', JSON.stringify(next));
       }
-      setSaveStatus('Đã lưu');
+      setSaveStatus(t('settings.saved'));
       setTimeout(() => setSaveStatus(null), 2000);
     } catch (err) {
-      console.error('[SettingsModal] Lỗi khi lưu cài đặt:', err);
+      console.error('[SettingsModal] Failed to save settings:', err);
     }
   };
 
@@ -535,7 +553,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setRolesSaveSuccess(false);
   };
 
-  // Ghép model và thinking level thành "provider/model[:level]" theo cú pháp OMP
+  // Format model and thinking level as "provider/model[:level]" per OMP spec
   const handleRoleSpecChange = (role: string, model: string, level?: RoleThinkingLevel) => {
     setRoleValue(role, formatModelRoleSpec(model, level));
   };
@@ -591,14 +609,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           setRolesDirty(false);
           setHasEngineChanged(true);
         } else {
-          setRolesError(res.error || 'Lỗi không xác định khi ghi config.yml');
+          setRolesError(res.error || t('settings.roles.unknownSaveError'));
         }
       } else {
         setRolesSaveSuccess(true);
         setRolesDirty(false);
       }
     } catch (err: any) {
-      setRolesError(`Lỗi lưu config.yml: ${err?.message || String(err)}`);
+      setRolesError(t('settings.roles.saveError', { error: err?.message || String(err) }));
     }
   };
 
@@ -678,7 +696,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTimeout(() => setCopiedText(null), 2000);
   };
 
-  // Phân loại giá trị apiKey theo cách OMP resolve: !lệnh, tên env var, hoặc key literal
+  // Classify apiKey value by OMP resolution: !cmd, env var, or literal key
   type ApiKeyKind = 'command' | 'env-ok' | 'env-missing' | 'literal';
   const classifyApiKey = (cp: CustomProviderConfig): ApiKeyKind => {
     const value = cp.apiKey || '';
@@ -687,11 +705,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (/^[A-Z][A-Z0-9_]*$/.test(value)) return 'env-missing';
     return 'literal';
   };
-
   const maskSecret = (value: string): string =>
     value.length > 8 ? `${value.slice(0, 4)}••••••••` : '••••••••';
 
-  // OAuth Login Handlers
+
+  const effectiveEngineRunning = isEngineOnline !== null ? isEngineOnline : isEngineRunning;
+
   const isAuthLoginPending =
     authLogin?.status === 'started' || authLogin?.status === 'awaiting-browser';
 
@@ -722,6 +741,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
     setAuthCodeInput('');
   };
+  const [loggingOutProviderId, setLoggingOutProviderId] = useState<string | null>(null);
+
+  const handleLogout = async (providerId: string) => {
+    if (!window.electronAPI?.logoutAuthProvider) return;
+    setLoggingOutProviderId(providerId);
+    try {
+      const res = await window.electronAPI.logoutAuthProvider(providerId);
+      if (res.success) {
+        setAuthedProviders((prev) => prev.filter((id) => id !== providerId));
+        setLoginProviders((prev) =>
+          prev.map((p) => (p.id === providerId ? { ...p, authenticated: false } : p))
+        );
+        refreshAuthStatus();
+        loadProvidersData();
+      } else {
+        alert(res.error || t('settings.providers.logoutFailed'));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(msg || t('settings.providers.logoutError'));
+    } finally {
+      setLoggingOutProviderId(null);
+    }
+  };
+
 
   // Provider CRUD Handlers
   const handleAddNewProvider = () => {
@@ -753,7 +797,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleDeleteProvider = async (providerId: string) => {
-    if (!window.confirm(`Bạn có chắc muốn xóa provider "${providerId}" khỏi models.yml không?`)) {
+    if (!window.confirm(t('settings.providers.confirmDelete', { id: providerId }))) {
       return;
     }
     const updated = customProviders.filter((p) => p.id !== providerId);
@@ -763,7 +807,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSaveEditingProvider = async () => {
     if (!editingProvider || !editingProvider.id.trim() || !editingProvider.baseUrl.trim()) {
-      alert('Vui lòng nhập Provider ID và Base URL.');
+      alert(t('settings.providers.validationAlert'));
       return;
     }
 
@@ -816,14 +860,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           setConfigError(null);
           loadProvidersData();
         } else {
-          setConfigError(res.error || 'Lỗi không xác định khi ghi models.yml');
+          setConfigError(res.error || t('settings.providers.unknownSaveError'));
         }
       } else {
         setModelsSaveSuccess(true);
         setHasEngineChanged(true);
       }
     } catch (err: any) {
-      setConfigError(`Lỗi lưu models.yml: ${err?.message || String(err)}`);
+      setConfigError(t('settings.providers.saveError', { error: err?.message || String(err) }));
     }
   };
 
@@ -858,7 +902,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     });
   };
 
-  // Bỏ trống giá -> xóa field; cost rỗng -> undefined để không ghi vào YAML
+  // Empty cost -> remove field; undefined to avoid writing to YAML
   const handleUpdateModelCost = (
     index: number,
     key: 'input' | 'output' | 'cacheRead' | 'cacheWrite',
@@ -876,7 +920,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     handleUpdateModelRow(index, 'cost', Object.keys(cost).length > 0 ? cost : undefined);
   };
 
-  // defaultLevel phải nằm trong danh sách efforts đã chọn
+  // defaultLevel must belong to selected efforts list
   const handleUpdateModelThinking = (index: number, patch: Partial<CustomModelThinking> | undefined) => {
     if (!editingProvider) return;
     const current = editingProvider.models?.[index];
@@ -894,7 +938,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Group models by provider for Available Models
   const groupedModels = availableModels.reduce<Record<string, OmpModelInfo[]>>((acc, m) => {
-    const provider = m.provider || 'khác';
+    const provider = m.provider || t('settings.providers.otherGroup');
     if (!acc[provider]) acc[provider] = [];
     acc[provider].push(m);
     return acc;
@@ -1007,7 +1051,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* TAB 1: Giao diện */}
+          {/* TAB 1: General */}
           {activeTab === 'general' && (
             <div className="space-y-6">
               <div>
@@ -1095,47 +1139,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: Engine & Khởi động */}
+          {/* TAB 2: Engine & Launch */}
           {activeTab === 'engine' && (
             <div className="space-y-6">
               {/* Binary Path Section */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                   <Terminal className="w-3.5 h-3.5 text-codex-accent" />
-                  Đường dẫn OMP Binary
+                  {t('settings.engine.binaryPath')}
                 </label>
                 <div className="p-3 bg-surface rounded-xl border border-border space-y-2.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500 dark:text-zinc-400">Đường dẫn tự phát hiện:</span>
+                    <span className="text-slate-500 dark:text-zinc-400">{t('settings.engine.autoDetectPath')}</span>
                     <span className="font-mono text-[11px] text-slate-700 dark:text-zinc-300 max-w-[320px] truncate">
-                      {installStatus?.binaryPath || 'Chưa tìm thấy'}
+                      {installStatus?.binaryPath || t('settings.engine.notFound')}
                     </span>
                   </div>
                   <div>
                     <label className="text-[11px] text-slate-500 dark:text-zinc-400 block mb-1">
-                      Đường dẫn tùy chỉnh (Custom override):
+                      {t('settings.engine.customPathLabel')}
                     </label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={customPathInput}
                         onChange={(e) => setCustomPathInput(e.target.value)}
-                        placeholder="Ví dụ: /usr/local/bin/omp hoặc ~/.local/bin/omp"
+                        placeholder={t('settings.engine.customPathPlaceholder')}
                         className="flex-1 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 placeholder-slate-400 focus:outline-none focus:border-codex-accent"
                       />
                       <button
                         onClick={handleBrowseBinary}
                         className="px-3 py-1.5 bg-surface hover:bg-surface-highlight border border-border rounded-lg text-xs font-medium text-slate-700 dark:text-zinc-300 transition-colors flex items-center gap-1.5 cursor-pointer"
-                        title="Chọn file từ ổ cứng"
+                        title={t('settings.engine.browseDisk')}
                       >
                         <FolderSearch className="w-3.5 h-3.5" />
-                        Chọn file
+                        {t('settings.engine.browseBtn')}
                       </button>
                       <button
                         onClick={handleApplyCustomPath}
                         className="px-3 py-1.5 bg-codex-accent text-white rounded-lg text-xs font-medium hover:bg-codex-accent/90 transition-colors cursor-pointer"
                       >
-                        Áp dụng
+                        {t('settings.engine.applyBtn')}
                       </button>
                     </div>
                   </div>
@@ -1147,7 +1191,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <User className="w-3.5 h-3.5 text-codex-accent" />
-                    Hồ sơ Engine (Profile Cô Lập)
+                    {t('settings.engine.profileTitle')}
                   </span>
                   {settings.profile && settings.profile !== 'default' && (
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-500 border border-purple-500/20">
@@ -1157,7 +1201,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </label>
                 <div className="p-3 bg-surface rounded-xl border border-border space-y-3">
                   <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
-                    Mỗi profile cô lập toàn bộ thông tin đăng nhập auth, danh sách session, settings và cache (~/.omp/profiles/&lt;name&gt;).
+                    {t('settings.engine.profileDesc')}
                   </p>
 
                   {profileError && (
@@ -1174,7 +1218,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     >
                       {availableProfiles.map((p) => (
                         <option key={p} value={p}>
-                          {p === 'default' ? 'default (mặc định)' : p}
+                          {p === 'default' ? t('settings.engine.profileDefault') : p}
                         </option>
                       ))}
                     </select>
@@ -1186,7 +1230,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       type="text"
                       value={newProfileInput}
                       onChange={(e) => setNewProfileInput(e.target.value)}
-                      placeholder="Tên profile mới (ví dụ: work, personal)..."
+                      placeholder={t('settings.engine.newProfilePlaceholder')}
                       disabled={isCreatingProfile}
                       className="flex-1 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 placeholder-slate-400 outline-none"
                     />
@@ -1197,7 +1241,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="flex items-center gap-1 px-3 py-1.5 bg-codex-accent text-white rounded-lg text-xs font-medium hover:bg-codex-accent/90 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>{isCreatingProfile ? 'Đang tạo...' : 'Tạo mới'}</span>
+                      <span>{isCreatingProfile ? t('settings.engine.creatingProfile') : t('settings.engine.createProfileBtn')}</span>
                     </button>
                   </div>
                 </div>
@@ -1208,12 +1252,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <Brain className="w-3.5 h-3.5 text-codex-accent" />
-                    Model & Provider mặc định khi khởi động
+                    {t('settings.engine.defaultModelTitle')}
                   </span>
                   {!isCurrentModelInCatalog && (
                     <span className="text-[11px] text-amber-500 flex items-center gap-1 font-normal">
                       <AlertTriangle className="w-3 h-3" />
-                      Model không có trong catalog hiện tại
+                      {t('settings.engine.modelNotInCatalog')}
                     </span>
                   )}
                 </label>
@@ -1223,7 +1267,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={handleModelSelect}
                     className="w-full px-3 py-2 bg-surface-highlight border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
                   >
-                    <option value="">(Mặc định của Engine / Cấu hình OMP)</option>
+                    <option value="">{t('settings.engine.defaultModelOption')}</option>
                     {Object.entries(groupedModels).map(([provider, models]) => (
                       <optgroup key={provider} label={provider.toUpperCase()}>
                         {models.map((m) => (
@@ -1234,7 +1278,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </optgroup>
                     ))}
                     {!isCurrentModelInCatalog && settings.defaultModel && settings.defaultProvider && (
-                      <optgroup label="MODEL ĐÃ LƯU TRƯỚC ĐÓ">
+                      <optgroup label={t('settings.engine.savedModelGroup')}>
                         <option value={currentModelValue}>
                           {settings.defaultModel} ({settings.defaultProvider})
                         </option>
@@ -1243,8 +1287,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </select>
                   <p className="text-[11px] text-slate-500 dark:text-zinc-400">
                     {availableModels.length > 0
-                      ? `Đã tải ${availableModels.length} models từ catalog thật của Engine.`
-                      : 'Chưa kết nối engine hoặc catalog rỗng. Sẽ tự động tải khi engine hoạt động.'}
+                      ? t('settings.engine.loadedModelsCount', { count: availableModels.length })
+                      : t('settings.engine.noModelsLoaded')}
                   </p>
                 </div>
               </div>
@@ -1253,21 +1297,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                   <Boxes className="w-3.5 h-3.5 text-codex-accent" />
-                  Model theo vai trò (Model Roles)
+                  {t('settings.engine.rolesTitle')}
                 </label>
                 <div className="bg-surface rounded-xl border border-border p-3 space-y-2.5">
                   {(!isRolesWritable || rolesError) && (
                     <div className="flex items-start gap-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
                       <span className="text-[11px] text-amber-600 dark:text-amber-400 break-all">
-                        {rolesError || `Không có quyền ghi vào ${rolesConfigPath}`}
+                        {rolesError || t('settings.engine.rolesNoPermission', { path: rolesConfigPath })}
                       </span>
                     </div>
                   )}
 
                   {Object.keys(modelRoles).length === 0 && (
                     <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Chưa có role nào được cấu hình. Thêm role bên dưới để gán model riêng cho từng vai trò.
+                      {t('settings.engine.rolesEmpty')}
                     </p>
                   )}
 
@@ -1293,7 +1337,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <div className="w-28 shrink-0">
                             <div className="text-xs font-mono font-medium text-slate-900 dark:text-zinc-100">{role}</div>
                             {known && (
-                              <div className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">{known.desc}</div>
+                              <div className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">{t(known.descKey)}</div>
                             )}
                           </div>
                           {isRawMode ? (
@@ -1301,7 +1345,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               type="text"
                               value={rawValue}
                               onChange={(e) => setRoleValue(role, e.target.value)}
-                              placeholder="@task, anthropic/*, hoặc danh sách cách nhau bởi dấu phẩy"
+                              placeholder={t('settings.engine.rolePlaceholder')}
                               spellCheck={false}
                               className="flex-1 min-w-0 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
                             />
@@ -1312,7 +1356,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 onChange={(e) => handleRoleSpecChange(role, e.target.value, spec.level)}
                                 className="flex-1 min-w-0 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
                               >
-                                <option value="">(Chưa gán model)</option>
+                                <option value="">{t('settings.engine.roleUnassigned')}</option>
                                 {Object.entries(groupedModels).map(([provider, models]) => (
                                   <optgroup key={provider} label={provider.toUpperCase()}>
                                     {models.map((m) => (
@@ -1323,7 +1367,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   </optgroup>
                                 ))}
                                 {spec.model && !catalogModel && (
-                                  <optgroup label="NGOÀI CATALOG HIỆN TẠI">
+                                  <optgroup label={t('settings.engine.roleOutOfCatalog')}>
                                     <option value={spec.model}>{spec.model}</option>
                                   </optgroup>
                                 )}
@@ -1338,10 +1382,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   )
                                 }
                                 disabled={!spec.model}
-                                title="Thinking level gắn vào model spec (provider/model:level)"
+                                title={t('settings.engine.roleThinkingTitle')}
                                 className="w-28 shrink-0 px-2 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                               >
-                                <option value="">Kế thừa</option>
+                                <option value="">{t('settings.engine.roleInherit')}</option>
                                 {ROLE_THINKING_LEVELS.map((lvl) => (
                                   <option key={lvl} value={lvl}>
                                     {lvl}
@@ -1351,7 +1395,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               {lacksReasoning && (
                                 <span
                                   className="shrink-0"
-                                  title="Model này không khai báo reasoning trong catalog, thinking level có thể bị bỏ qua"
+                                  title={t('settings.engine.roleNoReasoningWarning')}
                                 >
                                   <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
                                 </span>
@@ -1363,8 +1407,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             className="p-1.5 text-slate-400 hover:text-codex-accent transition-colors cursor-pointer shrink-0"
                             title={
                               isRawMode
-                                ? 'Chọn model từ danh sách'
-                                : 'Nhập tay (alias, glob, danh sách fallback)'
+                                ? t('settings.engine.roleSelectFromList')
+                                : t('settings.engine.roleManualInput')
                             }
                           >
                             {isRawMode ? <Boxes className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
@@ -1372,7 +1416,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <button
                             onClick={() => handleRemoveRole(role)}
                             className="p-1.5 text-slate-400 hover:text-red-500 transition-colors cursor-pointer shrink-0"
-                            title={`Xóa role "${role}"`}
+                            title={t('settings.engine.deleteRole', { role })}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1380,17 +1424,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       );
                     })}
 
-                  {/* Thêm role mới */}
+                  {/* Add new role */}
                   <div className="flex items-center gap-2 pt-1 border-t border-border">
                     <select
                       value={newRoleName}
                       onChange={(e) => setNewRoleName(e.target.value)}
                       className="flex-1 px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
                     >
-                      <option value="">Chọn role để thêm...</option>
+                      <option value="">{t('settings.engine.addRolePlaceholder')}</option>
                       {KNOWN_MODEL_ROLES.filter((r) => modelRoles[r.id] === undefined).map((r) => (
                         <option key={r.id} value={r.id}>
-                          {r.id} — {r.desc}
+                          {r.id} — {t(r.descKey)}
                         </option>
                       ))}
                     </select>
@@ -1400,7 +1444,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="px-3 py-1.5 bg-surface hover:bg-surface-highlight border border-border rounded-lg text-xs font-medium text-slate-700 dark:text-zinc-300 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      Thêm
+                      {t('settings.engine.addRoleBtn')}
                     </button>
                   </div>
 
@@ -1412,7 +1456,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {rolesSaveSuccess && (
                         <span className="text-[11px] text-emerald-500 flex items-center gap-1">
                           <Check className="w-3 h-3" />
-                          Đã lưu vào config.yml
+                          {t('settings.engine.rolesSaved')}
                         </span>
                       )}
                       <button
@@ -1420,7 +1464,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         disabled={!rolesDirty || !isRolesWritable}
                         className="px-3 py-1.5 bg-codex-accent text-white rounded-lg text-xs font-medium hover:bg-codex-accent/90 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        Lưu Roles
+                        {t('settings.engine.saveRolesBtn')}
                       </button>
                     </div>
                   </div>
@@ -1431,7 +1475,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                   <Brain className="w-3.5 h-3.5 text-indigo-400" />
-                  Mức độ suy nghĩ mặc định (Thinking Level)
+                  {t('settings.engine.thinkingTitle')}
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {THINKING_LEVELS.map((tl) => {
@@ -1447,10 +1491,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }`}
                       >
                         <div className="text-xs font-medium text-slate-900 dark:text-zinc-100 flex items-center justify-between">
-                          {tl.label}
+                          {t(tl.labelKey)}
                           {isSelected && <Check className="w-3.5 h-3.5 text-codex-accent" />}
                         </div>
-                        <div className="text-[10.5px] text-slate-500 dark:text-zinc-400 mt-0.5">{tl.desc}</div>
+                        <div className="text-[10.5px] text-slate-500 dark:text-zinc-400 mt-0.5">{t(tl.descKey)}</div>
                       </button>
                     );
                   })}
@@ -1461,7 +1505,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5 text-emerald-500" />
-                  Chế độ phê duyệt mặc định (Approval Mode)
+                  {t('settings.engine.approvalTitle')}
                 </label>
                 <div className="space-y-2">
                   {APPROVAL_OPTIONS.map((opt) => {
@@ -1477,8 +1521,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }`}
                       >
                         <div>
-                          <div className="text-xs font-medium text-slate-900 dark:text-zinc-100">{opt.label}</div>
-                          <div className="text-[11px] text-slate-500 dark:text-zinc-400">{opt.desc}</div>
+                          <div className="text-xs font-medium text-slate-900 dark:text-zinc-100">{t(opt.labelKey)}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-zinc-400">{t(opt.descKey)}</div>
                         </div>
                         {isSelected && <Check className="w-4 h-4 text-codex-accent shrink-0 ml-3" />}
                       </button>
@@ -1493,10 +1537,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Database className="w-4 h-4 text-codex-accent shrink-0" />
                   <div>
                     <div className="text-xs font-semibold text-slate-900 dark:text-zinc-100">
-                      Tự động nén ngữ cảnh (Auto-compaction)
+                      {t('settings.engine.autoCompactionTitle')}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Tự động tóm tắt ngữ cảnh khi dung lượng token vượt quá ngưỡng cho phép
+                      {t('settings.engine.autoCompactionDesc')}
                     </div>
                   </div>
                 </div>
@@ -1515,10 +1559,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <RotateCw className="w-4 h-4 text-amber-500 shrink-0" />
                   <div>
                     <div className="text-xs font-semibold text-slate-900 dark:text-zinc-100">
-                      Tự động thử lại (Auto-retry)
+                      {t('settings.engine.autoRetryTitle')}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Tự động gửi lại yêu cầu khi gặp lỗi mạng hoặc rate-limit từ provider
+                      {t('settings.engine.autoRetryDesc')}
                     </div>
                   </div>
                 </div>
@@ -1538,10 +1582,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Zap className="w-4 h-4 text-emerald-500 shrink-0" />
                   <div>
                     <div className="text-xs font-semibold text-slate-900 dark:text-zinc-100">
-                      Chế độ phản hồi nhanh (Fast Mode)
+                      {t('settings.engine.fastModeTitle')}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Giảm độ trễ suy nghĩ và stream phản hồi nhanh hơn khi tương tác
+                      {t('settings.engine.fastModeDesc')}
                     </div>
                   </div>
                 </div>
@@ -1561,10 +1605,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Boxes className="w-4 h-4 text-purple-500 shrink-0" />
                   <div>
                     <div className="text-xs font-semibold text-slate-900 dark:text-zinc-100">
-                      Tích hợp Desktop Host Tools & URI Schemes
+                      {t('settings.engine.hostToolsTitle')}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Cho phép model gửi thông báo macOS, mở file trong app và kích hoạt native picker
+                      {t('settings.engine.hostToolsDesc')}
                     </div>
                   </div>
                 </div>
@@ -1583,10 +1627,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div>
                   <h4 className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                     <Sliders className="w-3.5 h-3.5 text-blue-500" />
-                    Hành vi Engine (Engine Behavior Modes)
+                    {t('settings.engine.behaviorModesTitle')}
                   </h4>
                   <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                    Tùy chỉnh chế độ can thiệp chỉ đạo, xếp hàng follow-up và ngắt turn
+                    {t('settings.engine.behaviorModesDesc')}
                   </p>
                 </div>
 
@@ -1604,12 +1648,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     >
                       {STEERING_MODES.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.label}
+                          {t(m.labelKey)}
                         </option>
                       ))}
                     </select>
                     <div className="text-[10.5px] text-slate-500 dark:text-zinc-400 leading-tight">
-                      {STEERING_MODES.find((m) => m.id === (settings.steeringMode || 'default'))?.desc}
+                      {t(STEERING_MODES.find((m) => m.id === (settings.steeringMode || 'default'))?.descKey || 'settings.steering.default.desc')}
                     </div>
                   </div>
 
@@ -1626,12 +1670,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     >
                       {FOLLOW_UP_MODES.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.label}
+                          {t(m.labelKey)}
                         </option>
                       ))}
                     </select>
                     <div className="text-[10.5px] text-slate-500 dark:text-zinc-400 leading-tight">
-                      {FOLLOW_UP_MODES.find((m) => m.id === (settings.followUpMode || 'default'))?.desc}
+                      {t(FOLLOW_UP_MODES.find((m) => m.id === (settings.followUpMode || 'default'))?.descKey || 'settings.followUp.default.desc')}
                     </div>
                   </div>
 
@@ -1648,12 +1692,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     >
                       {INTERRUPT_MODES.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.label}
+                          {t(m.labelKey)}
                         </option>
                       ))}
                     </select>
                     <div className="text-[10.5px] text-slate-500 dark:text-zinc-400 leading-tight">
-                      {INTERRUPT_MODES.find((m) => m.id === (settings.interruptMode || 'default'))?.desc}
+                      {t(INTERRUPT_MODES.find((m) => m.id === (settings.interruptMode || 'default'))?.descKey || 'settings.interrupt.default.desc')}
                     </div>
                   </div>
                 </div>
@@ -1671,15 +1715,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* TAB 3: Providers & Custom LLM Management */}
           {activeTab === 'providers' && (
             <div className="space-y-6">
-              {/* Thông báo quyền ghi EACCES nếu có */}
+              {/* EACCES permission warning if needed */}
               {(!isConfigWritable || configError) && (
                 <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
                   <div className="flex items-start gap-2 text-amber-600 dark:text-amber-400">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                     <div className="text-xs space-y-1">
-                      <div className="font-semibold">Quyền truy cập models.yml bị hạn chế</div>
+                      <div className="font-semibold">{t('settings.providers.permissionRestricted')}</div>
                       <p className="text-slate-600 dark:text-zinc-300">
-                        {configError || `File ${modelsConfigPath} không thể ghi trực tiếp (thường do quyền root).`}
+                        {configError || t('settings.providers.permissionDesc', { path: modelsConfigPath })}
                       </p>
                     </div>
                   </div>
@@ -1694,12 +1738,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {copiedText === `sudo chown $USER ${modelsConfigPath}` ? (
                         <>
                           <Check className="w-3 h-3 text-emerald-500" />
-                          <span>Đã sao chép</span>
+                          <span>{t('settings.providers.copied')}</span>
                         </>
                       ) : (
                         <>
                           <Copy className="w-3 h-3" />
-                          <span>Copy lệnh</span>
+                          <span>{t('settings.providers.copyCmd')}</span>
                         </>
                       )}
                     </button>
@@ -1707,12 +1751,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              {/* Thông báo đã lưu thành công */}
+              {/* Save success notification */}
               {modelsSaveSuccess && (
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                     <Check className="w-4 h-4 shrink-0" />
-                    <span>Đã lưu cấu hình vào models.yml thành công!</span>
+                    <span>{t('settings.providers.saveSuccess')}</span>
                   </div>
                   {onRestartEngine && (
                     <button
@@ -1721,13 +1765,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="px-2.5 py-1 bg-codex-accent text-white rounded-lg text-xs font-medium hover:bg-codex-accent/90 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
                     >
                       <RotateCw className={`w-3 h-3 ${isRestarting ? 'animate-spin' : ''}`} />
-                      {isRestarting ? 'Đang restart...' : 'Khởi động lại Engine ngay'}
+                      {isRestarting ? t('settings.providers.restarting') : t('settings.providers.restartNow')}
                     </button>
                   )}
                 </div>
               )}
 
-              {/* PHẦN 1: Custom LLM Providers (models.yml) */}
+              {/* PART 1: Custom LLM Providers (models.yml) */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1736,7 +1780,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Custom LLM Providers ({modelsConfigPath})
                     </h3>
                     <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Cấu hình các provider tự host (LM Studio, Ollama, vLLM, OpenAI-compatible proxy)
+                      {t('settings.providers.customDesc')}
                     </p>
                   </div>
                   {!isEditingProvider && (
@@ -1745,18 +1789,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="px-3 py-1.5 bg-codex-accent text-white rounded-lg text-xs font-medium hover:bg-codex-accent/90 transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      Thêm Provider
+                      {t('settings.providers.addProviderBtn')}
                     </button>
                   )}
                 </div>
 
-                {/* Form chỉnh sửa / thêm mới Provider */}
+                {/* Provider edit / add form */}
                 {isEditingProvider && editingProvider && (
                   <div className="p-4 bg-surface rounded-xl border border-codex-accent/40 space-y-4 shadow-sm animate-fade-in">
                     <div className="flex items-center justify-between border-b border-border pb-2">
                       <span className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                         <Edit3 className="w-3.5 h-3.5 text-codex-accent" />
-                        {editingOriginalId ? `Sửa Provider: ${editingOriginalId}` : 'Thêm Custom Provider Mới'}
+                        {editingOriginalId ? t('settings.providers.editTitle', { id: editingOriginalId }) : t('settings.providers.newTitle')}
                       </span>
                       <button
                         onClick={() => {
@@ -1772,13 +1816,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-300 block mb-1">
-                          Provider ID (Slug duy nhất)*:
+                          {t('settings.providers.idLabel')}
                         </label>
                         <input
                           type="text"
                           value={editingProvider.id}
                           onChange={(e) => setEditingProvider({ ...editingProvider, id: e.target.value })}
-                          placeholder="Ví dụ: lmstudio-local hoặc vllm-prod"
+                          placeholder={t('settings.providers.idPlaceholder')}
                           className="w-full px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
                         />
                       </div>
@@ -1791,7 +1835,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           type="text"
                           value={editingProvider.baseUrl}
                           onChange={(e) => setEditingProvider({ ...editingProvider, baseUrl: e.target.value })}
-                          placeholder="Ví dụ: http://127.0.0.1:8040/v1"
+                          placeholder={t('settings.providers.baseUrlPlaceholder')}
                           className="w-full px-3 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
                         />
                       </div>
@@ -1820,7 +1864,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             type={showApiKey ? 'text' : 'password'}
                             value={editingProvider.apiKey || ''}
                             onChange={(e) => setEditingProvider({ ...editingProvider, apiKey: e.target.value })}
-                            placeholder="Dán API key trực tiếp (hoặc tên env var / !lệnh)"
+                            placeholder={t('settings.providers.apiKeyPlaceholder')}
                             autoComplete="off"
                             className="w-full pl-3 pr-9 py-1.5 bg-surface-highlight border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
                           />
@@ -1828,13 +1872,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             type="button"
                             onClick={() => setShowApiKey(!showApiKey)}
                             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"
-                            title={showApiKey ? 'Ẩn key' : 'Hiện key'}
+                            title={showApiKey ? t('settings.providers.hideKey') : t('settings.providers.showKey')}
                           >
                             {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           </button>
                         </div>
                         <span className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5 block">
-                          OMP hỗ trợ cả 3 dạng: key literal (lưu vào models.yml), tên biến môi trường (vd: OPENAI_API_KEY), hoặc lệnh shell (vd: !op read ...).
+                          {t('settings.providers.apiKeyHint')}
                         </span>
                       </div>
                     </div>
@@ -1847,7 +1891,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           onChange={(e) => setEditingProvider({ ...editingProvider, authHeader: e.target.checked })}
                           className="rounded text-codex-accent focus:ring-codex-accent"
                         />
-                        <span>Gửi Authorization Header (Bearer token)</span>
+                        <span>{t('settings.providers.authHeader')}</span>
                       </label>
 
                       <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-zinc-300 cursor-pointer">
@@ -1862,14 +1906,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           }
                           className="rounded text-codex-accent focus:ring-codex-accent"
                         />
-                        <span>Hỗ trợ token usage khi streaming</span>
+                        <span>{t('settings.providers.streamUsage')}</span>
                       </label>
                     </div>
 
                     <div className="grid grid-cols-3 gap-3 pt-1">
                       <div>
                         <label className="text-xs font-medium text-slate-700 dark:text-zinc-300 block mb-1">
-                          Chế độ xác thực
+                          {t('settings.providers.authMode')}
                         </label>
                         <select
                           value={editingProvider.auth || ''}
@@ -1881,15 +1925,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           }
                           className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
                         >
-                          <option value="">API Key (mặc định)</option>
-                          <option value="none">Không cần xác thực (none)</option>
+                          <option value="">{t('settings.providers.authDefault')}</option>
+                          <option value="none">{t('settings.providers.authNone')}</option>
                           <option value="oauth">OAuth</option>
                         </select>
                       </div>
 
                       <div>
                         <label className="text-xs font-medium text-slate-700 dark:text-zinc-300 block mb-1">
-                          Tự phát hiện model (discovery)
+                          {t('settings.providers.discoveryTitle')}
                         </label>
                         <select
                           value={editingProvider.discovery?.type || ''}
@@ -1903,7 +1947,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           }
                           className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
                         >
-                          <option value="">Tắt</option>
+                          <option value="">{t('settings.providers.discoveryOff')}</option>
                           {DISCOVERY_TYPE_OPTIONS.map((dt) => (
                             <option key={dt} value={dt}>{dt}</option>
                           ))}
@@ -1930,7 +1974,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               },
                             });
                           }}
-                          placeholder="Mặc định OMP"
+                          placeholder={t('settings.providers.discoveryPlaceholder')}
                           className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent disabled:opacity-40"
                         />
                       </div>
@@ -1938,22 +1982,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     <div>
                       <label className="text-xs font-medium text-slate-700 dark:text-zinc-300 block mb-1">
-                        HTTP Headers tùy chỉnh
+                        {t('settings.providers.customHeaders')}
                       </label>
                       <textarea
                         value={headersText}
                         onChange={(e) => setHeadersText(e.target.value)}
-                        placeholder={'Mỗi dòng một header, dạng Tên: Giá trị\nX-Api-Version: 2024-01'}
+                        placeholder={t('settings.providers.customHeadersPlaceholder')}
                         rows={2}
                         className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent resize-y"
                       />
                     </div>
 
-                    {/* Danh sách Models của Provider này */}
+                    {/* Model list for this provider */}
                     <div className="space-y-2 border-t border-border pt-3">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-semibold text-slate-900 dark:text-zinc-100">
-                          Danh sách Models thuộc Provider này:
+                          {t('settings.providers.modelListTitle')}
                         </label>
                         <button
                           type="button"
@@ -1961,7 +2005,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           className="text-[11px] text-codex-accent hover:underline flex items-center gap-1 cursor-pointer"
                         >
                           <Plus className="w-3 h-3" />
-                          Thêm dòng model
+                          {t('settings.providers.addModelRow')}
                         </button>
                       </div>
 
@@ -1973,14 +2017,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 type="text"
                                 value={m.id}
                                 onChange={(e) => handleUpdateModelRow(idx, 'id', e.target.value)}
-                                placeholder="Model ID (bắt buộc, vd: gemini-3.7-flash)"
+                                placeholder={t('settings.providers.modelIdPlaceholder')}
                                 className="flex-2 px-2.5 py-1 bg-surface border border-border rounded text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
                               />
                               <input
                                 type="text"
                                 value={m.name || ''}
                                 onChange={(e) => handleUpdateModelRow(idx, 'name', e.target.value)}
-                                placeholder="Tên hiển thị (vd: Gemini 3.7)"
+                                placeholder={t('settings.providers.modelNamePlaceholder')}
                                 className="flex-2 px-2.5 py-1 bg-surface border border-border rounded text-xs text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
                               />
                               <input
@@ -2001,14 +2045,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 type="button"
                                 onClick={() => handleRemoveModelRow(idx)}
                                 className="p-1 text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-                                title="Xóa model này"
+                                title={t('settings.providers.deleteModel')}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
 
                             <div className="flex items-center gap-4 flex-wrap pl-0.5">
-                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title="Model nhận được ảnh đầu vào (vision)">
+                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title={t('settings.providers.visionTitle')}>
                                 <input
                                   type="checkbox"
                                   checked={m.input?.includes('image') === true}
@@ -2020,7 +2064,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 <span>Image input</span>
                               </label>
 
-                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title="Model có reasoning/thinking block">
+                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title={t('settings.providers.reasoningTitle')}>
                                 <input
                                   type="checkbox"
                                   checked={m.reasoning === true}
@@ -2032,7 +2076,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 <span>Reasoning</span>
                               </label>
 
-                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title="Bỏ chọn nếu model không hỗ trợ tool calling">
+                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title={t('settings.providers.toolsTitle')}>
                                 <input
                                   type="checkbox"
                                   checked={m.supportsTools !== false}
@@ -2044,7 +2088,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 <span>Tool calling</span>
                               </label>
 
-                              <div className="flex items-center gap-1.5 ml-auto" title="Giá USD trên 1 triệu token (để trống nếu miễn phí)">
+                              <div className="flex items-center gap-1.5 ml-auto" title={t('settings.providers.costTitle')}>
                                 <span className="text-[10px] text-slate-400 dark:text-zinc-500">$/1M:</span>
                                 {(['input', 'output', 'cacheRead', 'cacheWrite'] as const).map((costKey) => (
                                   <input
@@ -2064,7 +2108,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             </div>
 
                             <div className="flex items-center gap-4 flex-wrap pl-0.5">
-                              <div className="flex items-center gap-1.5" title="Hệ số nhân premium usage của OMP (để trống = 1)">
+                              <div className="flex items-center gap-1.5" title={t('settings.providers.premiumTitle')}>
                                 <span className="text-[10px] text-slate-400 dark:text-zinc-500">×Premium:</span>
                                 <input
                                   type="number"
@@ -2080,7 +2124,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 />
                               </div>
 
-                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title="Không gửi max_output_tokens trong request (một số API yêu cầu)">
+                              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title={t('settings.providers.omitMaxTokensTitle')}>
                                 <input
                                   type="checkbox"
                                   checked={m.omitMaxOutputTokens === true}
@@ -2089,10 +2133,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   }
                                   className="rounded text-codex-accent focus:ring-codex-accent"
                                 />
-                                <span>Bỏ max_output_tokens</span>
+                                <span>{t('settings.providers.omitMaxTokens')}</span>
                               </label>
 
-                              <div className="flex items-center gap-1.5" title="Cấu hình mức thinking/reasoning cho model">
+                              <div className="flex items-center gap-1.5" title={t('settings.providers.thinkingConfigTitle')}>
                                 <span className="text-[10px] text-slate-400 dark:text-zinc-500">Thinking:</span>
                                 <select
                                   value={m.thinking?.mode || ''}
@@ -2106,7 +2150,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   }
                                   className="px-1.5 py-0.5 bg-surface border border-border rounded text-[10.5px] text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent cursor-pointer"
                                 >
-                                  <option value="">Tắt</option>
+                                  <option value="">{t('settings.providers.discoveryOff')}</option>
                                   {THINKING_MODE_OPTIONS.map((tm) => (
                                     <option key={tm.id} value={tm.id}>{tm.label}</option>
                                   ))}
@@ -2136,7 +2180,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 ))}
 
                                 <div className="flex items-center gap-1.5 ml-auto">
-                                  <span className="text-[10px] text-slate-400 dark:text-zinc-500">Mặc định:</span>
+                                  <span className="text-[10px] text-slate-400 dark:text-zinc-500">{t('settings.providers.thinkingDefaultLabel')}</span>
                                   <select
                                     value={m.thinking?.defaultLevel || ''}
                                     onChange={(e) =>
@@ -2154,7 +2198,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </div>
 
                                 {!(m.thinking?.efforts && m.thinking.efforts.length > 0) && (
-                                  <span className="text-[10px] text-amber-500">Chọn ít nhất 1 effort, nếu không thinking sẽ không được lưu.</span>
+                                  <span className="text-[10px] text-amber-500">{t('settings.providers.thinkingEffortWarning')}</span>
                                 )}
                               </div>
                             )}
@@ -2162,7 +2206,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         ))}
                         {(!editingProvider.models || editingProvider.models.length === 0) && (
                           <div className="text-[11px] text-slate-400 dark:text-zinc-500 italic py-1">
-                            Chưa có model nào. Nhấn "+ Thêm dòng model" ở trên.
+                            {t('settings.providers.noModelsYet')}
                           </div>
                         )}
                       </div>
@@ -2177,20 +2221,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }}
                         className="px-3 py-1.5 bg-surface hover:bg-surface-highlight border border-border rounded-lg text-xs font-medium text-slate-700 dark:text-zinc-300 transition-colors cursor-pointer"
                       >
-                        Hủy
+                        {t('settings.providers.cancel')}
                       </button>
                       <button
                         type="button"
                         onClick={handleSaveEditingProvider}
                         className="px-4 py-1.5 bg-codex-accent text-white rounded-lg text-xs font-medium hover:bg-codex-accent/90 transition-colors cursor-pointer"
                       >
-                        Lưu Provider vào models.yml
+                        {t('settings.providers.saveProviderBtn')}
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* Danh sách các custom providers đã cấu hình */}
+                {/* Configured custom providers list */}
                 <div className="space-y-2.5">
                   {customProviders.map((cp) => (
                     <div
@@ -2217,21 +2261,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <button
                             onClick={() => handleEditProvider(cp)}
                             className="p-1.5 rounded-lg hover:bg-surface-highlight text-slate-500 hover:text-slate-900 dark:hover:text-zinc-100 transition-colors cursor-pointer"
-                            title="Sửa provider này"
+                            title={t('settings.providers.editProvider')}
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDeleteProvider(cp.id)}
                             className="p-1.5 rounded-lg hover:bg-surface-highlight text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-                            title="Xóa provider này"
+                            title={t('settings.providers.deleteProvider')}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
 
-                      {/* Trạng thái biến môi trường API Key */}
+                      {/* API Key environment variable status */}
                       <div className="flex items-center gap-3 text-xs pt-1 border-t border-border/50">
                         {cp.apiKey ? (
                           <div className="flex items-center gap-1.5">
@@ -2241,38 +2285,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             </span>
                             {classifyApiKey(cp) === 'env-ok' && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                ✓ Env var đã có trong process.env
+                                {t('settings.providers.envPresent')}
                               </span>
                             )}
                             {classifyApiKey(cp) === 'env-missing' && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                                ⚠ Biến môi trường chưa được đặt
+                                {t('settings.providers.envMissing')}
                               </span>
                             )}
                             {classifyApiKey(cp) === 'literal' && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                ✓ Key lưu trong models.yml
+                                {t('settings.providers.literalKey')}
                               </span>
                             )}
                             {classifyApiKey(cp) === 'command' && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
-                                ⚡ Key lấy từ lệnh shell
+                                {t('settings.providers.commandKey')}
                               </span>
                             )}
                           </div>
                         ) : (
                           <div className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-zinc-500">
                             <KeyRound className="w-3 h-3" />
-                            <span>Không yêu cầu API Key</span>
+                            <span>{t('settings.providers.noKeyNeeded')}</span>
                           </div>
                         )}
 
                         <div className="text-[11px] text-slate-500 dark:text-zinc-400 ml-auto">
-                          {cp.models?.length || 0} models đã đăng ký
+                          {t('settings.providers.registeredModels', { count: cp.models?.length || 0 })}
                         </div>
                       </div>
 
-                      {/* Chips danh sách models */}
+                      {/* Model chips list */}
                       {cp.models && cp.models.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {cp.models.map((m) => (
@@ -2293,28 +2337,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="p-6 bg-surface rounded-xl border border-dashed border-border text-center space-y-2">
                       <Server className="w-6 h-6 text-slate-400 mx-auto" />
                       <div className="text-xs font-medium text-slate-600 dark:text-zinc-400">
-                        Chưa có custom provider nào trong {modelsConfigPath}
+                        {t('settings.providers.noProvidersInPath', { path: modelsConfigPath })}
                       </div>
                       <button
                         onClick={handleAddNewProvider}
                         className="text-xs text-codex-accent hover:underline font-medium cursor-pointer"
                       >
-                        + Thêm provider đầu tiên
+                        {t('settings.providers.addFirstProvider')}
                       </button>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* PHẦN 2: Models khả dụng từ Engine RPC (Available Models) */}
+              {/* PART 2: Model Catalog Search & Refresh (Phase 7) */}
+              <ModelsCatalogSection onRefreshModels={onRefreshModels} />
+
+              {/* PART 3: Available Models from Engine RPC */}
               <div className="space-y-3 pt-4 border-t border-border">
                 <div>
                   <h3 className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                     <Boxes className="w-3.5 h-3.5 text-indigo-400" />
-                    Models đang khả dụng trong OMP Engine ({availableModels.length} models)
+                    {t('settings.providers.availableModelsTitle', { count: availableModels.length })}
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                    Danh sách models thực tế nhận diện được từ engine RPC (bao gồm builtin & custom)
+                    {t('settings.providers.availableModelsDesc')}
                   </p>
                 </div>
 
@@ -2348,32 +2395,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   ) : (
                     <div className="p-6 text-center text-xs text-slate-500 dark:text-zinc-400">
-                      Engine chưa chạy hoặc chưa tải được danh sách models.
+                      {t('settings.providers.engineNotRunningModels')}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* PHẦN 3: Danh sách Dịch vụ Login OAuth (~70 mục) */}
+              {/* PART 4: OAuth Login Services List */}
               <div className="space-y-3 pt-4 border-t border-border">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5 text-emerald-500" />
-                      Dịch vụ Đăng nhập & OAuth ({loginProviders.length} dịch vụ)
+                      {t('settings.providers.oauthTitle', { count: loginProviders.length })}
                     </h3>
                     <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Bấm "Đăng nhập" để mở trình duyệt và hoàn tất xác thực OAuth trực tiếp từ ứng dụng.
+                      {t('settings.providers.oauthDesc')}
                     </p>
                   </div>
                 </div>
+                {/* Engine offline warning */}
+                {!effectiveEngineRunning && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{t('settings.providers.engineOfflineHint')}</span>
+                  </div>
+                )}
 
-                {/* Hướng dẫn đăng nhập Terminal */}
+
+                {/* Terminal login instructions */}
                 <div className="p-3 bg-surface rounded-xl border border-border space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-600 dark:text-zinc-300 font-medium flex items-center gap-1.5">
                       <Terminal className="w-3.5 h-3.5 text-codex-accent" />
-                      Cách khác: đăng nhập thủ công qua Terminal
+                      {t('settings.providers.terminalLoginTitle')}
                     </span>
                     <button
                       onClick={() => handleCopyText('omp')}
@@ -2382,7 +2437,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {copiedText === 'omp' ? (
                         <>
                           <Check className="w-3 h-3 text-emerald-500" />
-                          <span>Đã copy "omp"</span>
+                          <span>{t('settings.providers.copiedOmp')}</span>
                         </>
                       ) : (
                         <>
@@ -2393,11 +2448,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                    Gõ <code className="px-1 py-0.5 bg-surface-highlight rounded font-mono text-codex-accent">/login</code> bên trong giao diện dòng lệnh OMP để chọn nhà cung cấp và hoàn tất đăng nhập OAuth.
+                    {t('settings.providers.terminalLoginHint')}
                   </p>
                 </div>
 
-                {/* Trạng thái phiên đăng nhập OAuth */}
+                {/* OAuth login session status */}
                 {authLogin && (
                   <div
                     className={`p-3 rounded-xl border space-y-2 ${
@@ -2419,25 +2474,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         {authLogin.status === 'error' && (
                           <XCircle className="w-3.5 h-3.5 text-red-500" />
                         )}
-                        {authLogin.status === 'started' && `Đang khởi tạo đăng nhập "${authLogin.providerId}"...`}
-                        {authLogin.status === 'awaiting-browser' && `Đã mở trình duyệt — hoàn tất xác thực "${authLogin.providerId}" rồi quay lại đây.`}
-                        {authLogin.status === 'success' && `Đăng nhập "${authLogin.providerId}" thành công!`}
-                        {authLogin.status === 'error' && `Đăng nhập "${authLogin.providerId}" thất bại.`}
-                        {authLogin.status === 'cancelled' && `Đã hủy đăng nhập "${authLogin.providerId}".`}
+                        {authLogin.status === 'started' && t('settings.providers.authStarted', { providerId: authLogin.providerId })}
+                        {authLogin.status === 'awaiting-browser' && t('settings.providers.authAwaitingBrowser', { providerId: authLogin.providerId })}
+                        {authLogin.status === 'success' && t('settings.providers.authSuccess', { providerId: authLogin.providerId })}
+                        {authLogin.status === 'error' && t('settings.providers.authFailed', { providerId: authLogin.providerId })}
+                        {authLogin.status === 'cancelled' && t('settings.providers.authCancelled', { providerId: authLogin.providerId })}
                       </span>
                       {isAuthLoginPending ? (
                         <button
                           onClick={handleCancelAuthLogin}
                           className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-surface-highlight hover:bg-surface border border-border text-slate-600 dark:text-zinc-300 cursor-pointer"
                         >
-                          Hủy
+                          {t('settings.providers.cancel')}
                         </button>
                       ) : (
                         <button
                           onClick={() => setAuthLogin(null)}
                           className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200 cursor-pointer"
                         >
-                          Đóng
+                          {t('settings.providers.authClose')}
                         </button>
                       )}
                     </div>
@@ -2453,7 +2508,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           value={authCodeInput}
                           onChange={(e) => setAuthCodeInput(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleSubmitAuthCode()}
-                          placeholder="Nếu trình duyệt không tự quay lại: dán redirect URL hoặc mã xác thực vào đây"
+                          placeholder={t('settings.providers.authRedirectPlaceholder')}
                           className="flex-1 px-3 py-1.5 text-[11px] rounded-lg border border-border bg-panel text-slate-800 dark:text-zinc-200 outline-none font-mono focus:border-codex-accent"
                         />
                         <button
@@ -2461,71 +2516,103 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           disabled={!authCodeInput.trim()}
                           className="px-3 py-1.5 text-[11px] font-semibold bg-surface-highlight hover:bg-surface text-slate-800 dark:text-zinc-200 rounded-lg border border-border disabled:opacity-40 cursor-pointer"
                         >
-                          Gửi
+                          {t('settings.providers.authSubmit')}
                         </button>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Tìm kiếm Login Providers */}
+                {/* Search Login Providers */}
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={loginSearchQuery}
                     onChange={(e) => setLoginSearchQuery(e.target.value)}
-                    placeholder="Tìm kiếm dịch vụ login (vd: openai, claude, github, copilot, gemini, cursor...)"
+                    placeholder={t('settings.providers.searchLoginPlaceholder')}
                     className="w-full pl-9 pr-3 py-1.5 bg-surface border border-border rounded-lg text-xs text-slate-900 dark:text-zinc-100 placeholder-slate-400 focus:outline-none focus:border-codex-accent"
                   />
                 </div>
 
-                {/* Danh sách Services */}
+                {/* Services List */}
                 <div className="max-h-48 overflow-y-auto bg-surface rounded-xl border border-border divide-y divide-border">
-                  {filteredLoginProviders.map((lp) => (
-                    <div
-                      key={lp.id}
-                      className="px-3.5 py-2 flex items-center justify-between text-xs hover:bg-surface-highlight/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div>
-                          <div className="font-medium text-slate-800 dark:text-zinc-200">{lp.name}</div>
-                          <div className="text-[10px] font-mono text-slate-400 dark:text-zinc-500">{lp.id}</div>
-                        </div>
-                        {authedProviders.includes(lp.id) && (
-                          <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-medium border border-green-500/30">
-                            ✓ Đã đăng nhập
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleStartAuthLogin(lp)}
-                        disabled={isAuthLoginPending}
-                        className={`px-2 py-1 border rounded text-[10.5px] font-medium flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-default ${
-                          authLogin?.providerId === lp.id && isAuthLoginPending
-                            ? 'bg-codex-accent/10 border-codex-accent/40 text-codex-accent'
-                            : 'bg-surface-highlight hover:bg-surface border-border text-slate-600 dark:text-zinc-300'
-                        }`}
-                        title="Đăng nhập OAuth qua trình duyệt"
+                  {filteredLoginProviders.map((lp) => {
+                    const isAuthed = authedProviders.includes(lp.id) || Boolean(lp.authenticated);
+                    const isLoggingIn = authLogin?.providerId === lp.id && isAuthLoginPending;
+                    const isLoggingOut = loggingOutProviderId === lp.id;
+                    const isLoginDisabled = isAuthLoginPending || !effectiveEngineRunning;
+
+                    return (
+                      <div
+                        key={lp.id}
+                        className="px-3.5 py-2 flex items-center justify-between text-xs hover:bg-surface-highlight/50 transition-colors"
                       >
-                        {authLogin?.providerId === lp.id && isAuthLoginPending ? (
-                          <RotateCw className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <LogIn className="w-3 h-3" />
-                        )}
-                        <span>
-                          {authLogin?.providerId === lp.id && isAuthLoginPending
-                            ? 'Đang chờ...'
-                            : authedProviders.includes(lp.id)
-                              ? 'Đăng nhập lại'
-                              : 'Đăng nhập'}
-                        </span>
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <div className="font-medium text-slate-800 dark:text-zinc-200">{lp.name}</div>
+                            <div className="text-[10px] font-mono text-slate-400 dark:text-zinc-500">{lp.id}</div>
+                          </div>
+                          {isAuthed && (
+                            <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-medium border border-green-500/30">
+                              ✓ {t('settings.providers.authenticated')}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {isAuthed && (
+                            <button
+                              onClick={() => handleLogout(lp.id)}
+                              disabled={isLoggingOut || isAuthLoginPending}
+                              className="px-2 py-1 border border-red-500/30 hover:bg-red-500/10 text-red-600 dark:text-red-400 rounded text-[10.5px] font-medium flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-default transition-colors"
+                              title={t('settings.providers.logout')}
+                            >
+                              {isLoggingOut ? (
+                                <RotateCw className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <LogOut className="w-3 h-3" />
+                              )}
+                              <span>
+                                {isLoggingOut
+                                  ? t('settings.providers.loggingOut')
+                                  : t('settings.providers.logout')}
+                              </span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleStartAuthLogin(lp)}
+                            disabled={isLoginDisabled}
+                            className={`px-2 py-1 border rounded text-[10.5px] font-medium flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                              isLoggingIn
+                                ? 'bg-codex-accent/10 border-codex-accent/40 text-codex-accent'
+                                : 'bg-surface-highlight hover:bg-surface border-border text-slate-600 dark:text-zinc-300'
+                            }`}
+                            title={
+                              !effectiveEngineRunning
+                                ? t('settings.providers.engineOfflineBtnTooltip')
+                                : t('settings.providers.oauthBrowser')
+                            }
+                          >
+                            {isLoggingIn ? (
+                              <RotateCw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <LogIn className="w-3 h-3" />
+                            )}
+                            <span>
+                              {isLoggingIn
+                                ? t('settings.providers.awaitingAuth')
+                                : isAuthed
+                                  ? t('settings.providers.relogin')
+                                  : t('settings.providers.login')}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                   {filteredLoginProviders.length === 0 && (
                     <div className="p-4 text-center text-xs text-slate-400 dark:text-zinc-500">
-                      Không tìm thấy dịch vụ login phù hợp với từ khóa "{loginSearchQuery}".
+                      {t('settings.providers.noLoginResults', { query: loginSearchQuery })}
                     </div>
                   )}
                 </div>
@@ -2551,7 +2638,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {hasEngineChanged && (
               <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 font-medium">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                Thay đổi sẽ có hiệu lực khi khởi động lại engine.
+                {t('settings.footer.restartBanner')}
               </span>
             )}
           </div>
@@ -2563,14 +2650,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 className="px-3 py-1.5 bg-codex-accent text-white rounded-lg text-xs font-medium hover:bg-codex-accent/90 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <RotateCw className={`w-3.5 h-3.5 ${isRestarting ? 'animate-spin' : ''}`} />
-                {isRestarting ? 'Đang khởi động lại...' : isEngineRunning ? 'Khởi động lại Engine ngay' : 'Khởi động Engine ngay'}
+                {isRestarting ? t('settings.footer.restarting') : effectiveEngineRunning ? t('settings.footer.restartNow') : t('settings.footer.startNow')}
               </button>
             )}
             <button
               onClick={onClose}
               className="px-4 py-1.5 bg-surface hover:bg-surface-highlight border border-border rounded-lg text-xs font-medium text-slate-700 dark:text-zinc-300 transition-colors cursor-pointer"
             >
-              Đóng
+              {t('settings.footer.close')}
             </button>
           </div>
         </div>

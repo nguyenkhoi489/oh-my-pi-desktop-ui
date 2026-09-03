@@ -1,4 +1,5 @@
 import type { WorkspaceFile, FileDiffItem, ChatMessage, ArtifactDocument, OmpUiRequest } from '../types/index.ts';
+import { tm } from '../../shared/i18n/index.ts';
 
 export const DEMO_WORKSPACE_FILES: WorkspaceFile[] = [
   {
@@ -139,17 +140,17 @@ export const DEMO_MESSAGES: ChatMessage[] = [
   {
     id: 'msg-1',
     role: 'user',
-    content: 'Hãy hoàn thiện hàm `validateUser` trong file `src/auth/service.ts` với JWT verification và xử lý ngoại lệ an toàn.',
+    content: tm('mock.promptDemo'),
     timestamp: Date.now() - 1000 * 60 * 3,
   },
   {
     id: 'msg-2',
     role: 'assistant',
-    content: 'Tôi đã phân tích AST của file `src/auth/service.ts` bằng Tree-sitter và bổ sung logic xác thực JWT an toàn kèm kiểm tra payload expiration.\n\nBạn có thể kiểm tra **Visual Diff** tại khung Canvas bên trái và nhấn **Accept Changes** (⌘↵) để ghi đè code.',
+    content: tm('mock.replyDemo'),
     timestamp: Date.now() - 1000 * 60 * 2,
     thinking: {
       id: 'think-1',
-      thought: '1. Khởi động AST query cho file `src/auth/service.ts`.\n2. Phát hiện method `validateUser` chưa có implementation.\n3. Đọc type definition của `jsonwebtoken` qua LSP.\n4. Tạo patch code hash-anchored không làm vỡ các method khác.',
+      thought: tm('mock.thoughtDemo'),
       timestamp: Date.now() - 1000 * 60 * 2.5,
       completed: true,
     },
@@ -368,8 +369,8 @@ export const DEMO_ARTIFACT: ArtifactDocument = DEMO_ARTIFACTS[0];
 export const DEMO_TOOL_APPROVAL_REQUEST: OmpUiRequest = {
   id: 'ui-demo-approval',
   method: 'select',
-  title: 'Cho phép thực thi lệnh bash: "npm run build"',
-  message: 'Lệnh này sẽ biên dịch toàn bộ dự án sang thư mục dist/.',
+  title: tm('mock.bashTitle'),
+  message: tm('mock.bashMessage'),
   options: ['Approve', 'Deny'],
   isToolApproval: true,
   timeout: 30000,
@@ -378,13 +379,13 @@ export const DEMO_TOOL_APPROVAL_REQUEST: OmpUiRequest = {
 export const DEMO_GENERIC_SELECT_REQUEST: OmpUiRequest = {
   id: 'ui-demo-select',
   method: 'select',
-  title: 'Chọn chiến lược merge cho branch hiện tại',
-  message: 'Vui lòng chọn một tùy chọn bên dưới để tiếp tục:',
+  title: tm('mock.mergeTitle'),
+  message: tm('mock.mergeMessage'),
   options: ['Create a merge commit', 'Squash and merge', 'Rebase and merge'],
   optionDetails: [
-    { label: 'Create a merge commit', description: 'Tất cả commit từ branch sẽ được giữ lại' },
-    { label: 'Squash and merge', description: 'Gộp tất cả commit thành 1 commit duy nhất' },
-    { label: 'Rebase and merge', description: 'Thêm tuần tự từng commit vào main' },
+    { label: tm('mock.mergeOption1Label'), description: tm('mock.mergeOption1Desc') },
+    { label: tm('mock.mergeOption2Label'), description: tm('mock.mergeOption2Desc') },
+    { label: tm('mock.mergeOption3Label'), description: tm('mock.mergeOption3Desc') },
   ],
   isToolApproval: false,
 };

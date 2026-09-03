@@ -84,6 +84,31 @@ if (sub === 'ps') {
     const name = args[2];
     console.log(\`[log 1] \${name} starting\\n[log 2] \${name} ready\`);
     process.exit(0);
+  } else if (action === 'info') {
+    const name = args[2];
+    if (name === 'error-target') {
+      console.error('Error: daemon not found');
+      process.exit(1);
+    }
+    const payload = {
+      name: name,
+      id: 'mock-uuid-1234',
+      state: 'running',
+      command: 'bun run dev',
+      spec: {
+        name: name,
+        application: 'bun',
+        args: ['run', 'dev'],
+        cwd: '/mock/project',
+        pty: false,
+        ready: { log: 'ready', timeoutMs: 15000 },
+        restart: 'no',
+        persist: false,
+        detached: false
+      }
+    };
+    console.log(JSON.stringify(payload));
+    process.exit(0);
   }
 } else if (sub === 'worktree') {
   const action = args[1];
@@ -156,6 +181,23 @@ process.exit(0);
     assert(res.logs?.includes('dev-server ready'));
   });
 
+  // Test 5b: info
+  await asyncTest('info fetches daemon specification and status detail', async () => {
+    const res = await manager.info(mockOpsScript, 'dev-server');
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.daemon?.name, 'dev-server');
+    assert.strictEqual(res.daemon?.id, 'mock-uuid-1234');
+    assert.strictEqual(res.daemon?.spec?.application, 'bun');
+    assert.strictEqual(res.daemon?.spec?.ready?.log, 'ready');
+  });
+
+  // Test 5c: info error handling
+  await asyncTest('info handles non-existent daemon error', async () => {
+    const res = await manager.info(mockOpsScript, 'error-target');
+    assert.strictEqual(res.success, false);
+    assert(res.error?.includes('daemon not found') || res.error?.includes('Lỗi'));
+  });
+
   // Test 6: listWorktrees
   await asyncTest('listWorktrees parses worktree list', async () => {
     const res = await manager.listWorktrees(mockOpsScript);
@@ -187,10 +229,24 @@ test('Preload & Main IPC contracts for ps & worktrees are properly wired', () =>
   assert(preloadSource.includes('omp:worktree-list'), 'preload.ts must invoke omp:worktree-list');
   assert(preloadSource.includes('omp:worktree-clear'), 'preload.ts must invoke omp:worktree-clear');
 
+  assert(preloadSource.includes('omp:ps-info'), 'preload.ts must invoke omp:ps-info');
+  assert(preloadSource.includes('omp:ps-logs-follow-start'), 'preload.ts must invoke omp:ps-logs-follow-start');
+  assert(preloadSource.includes('omp:ps-logs-follow-stop'), 'preload.ts must invoke omp:ps-logs-follow-stop');
+  assert(preloadSource.includes('omp:ps-log-line'), 'preload.ts must listen to omp:ps-log-line');
+  assert(preloadSource.includes('getProcessInfo'), 'preload.ts must expose getProcessInfo');
+  assert(preloadSource.includes('startProcessLogFollow'), 'preload.ts must expose startProcessLogFollow');
+  assert(preloadSource.includes('stopProcessLogFollow'), 'preload.ts must expose stopProcessLogFollow');
+  assert(preloadSource.includes('onPsLogLine'), 'preload.ts must expose onPsLogLine');
+
   const mainSource = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8');
   assert(mainSource.includes('omp:ps-list'), 'main.ts must handle omp:ps-list');
   assert(mainSource.includes('omp:ps-control'), 'main.ts must handle omp:ps-control');
   assert(mainSource.includes('omp:ps-logs'), 'main.ts must handle omp:ps-logs');
+  assert(mainSource.includes('omp:ps-info'), 'main.ts must handle omp:ps-info');
+  assert(mainSource.includes('omp:ps-logs-follow-start'), 'main.ts must handle omp:ps-logs-follow-start');
+  assert(mainSource.includes('omp:ps-logs-follow-stop'), 'main.ts must handle omp:ps-logs-follow-stop');
+  assert(mainSource.includes('disposeAll'), 'main.ts must define disposeAll');
+  assert(mainSource.includes("app.on('before-quit'"), 'main.ts must listen to before-quit');
   assert(mainSource.includes('omp:worktree-list'), 'main.ts must handle omp:worktree-list');
   assert(mainSource.includes('omp:worktree-clear'), 'main.ts must handle omp:worktree-clear');
 });

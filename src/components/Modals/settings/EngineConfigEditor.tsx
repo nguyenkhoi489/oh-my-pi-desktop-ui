@@ -65,12 +65,12 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
   const [configPath, setConfigPath] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Quản lý các nhóm đang mở (nhóm ghim mở sẵn theo mặc định)
+  // Open group state (pinned group open by default)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['__pinned__']));
-  // Quản lý các key đang mở rộng mô tả chi tiết
+  // Expanded description keys state
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
 
-  // Quản lý giá trị nhập liệu bản nháp cho từng key
+  // Draft input values state per key
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set());
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
@@ -79,14 +79,14 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
 
   const savedTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
   const requestIdRef = useRef<number>(0);
-  // Dọn dẹp timer khi unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       Object.values(savedTimersRef.current).forEach((timer) => clearTimeout(timer));
     };
   }, []);
 
-  // Nạp danh sách cấu hình từ engine
+  // Load configuration entries from engine
   const loadConfig = useCallback(
     async (forceRefresh = false) => {
       if (!getEngineConfig) return;
@@ -101,7 +101,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
         if (currentRequestId !== requestIdRef.current) return;
         if (result.success && result.entries) {
           setEntries(result.entries);
-          // Đồng bộ giá trị nháp ban đầu
+          // Synchronize initial draft values
           const initialDrafts: Record<string, string> = {};
           result.entries.forEach((e) => {
             initialDrafts[e.key] = formatConfigValue(e.value);
@@ -125,7 +125,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
     [getEngineConfig, currentProfile, t],
   );
 
-  // Nạp đường dẫn file cấu hình engine
+  // Load engine configuration file path
   useEffect(() => {
     if (!getEngineConfigPath) return;
     getEngineConfigPath({ profile: currentProfile })
@@ -137,23 +137,23 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
       .catch(() => {});
   }, [getEngineConfigPath, currentProfile]);
 
-  // Nạp cấu hình lần đầu hoặc khi profile thay đổi
+  // Load config initially or when profile changes
   useEffect(() => {
     loadConfig(false);
   }, [loadConfig]);
 
-  // Lọc danh sách theo từ khóa tìm kiếm
+  // Filter entries by search query
   const filteredEntries = useMemo(() => {
     return filterEntries(entries, searchQuery);
   }, [entries, searchQuery]);
 
-  // Tách nhóm cấu hình ghim và các nhóm prefix
+  // Split into pinned config keys and prefix groups
   const { pinnedEntries, prefixGroups } = useMemo(() => {
     const pinnedSet = new Set<string>(PINNED_CONFIG_KEYS);
     const pinned: EngineConfigEntry[] = [];
     const nonPinned: EngineConfigEntry[] = [];
 
-    // Tìm các key ghim theo thứ tự danh sách ghim
+    // Find pinned keys following pinned key order
     const entryMap = new Map<string, EngineConfigEntry>();
     filteredEntries.forEach((e) => entryMap.set(e.key, e));
 
@@ -170,7 +170,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
         }
       });
     } else {
-      // Khi tìm kiếm, hiển thị mọi match trong pinned và prefix groups
+      // On search, display all matches in pinned and prefix groups
       filteredEntries.forEach((e) => {
         if (pinnedSet.has(e.key)) {
           pinned.push(e);
@@ -183,7 +183,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
     return { pinnedEntries: pinned, prefixGroups: groups };
   }, [filteredEntries, searchQuery]);
 
-  // Khi người dùng gõ từ khóa tìm kiếm, tự động mở tất cả nhóm có kết quả
+  // Auto-expand matching groups when search query is entered
   useEffect(() => {
     if (searchQuery.trim()) {
       const allGroupKeys = new Set<string>(Object.keys(prefixGroups));
@@ -194,7 +194,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
     }
   }, [searchQuery, prefixGroups, pinnedEntries.length]);
 
-  // Đóng mở một nhóm
+  // Toggle group open/closed
   const toggleGroup = useCallback((groupKey: string) => {
     setOpenGroups((prev) => {
       const next = new Set(prev);
@@ -207,7 +207,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
     });
   }, []);
 
-  // Đóng mở mô tả chi tiết của một key
+  // Toggle expanded description for a key
   const toggleDescription = useCallback((key: string) => {
     setExpandedDescriptions((prev) => {
       const next = new Set(prev);
@@ -220,7 +220,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
     });
   }, []);
 
-  // Đánh dấu thành công và bật checkmark ngắn
+  // Mark key saved and show transient checkmark
   const markKeySaved = useCallback((key: string) => {
     setSavedKeys((prev) => new Set(prev).add(key));
     if (savedTimersRef.current[key]) {
@@ -236,14 +236,14 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
     }, 2000);
   }, []);
 
-  // Thực hiện lưu giá trị cấu hình xuống engine
+  // Save config value to engine
   const handleSaveKey = useCallback(
     async (entry: EngineConfigEntry, rawValueOverride?: unknown) => {
       if (!setEngineConfigValue) return;
       const key = entry.key;
       const rawValue = rawValueOverride !== undefined ? rawValueOverride : (draftValues[key] ?? formatConfigValue(entry.value));
 
-      // Kiểm tra tính hợp lệ của giá trị
+      // Validate input value
       const coerced = coerceInput(entry.type, rawValue);
       if (coerced.error) {
         setKeyErrors((prev) => ({ ...prev, [key]: t(coerced.error!) }));
@@ -257,7 +257,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
         return next;
       });
 
-      // Cập nhật optimistic giá trị trên UI
+      // Optimistically update UI value
       setEntries((prev) =>
         prev.map((e) => (e.key === key ? { ...e, value: coerced.value } : e)),
       );
@@ -279,7 +279,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
           }));
           markKeySaved(key);
         } else {
-          // Revert và báo lỗi nguyên văn từ engine
+          // Revert and surface engine error message
           setEntries((prev) =>
             prev.map((e) => (e.key === key ? { ...e, value: entry.value } : e)),
           );
@@ -304,7 +304,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
     [setEngineConfigValue, draftValues, currentProfile, markKeySaved, t],
   );
 
-  // Khôi phục giá trị cấu hình về mặc định của engine
+  // Reset configuration value to engine default
   const handleResetKey = useCallback(
     async (entry: EngineConfigEntry) => {
       if (!resetEngineConfigValue) return;
@@ -354,7 +354,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
     [resetEngineConfigValue, currentProfile, loadConfig, markKeySaved],
   );
 
-  // Thay đổi draft value của một key
+  // Handle draft value change for a key
   const handleDraftChange = useCallback((key: string, value: string) => {
     setDraftValues((prev) => ({ ...prev, [key]: value }));
     setDirtyKeys((prev) => new Set(prev).add(key));
@@ -365,11 +365,11 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
     });
   }, []);
 
-  // Tính toán số dòng render và áp dụng giới hạn MAX_RENDER_CONFIG_ROWS (Rule 4)
+  // Count rendered rows and enforce MAX_RENDER_CONFIG_ROWS cap (Rule 4)
   let renderedCount = 0;
   let isCapReached = false;
 
-  // Render một hàng cấu hình
+  // Render one configuration row
   const renderConfigRow = (entry: EngineConfigEntry) => {
     if (renderedCount >= MAX_RENDER_CONFIG_ROWS) {
       isCapReached = true;
@@ -399,7 +399,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
         key={key}
         className="p-3.5 rounded-xl border border-border bg-surface/40 hover:bg-surface/70 transition-all space-y-2.5"
       >
-        {/* Header hàng: Tên key + Type badge + Override badge + Action buttons */}
+        {/* Row Header: Key name + Type badge + Override badge + Action buttons */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -420,7 +420,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
               )}
             </div>
 
-            {/* Mô tả của key */}
+            {/* Key description */}
             {entry.description && (
               <div className="mt-1">
                 <p
@@ -436,7 +436,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
             )}
           </div>
 
-          {/* Action buttons góc phải: Status indicator & Reset button */}
+          {/* Action buttons on right: Status indicator & Reset button */}
           <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
             {isSaved && (
               <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
@@ -461,7 +461,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
           </div>
         </div>
 
-        {/* Khu vực nhập liệu tùy theo kiểu dữ liệu */}
+        {/* Input area based on data type */}
         <div className="pt-1">
           {isBoolean ? (
             <div className="flex items-center justify-between">
@@ -560,7 +560,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
           )}
         </div>
 
-        {/* Hiển thị thông báo lỗi nếu có */}
+        {/* Error message display if any */}
         {keyError && (
           <div className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400 text-xs pt-0.5">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -599,7 +599,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
           </button>
         </div>
 
-        {/* Đường dẫn file config nếu có */}
+        {/* Config file path if available */}
         {configPath && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-highlight/50 border border-border text-xs text-slate-500 dark:text-zinc-400">
             <FileCode className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-zinc-500" />
@@ -610,7 +610,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
           </div>
         )}
 
-        {/* Thanh tìm kiếm */}
+        {/* Search bar */}
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" />
           <input
@@ -631,7 +631,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
         </div>
       </div>
 
-      {/* Thông báo lỗi tải cấu hình */}
+      {/* Load config error banner */}
       {error && (
         <div className="p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -647,7 +647,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
         </div>
       )}
 
-      {/* Danh sách cấu hình */}
+      {/* Configuration list */}
       {loading && entries.length === 0 ? (
         <div className="py-12 text-center text-xs text-slate-400 dark:text-zinc-500 space-y-2">
           <RotateCw className="w-5 h-5 animate-spin mx-auto text-codex-accent" />
@@ -661,7 +661,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Nhóm ghim: Thường dùng */}
+          {/* Pinned group: Common settings */}
           {pinnedEntries.length > 0 && (
             <div className="border border-border/80 rounded-2xl overflow-hidden bg-surface/20">
               <button
@@ -692,7 +692,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
             </div>
           )}
 
-          {/* Các nhóm prefix */}
+          {/* Prefix groups */}
           {prefixGroupKeys.map((prefix) => {
             const groupEntries = prefixGroups[prefix];
             if (!groupEntries || groupEntries.length === 0) return null;
@@ -732,7 +732,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
             );
           })}
 
-          {/* Cảnh báo giới hạn dòng render nếu có */}
+          {/* Row render cap warning */}
           {isCapReached && (
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />

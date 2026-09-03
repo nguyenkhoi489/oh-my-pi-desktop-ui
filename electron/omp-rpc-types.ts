@@ -336,6 +336,36 @@ export interface SetHostUriSchemesCommand {
   id?: string;
   schemes: Array<{ scheme: string; immutable?: boolean; write?: boolean }>;
 }
+export interface GetLoginProvidersCommand {
+  type: 'get_login_providers';
+  id?: string;
+  [key: string]: unknown;
+}
+
+export interface LoginCommand {
+  type: 'login';
+  id?: string;
+  providerId: string;
+  [key: string]: unknown;
+}
+
+export interface LoginProviderItemRpc {
+  id: string;
+  name: string;
+  available?: boolean;
+  authenticated?: boolean;
+}
+
+export interface GetLoginProvidersResponseData {
+  providers?: LoginProviderItemRpc[];
+  [key: string]: unknown;
+}
+
+export interface LoginResponseData {
+  providerId?: string;
+  [key: string]: unknown;
+}
+
 
 export interface HostUriRequestEvent {
   type: 'host_uri_request';
@@ -439,7 +469,9 @@ export type OmpCommandFrame =
   | SetHostUriSchemesCommand
   | HostToolResultFrame
   | HostToolUpdateFrame
-  | HostUriResultFrame;
+  | HostUriResultFrame
+  | GetLoginProvidersCommand
+  | LoginCommand;
 // ==========================================
 // Message Content & Envelope Definitions
 // ==========================================
@@ -689,6 +721,9 @@ export interface ExtensionUiRequestEvent {
   statusText?: string;
   notifyType?: string;
   params?: unknown;
+  url?: string;
+  launchUrl?: string;
+  instructions?: string;
   [key: string]: unknown;
 }
 

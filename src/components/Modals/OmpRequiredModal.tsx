@@ -9,7 +9,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { OmpInstallStatus } from '../../types';
-
+import { useI18n } from '../../i18n/I18nProvider';
 interface OmpRequiredModalProps {
   isOpen: boolean;
   installStatus?: OmpInstallStatus | null;
@@ -28,29 +28,29 @@ export const OmpRequiredModal: React.FC<OmpRequiredModalProps> = ({
   onSelectCustomFile,
   onSetCustomPath,
 }) => {
+  const { t } = useI18n();
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [manualPath, setManualPath] = useState<string>('');
-
   if (!isOpen) return null;
 
   const installMethods = [
     {
-      name: '1. Cài đặt qua Bun (Khuyên dùng)',
+      name: t('ompRequired.method.bun.name'),
       cmd: 'bun install -g @oh-my-pi/pi-coding-agent',
       tag: 'Recommended ⭐',
-      desc: 'Tối ưu tốc độ cao nhất với Bun runtime trên macOS.',
+      desc: t('ompRequired.method.bun.desc'),
     },
     {
-      name: '2. Cài đặt qua Homebrew',
+      name: t('ompRequired.method.brew.name'),
       cmd: 'brew install can1357/tap/omp',
       tag: 'Homebrew',
-      desc: 'Tự động quản lý PATH và cập nhật gói qua brew.',
+      desc: t('ompRequired.method.brew.desc'),
     },
     {
-      name: '3. Cài đặt bằng Shell Script',
+      name: t('ompRequired.method.curl.name'),
       cmd: 'curl -fsSL https://omp.sh/install | sh',
       tag: 'Direct Curl',
-      desc: 'Tự động tải và cài đặt binary vào hệ thống.',
+      desc: t('ompRequired.method.curl.desc'),
     },
   ];
 
@@ -78,14 +78,14 @@ export const OmpRequiredModal: React.FC<OmpRequiredModalProps> = ({
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                Requirement
+                {t('ompRequired.badge')}
               </span>
             </div>
             <h2 className="text-base font-bold text-slate-900 dark:text-zinc-100 mt-1">
-              Chưa phát hiện oh-my-pi (OMP) Engine
+              {t('ompRequired.title')}
             </h2>
             <p className="text-xs text-slate-600 dark:text-zinc-400 mt-1 leading-relaxed">
-              Ứng dụng <strong>OMP Agent</strong> cần engine lõi <strong>oh-my-pi</strong> để thực hiện phân tích cú pháp AST, kiểm tra LSP và chạy chế độ RPC ngầm.
+              {t('ompRequired.desc')}
             </p>
           </div>
         </div>
@@ -97,15 +97,15 @@ export const OmpRequiredModal: React.FC<OmpRequiredModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-codex-accent" />
-                Nếu bạn đã cài OMP ở đường dẫn riêng:
+                {t('ompRequired.customPathTitle')}
               </span>
               <button
                 onClick={onSelectCustomFile}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-highlight hover:bg-surface border border-border text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer"
-                title="Chọn file nhị phân trên máy"
+                title={t('ompRequired.browseTitle')}
               >
                 <FolderSearch className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-400" />
-                <span>Chọn file nhị phân...</span>
+                <span>{t('ompRequired.browseBtn')}</span>
               </button>
             </div>
 
@@ -114,7 +114,7 @@ export const OmpRequiredModal: React.FC<OmpRequiredModalProps> = ({
                 type="text"
                 value={manualPath}
                 onChange={(e) => setManualPath(e.target.value)}
-                placeholder="Hoặc dán đường dẫn (ví dụ: ~/.bun/bin/omp, /usr/local/bin/omp)"
+                placeholder={t('ompRequired.placeholder')}
                 className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-border bg-panel text-slate-800 dark:text-zinc-200 outline-none font-mono focus:border-codex-accent"
               />
               <button
@@ -122,14 +122,14 @@ export const OmpRequiredModal: React.FC<OmpRequiredModalProps> = ({
                 disabled={!manualPath.trim()}
                 className="px-3.5 py-1.5 text-xs font-semibold bg-surface-highlight hover:bg-surface text-slate-800 dark:text-zinc-200 rounded-lg border border-border transition-colors disabled:opacity-40 cursor-pointer"
               >
-                Apply
+                {t('ompRequired.apply')}
               </button>
             </div>
           </div>
 
           <div className="text-xs font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5 pt-1">
             <Terminal className="w-4 h-4 text-codex-accent" />
-            <span>Hoặc mở Terminal trên Mac và chạy 1 trong các lệnh sau:</span>
+            <span>{t('ompRequired.terminalOr')}</span>
           </div>
 
           {installMethods.map((method, idx) => (
@@ -151,17 +151,17 @@ export const OmpRequiredModal: React.FC<OmpRequiredModalProps> = ({
                 <button
                   onClick={() => handleCopy(method.cmd, idx)}
                   className="flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white transition-colors text-[11px] shrink-0 cursor-pointer"
-                  title="Copy lệnh"
+                  title={t('ompRequired.copyCmd')}
                 >
                   {copiedIndex === idx ? (
                     <>
                       <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-emerald-400 font-medium">Copied!</span>
+                      <span className="text-emerald-400 font-medium">{t('ompRequired.copied')}</span>
                     </>
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5" />
-                      <span>Copy</span>
+                      <span>{t('ompRequired.copyCmd')}</span>
                     </>
                   )}
                 </button>
@@ -180,7 +180,7 @@ export const OmpRequiredModal: React.FC<OmpRequiredModalProps> = ({
             onClick={onContinueDemo}
             className="text-xs text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200 font-medium transition-colors cursor-pointer"
           >
-            Dùng thử Demo UI trước →
+            {t('ompRequired.tryDemo')}
           </button>
 
           <div className="flex items-center gap-2">
@@ -190,7 +190,7 @@ export const OmpRequiredModal: React.FC<OmpRequiredModalProps> = ({
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-codex-accent hover:bg-codex-accent-hover text-white shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
-              <span>{isChecking ? 'Đang kiểm tra...' : 'Kiểm tra lại'}</span>
+              <span>{isChecking ? t('ompRequired.checking') : t('ompRequired.recheck')}</span>
             </button>
           </div>
         </div>

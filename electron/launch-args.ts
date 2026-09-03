@@ -28,7 +28,7 @@ export interface OmpLaunchOptions {
   noTitle?: boolean;
 }
 
-// Mở rộng dấu ~ thành thư mục home của người dùng
+// Expand ~ to user home directory
 export function expandHomeDir(targetPath: string): string {
   const trimmed = targetPath.trim();
   if (!trimmed) return '';
@@ -55,7 +55,7 @@ function cleanOptionalString(val: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-// Làm sạch và chuẩn hóa dữ liệu launch options từ settings
+// Sanitize and normalize launch options from settings
 export function sanitizeLaunchOptions(raw: unknown): OmpLaunchOptions {
   if (!raw || typeof raw !== 'object') {
     return {
@@ -117,7 +117,7 @@ export function sanitizeLaunchOptions(raw: unknown): OmpLaunchOptions {
   return result;
 }
 
-// Xây dựng danh sách tham số dòng lệnh từ launch options
+// Build CLI argument list from launch options
 export function buildLaunchArgs(opts?: OmpLaunchOptions | null): string[] {
   if (!opts || typeof opts !== 'object') {
     return [];
@@ -135,7 +135,7 @@ export function buildLaunchArgs(opts?: OmpLaunchOptions | null): string[] {
     }
   }
 
-  // 2. tools vs noTools (noTools loại bỏ tools)
+  // 2. tools vs noTools (noTools overrides tools)
   if (opts.noTools) {
     args.push('--no-tools');
   } else if (opts.tools && opts.tools.length > 0) {
@@ -157,7 +157,7 @@ export function buildLaunchArgs(opts?: OmpLaunchOptions | null): string[] {
     args.push('--no-pty');
   }
 
-  // 5. skills vs noSkills (noSkills loại bỏ skills)
+  // 5. skills vs noSkills (noSkills overrides skills)
   if (opts.noSkills) {
     args.push('--no-skills');
   } else if (opts.skills && opts.skills.length > 0) {
@@ -174,7 +174,7 @@ export function buildLaunchArgs(opts?: OmpLaunchOptions | null): string[] {
     args.push('--no-rules');
   }
 
-  // 7. extensions & hooks vs noExtensions (noExtensions loại bỏ extensions & hooks)
+  // 7. extensions & hooks vs noExtensions (noExtensions overrides extensions & hooks)
   if (opts.noExtensions) {
     args.push('--no-extensions');
   } else {

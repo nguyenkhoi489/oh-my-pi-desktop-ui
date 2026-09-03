@@ -1,3 +1,4 @@
+import { tm } from '../shared/i18n/index.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as fs from 'node:fs/promises';
@@ -53,7 +54,7 @@ export interface OmpAgentItem {
   path?: string;
 }
 
-// Helper loại bỏ ANSI codes và parse JSON an toàn hoặc trả về fallback khi rỗng
+// Helper removing ANSI codes and safely parsing JSON or returning fallback when empty
 export function parseJsonOrEmpty<T = unknown>(stdout: string, fallback: T): T {
   if (!stdout) return fallback;
   const clean = stdout.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '').trim();
@@ -83,7 +84,7 @@ function getErrorMessage(err: unknown, defaultMessage: string): string {
 }
 
 export class ExtensionManager {
-  // 1. Danh sách plugins
+  // 1. Plugins list
   public async listPlugins(
     binaryPath: string,
     options?: { local?: boolean }
@@ -164,12 +165,12 @@ export class ExtensionManager {
       return {
         success: false,
         plugins: [],
-        error: getErrorMessage(err, 'Lỗi khi liệt kê plugins'),
+        error: getErrorMessage(err, tm('electron.extensions.listPluginsFailed')),
       };
     }
   }
 
-  // 2. Cài đặt plugin
+  // 2. Install plugin
   public async installPlugin(
     binaryPath: string,
     target: string,
@@ -177,7 +178,7 @@ export class ExtensionManager {
   ): Promise<{ success: boolean; message?: string; error?: string }> {
     const cleanTarget = String(target || '').trim();
     if (!cleanTarget) {
-      return { success: false, error: 'Tên package hoặc plugin không được để trống' };
+      return { success: false, error: tm('electron.extensions.packageOrPluginEmpty') };
     }
 
     const args = ['plugin', 'install', cleanTarget];
@@ -205,16 +206,16 @@ export class ExtensionManager {
       });
 
       const output = `${stdout}\n${stderr}`.trim();
-      return { success: true, message: output || `Đã cài đặt plugin ${cleanTarget} thành công` };
+      return { success: true, message: output || tm('electron.extensions.installSuccess', { name: cleanTarget }) };
     } catch (err: unknown) {
       return {
         success: false,
-        error: getErrorMessage(err, `Lỗi khi cài đặt plugin ${cleanTarget}`),
+        error: getErrorMessage(err, tm('electron.extensions.installFailed', { name: cleanTarget })),
       };
     }
   }
 
-  // 3. Gỡ cài đặt plugin
+  // 3. Uninstall plugin
   public async uninstallPlugin(
     binaryPath: string,
     target: string,
@@ -222,7 +223,7 @@ export class ExtensionManager {
   ): Promise<{ success: boolean; message?: string; error?: string }> {
     const cleanTarget = String(target || '').trim();
     if (!cleanTarget) {
-      return { success: false, error: 'Tên plugin không được để trống' };
+      return { success: false, error: tm('electron.extensions.pluginNameEmpty') };
     }
 
     const args = ['plugin', 'uninstall', cleanTarget];
@@ -247,11 +248,11 @@ export class ExtensionManager {
       });
 
       const output = `${stdout}\n${stderr}`.trim();
-      return { success: true, message: output || `Đã gỡ cài đặt plugin ${cleanTarget}` };
+      return { success: true, message: output || tm('electron.extensions.uninstallSuccess', { name: cleanTarget }) };
     } catch (err: unknown) {
       return {
         success: false,
-        error: getErrorMessage(err, `Lỗi khi gỡ cài đặt plugin ${cleanTarget}`),
+        error: getErrorMessage(err, tm('electron.extensions.uninstallFailed', { name: cleanTarget })),
       };
     }
   }
@@ -263,7 +264,7 @@ export class ExtensionManager {
   ): Promise<{ success: boolean; message?: string; error?: string }> {
     const cleanPath = String(localPath || '').trim();
     if (!cleanPath) {
-      return { success: false, error: 'Đường dẫn thư mục plugin không được để trống' };
+      return { success: false, error: tm('electron.extensions.pluginPathEmpty') };
     }
 
     try {
@@ -277,16 +278,16 @@ export class ExtensionManager {
       });
 
       const output = `${stdout}\n${stderr}`.trim();
-      return { success: true, message: output || `Đã liên kết plugin từ ${cleanPath}` };
+      return { success: true, message: output || tm('electron.extensions.linkSuccess', { path: cleanPath }) };
     } catch (err: unknown) {
       return {
         success: false,
-        error: getErrorMessage(err, `Lỗi khi liên kết plugin từ ${cleanPath}`),
+        error: getErrorMessage(err, tm('electron.extensions.linkFailed', { path: cleanPath })),
       };
     }
   }
 
-  // 5. Doctor kiểm tra plugin health
+  // 5. Doctor checking plugin health
   public async doctor(
     binaryPath: string,
     options?: { fix?: boolean; local?: boolean }
@@ -320,12 +321,12 @@ export class ExtensionManager {
       return {
         success: false,
         items: [],
-        error: getErrorMessage(err, 'Lỗi khi chạy plugin doctor'),
+        error: getErrorMessage(err, tm('electron.extensions.doctorFailed')),
       };
     }
   }
 
-  // 6. Features của plugin
+  // 6. Plugin features
   public async features(
     binaryPath: string,
     pluginName: string,
@@ -333,7 +334,7 @@ export class ExtensionManager {
   ): Promise<{ success: boolean; features?: OmpPluginFeatureItem[]; rawOutput?: string; error?: string }> {
     const cleanName = String(pluginName || '').trim();
     if (!cleanName) {
-      return { success: false, error: 'Tên plugin không được để trống' };
+      return { success: false, error: tm('electron.extensions.pluginNameEmpty') };
     }
 
     const args = ['plugin', 'features', cleanName];
@@ -385,12 +386,12 @@ export class ExtensionManager {
       return {
         success: false,
         features: [],
-        error: getErrorMessage(err, `Lỗi khi lấy danh sách features của plugin ${cleanName}`),
+        error: getErrorMessage(err, tm('electron.extensions.featuresFailed', { name: cleanName })),
       };
     }
   }
 
-  // 7. Toggle feature của plugin (--enable / --disable)
+  // 7. Toggle plugin feature (--enable / --disable)
   public async toggleFeature(
     binaryPath: string,
     pluginName: string,
@@ -401,7 +402,7 @@ export class ExtensionManager {
     const cleanName = String(pluginName || '').trim();
     const cleanFeature = String(feature || '').trim();
     if (!cleanName || !cleanFeature) {
-      return { success: false, error: 'Tên plugin và feature không được để trống' };
+      return { success: false, error: tm('electron.extensions.pluginAndFeatureEmpty') };
     }
 
     const args = [
@@ -427,17 +428,17 @@ export class ExtensionManager {
       const output = `${stdout}\n${stderr}`.trim();
       return {
         success: true,
-        message: output || `Đã ${enabled ? 'bật' : 'tắt'} feature ${cleanFeature} cho plugin ${cleanName}`,
+        message: output || (enabled ? tm('electron.extensions.featureEnabled', { feature: cleanFeature, name: cleanName }) : tm('electron.extensions.featureDisabled', { feature: cleanFeature, name: cleanName })),
       };
     } catch (err: unknown) {
       return {
         success: false,
-        error: getErrorMessage(err, `Lỗi khi chuyển trạng thái feature ${cleanFeature}`),
+        error: getErrorMessage(err, tm('electron.extensions.toggleFeatureFailed', { feature: cleanFeature })),
       };
     }
   }
 
-  // 8. Cấu hình plugin (--set k=v)
+  // 8. Plugin config (--set k=v)
   public async setPluginConfig(
     binaryPath: string,
     pluginName: string,
@@ -446,10 +447,10 @@ export class ExtensionManager {
   ): Promise<{ success: boolean; message?: string; error?: string }> {
     const cleanName = String(pluginName || '').trim();
     if (!cleanName) {
-      return { success: false, error: 'Tên plugin không được để trống' };
+      return { success: false, error: tm('electron.extensions.pluginNameEmpty') };
     }
     if (!Array.isArray(pairs) || pairs.length === 0) {
-      return { success: false, error: 'Danh sách cấu hình không được để trống' };
+      return { success: false, error: tm('electron.extensions.configPairsEmpty') };
     }
 
     const args = ['plugin', 'config', cleanName];
@@ -475,17 +476,17 @@ export class ExtensionManager {
       const output = `${stdout}\n${stderr}`.trim();
       return {
         success: true,
-        message: output || `Đã cập nhật cấu hình cho plugin ${cleanName}`,
+        message: output || tm('electron.extensions.setConfigSuccess', { name: cleanName }),
       };
     } catch (err: unknown) {
       return {
         success: false,
-        error: getErrorMessage(err, `Lỗi khi cập nhật cấu hình plugin ${cleanName}`),
+        error: getErrorMessage(err, tm('electron.extensions.setConfigFailed', { name: cleanName })),
       };
     }
   }
 
-  // 9. Lấy cấu hình plugin
+  // 9. Get plugin config
   public async getPluginConfig(
     binaryPath: string,
     pluginName: string,
@@ -493,7 +494,7 @@ export class ExtensionManager {
   ): Promise<{ success: boolean; config?: Record<string, unknown>; rawOutput?: string; error?: string }> {
     const cleanName = String(pluginName || '').trim();
     if (!cleanName) {
-      return { success: false, error: 'Tên plugin không được để trống' };
+      return { success: false, error: tm('electron.extensions.pluginNameEmpty') };
     }
 
     const args = ['plugin', 'config', cleanName];
@@ -518,12 +519,12 @@ export class ExtensionManager {
       return {
         success: false,
         config: {},
-        error: getErrorMessage(err, `Lỗi khi lấy cấu hình của plugin ${cleanName}`),
+        error: getErrorMessage(err, tm('electron.extensions.getConfigFailed', { name: cleanName })),
       };
     }
   }
 
-  // 10. Bật / Tắt plugin (enable / disable)
+  // 10. Toggle plugin (enable / disable)
   public async togglePlugin(
     binaryPath: string,
     name: string,
@@ -532,7 +533,7 @@ export class ExtensionManager {
   ): Promise<{ success: boolean; message?: string; error?: string }> {
     const cleanName = String(name || '').trim();
     if (!cleanName) {
-      return { success: false, error: 'Tên plugin không được để trống' };
+      return { success: false, error: tm('electron.extensions.pluginNameEmpty') };
     }
 
     const args = ['plugin', enabled ? 'enable' : 'disable', cleanName];
@@ -553,12 +554,12 @@ export class ExtensionManager {
       const output = `${stdout}\n${stderr}`.trim();
       return {
         success: true,
-        message: output || `Đã ${enabled ? 'bật' : 'tắt'} plugin ${cleanName}`,
+        message: output || (enabled ? tm('electron.extensions.enablePluginSuccess', { name: cleanName }) : tm('electron.extensions.disablePluginSuccess', { name: cleanName })),
       };
     } catch (err: unknown) {
       return {
         success: false,
-        error: getErrorMessage(err, `Lỗi khi thay đổi trạng thái plugin ${cleanName}`),
+        error: getErrorMessage(err, tm('electron.extensions.togglePluginFailed', { name: cleanName })),
       };
     }
   }
@@ -592,13 +593,13 @@ export class ExtensionManager {
       const output = `${stdout}\n${stderr}`.trim();
       return {
         success: true,
-        message: output || 'Đã nâng cấp plugin thành công',
+        message: output || tm('electron.extensions.upgradeSuccess'),
         rawOutput: output,
       };
     } catch (err: unknown) {
       return {
         success: false,
-        error: getErrorMessage(err, 'Lỗi khi nâng cấp plugin'),
+        error: getErrorMessage(err, tm('electron.extensions.upgradeFailed')),
       };
     }
   }
@@ -629,7 +630,7 @@ export class ExtensionManager {
         return { success: true, plugins: [], rawOutput: stdout };
       }
 
-      // Thử parse JSON trước
+      // Try to parse JSON first
       const jsonParsed = parseJsonOrEmpty<unknown>(clean, null);
       if (Array.isArray(jsonParsed)) {
         return {
@@ -648,7 +649,7 @@ export class ExtensionManager {
         };
       }
 
-      // Parse định dạng text: "Available Plugins:\n  name@version\n    description"
+      // Parse text format: "Available Plugins:\n  name@version\n    description"
       const plugins: OmpDiscoverPluginItem[] = [];
       const lines = clean.split('\n');
       let currentPlugin: OmpDiscoverPluginItem | null = null;
@@ -680,12 +681,12 @@ export class ExtensionManager {
       return {
         success: false,
         plugins: [],
-        error: getErrorMessage(err, 'Lỗi khi khám phá plugins từ marketplace'),
+        error: getErrorMessage(err, tm('electron.extensions.marketplaceDiscoverFailed')),
       };
     }
   }
 
-  // 13. Quản lý marketplace (list | add | remove)
+  // 13. Marketplace management (list | add | remove)
   public async marketplace(
     binaryPath: string,
     action: 'list' | 'add' | 'remove',
@@ -698,7 +699,7 @@ export class ExtensionManager {
     if ((cleanAction === 'add' || cleanAction === 'remove') && !cleanSource) {
       return {
         success: false,
-        error: `Cần cung cấp source hoặc tên marketplace để thực hiện ${cleanAction}`,
+        error: tm('electron.extensions.marketplaceSourceEmpty', { action: cleanAction }),
       };
     }
 
@@ -766,33 +767,33 @@ export class ExtensionManager {
 
       return {
         success: true,
-        message: output || `Marketplace ${cleanAction} thành công`,
+        message: output || tm('electron.extensions.marketplaceActionSuccess', { action: cleanAction }),
         rawOutput: output,
       };
     } catch (err: unknown) {
       return {
         success: false,
         marketplaces: [],
-        error: getErrorMessage(err, `Lỗi khi thực hiện thao tác marketplace ${cleanAction}`),
+        error: getErrorMessage(err, tm('electron.extensions.marketplaceActionFailed', { action: cleanAction })),
       };
     }
   }
 
-  // 14. Danh sách agents (bundled + user + project)
+  // 14. Agents list (bundled + user + project)
   public async listAgents(
     _binaryPath: string,
     projectCwd?: string
   ): Promise<{ success: boolean; agents?: OmpAgentItem[]; error?: string }> {
     const agents: OmpAgentItem[] = [];
 
-    // Danh sách bundled mặc định đã biết
+    // Known default bundled agents list
     const BUNDLED_AGENTS = [
-      { id: 'scout', name: 'Codebase Scout', description: 'Agent quét nhanh cấu trúc và tìm file liên quan' },
-      { id: 'reviewer', name: 'Code Reviewer', description: 'Review chất lượng, bảo mật và logic' },
-      { id: 'security-reviewer', name: 'Security Reviewer', description: 'Rà soát lỗ hổng STRIDE + OWASP' },
-      { id: 'designer', name: 'UI/UX Designer', description: 'Thiết kế giao diện và tinh chỉnh visual' },
-      { id: 'librarian', name: 'Librarian', description: 'Tra cứu tài liệu và API thư viện' },
-      { id: 'sonic', name: 'Sonic (Low-reasoning)', description: 'Thực thi các thao tác cơ học nhanh' },
+      { id: 'scout', name: 'Codebase Scout', description: tm('electron.extensions.bundledAgent.scoutDesc') },
+      { id: 'reviewer', name: 'Code Reviewer', description: tm('electron.extensions.bundledAgent.reviewerDesc') },
+      { id: 'security-reviewer', name: 'Security Reviewer', description: tm('electron.extensions.bundledAgent.securityDesc') },
+      { id: 'designer', name: 'UI/UX Designer', description: tm('electron.extensions.bundledAgent.designerDesc') },
+      { id: 'librarian', name: 'Librarian', description: tm('electron.extensions.bundledAgent.librarianDesc') },
+      { id: 'sonic', name: 'Sonic (Low-reasoning)', description: tm('electron.extensions.bundledAgent.sonicDesc') },
     ];
 
     for (const b of BUNDLED_AGENTS) {
@@ -804,7 +805,7 @@ export class ExtensionManager {
       });
     }
 
-    // Quét user agents (~/.omp/agent/agents)
+    // Scan user agents (~/.omp/agent/agents)
     try {
       const userDir = path.join(os.homedir(), '.omp', 'agent', 'agents');
       const files = await fs.readdir(userDir, { withFileTypes: true });
@@ -821,7 +822,7 @@ export class ExtensionManager {
       }
     } catch {}
 
-    // Quét project agents (./.omp/agents)
+    // Scan project agents (./.omp/agents)
     if (projectCwd) {
       try {
         const projDir = path.join(projectCwd, '.omp', 'agents');
@@ -877,7 +878,7 @@ export class ExtensionManager {
     } catch (err: unknown) {
       return {
         success: false,
-        error: getErrorMessage(err, 'Lỗi khi giải nén bundled agents'),
+        error: getErrorMessage(err, tm('electron.extensions.extractBundledFailed')),
       };
     }
   }

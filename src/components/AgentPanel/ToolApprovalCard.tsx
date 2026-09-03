@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ShieldAlert, Check, X, Clock } from 'lucide-react';
 import { OmpUiRequest } from '../../types';
+import { useI18n } from '../../i18n/I18nProvider';
 
 export interface ToolApprovalCardProps {
   request: OmpUiRequest;
@@ -15,9 +16,10 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({
   onApprove,
   onDeny,
 }) => {
+  const { t } = useI18n();
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
-  // Khởi tạo đếm ngược nếu request có timeout thật từ engine
+  // Initialize countdown if request has actual engine timeout
   useEffect(() => {
     if (typeof request.timeout === 'number' && request.timeout > 0) {
       const initialSeconds = Math.max(
@@ -30,7 +32,7 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({
     }
   }, [request.id, request.timeout]);
 
-  // Bộ đếm giây trung thực
+  // Countdown seconds timer
   useEffect(() => {
     if (timeLeft === null || timeLeft <= 0) return;
 
@@ -41,7 +43,7 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({
     return () => clearInterval(timer);
   }, [timeLeft]);
 
-  // Phím tắt: ⌘↵ Approve, ⌘⌫ Deny (KHÔNG có ESC dismiss)
+  // Shortcuts: Cmd+Enter Approve, Cmd+Backspace Deny (NO ESC dismiss)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey) {
@@ -70,8 +72,8 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({
         }`}
         title={
           timeLeft === 0
-            ? 'Đã hết thời gian chờ engine xử lý'
-            : `Engine tự xử lý sau ${timeLeft}s`
+            ? t('toolApproval.timeoutExpired')
+            : t('toolApproval.timeout', { timeLeft })
         }
       >
         <Clock className="w-3 h-3" />
@@ -91,7 +93,7 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate">
-                Cấp quyền thực thi công cụ
+                {t('toolApproval.title')}
               </span>
               {queueLength > 1 && (
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
@@ -100,7 +102,7 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({
               )}
             </div>
             <p className="text-[11px] text-slate-500 dark:text-zinc-400 truncate">
-              OMP Agent yêu cầu quyền chạy hành động sau:
+              {t('toolApproval.desc')}
             </p>
           </div>
         </div>
@@ -110,7 +112,7 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({
       {/* Tool details */}
       <div className="p-2.5 rounded-xl bg-background/80 border border-border space-y-1.5 text-xs">
         <div className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono uppercase tracking-wider">
-          Chi tiết công cụ & yêu cầu:
+          {t('toolApproval.details')}
         </div>
         <pre className="p-2 rounded-lg bg-surface text-amber-600 dark:text-amber-400 font-mono text-[11px] max-h-40 overflow-y-auto whitespace-pre-wrap break-words border border-border/70 leading-relaxed selection:bg-amber-500/20">
           {request.title}
@@ -125,7 +127,7 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({
       {/* Action buttons */}
       <div className="flex items-center justify-between pt-0.5">
         <span className="text-[10.5px] text-slate-400 dark:text-zinc-500">
-          Phím tắt: <kbd className="font-mono text-[10px] px-1 py-0.5 rounded bg-surface border border-border">⌘↵</kbd> duyệt · <kbd className="font-mono text-[10px] px-1 py-0.5 rounded bg-surface border border-border">⌘⌫</kbd> từ chối
+          {t('toolApproval.shortcutHint')}
         </span>
 
         <div className="flex items-center gap-2">
@@ -135,7 +137,7 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300 border border-border transition-colors cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
-            <span>Từ chối (Deny)</span>
+            <span>{t('toolApproval.deny')}</span>
           </button>
 
           <button
@@ -144,7 +146,7 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow-sm transition-all cursor-pointer"
           >
             <Check className="w-3.5 h-3.5" />
-            <span>Cho phép (Approve)</span>
+            <span>{t('toolApproval.approve')}</span>
           </button>
         </div>
       </div>

@@ -1,5 +1,7 @@
-import { execFile } from 'node:child_process';
+import { tm } from '../shared/i18n/index.ts';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
+import readline from 'node:readline';
 import { buildExtendedPath } from './models-config.ts';
 
 const execFileAsync = promisify(execFile);
@@ -23,6 +25,28 @@ export interface OmpDaemonInfo {
   supervised?: boolean;
 }
 
+export interface OmpDaemonSpec {
+  name?: string;
+  application?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  pty?: boolean;
+  ready?: {
+    log?: string;
+    port?: number;
+    timeoutMs?: number;
+    timeout?: number;
+  };
+  restart?: string;
+  persist?: boolean;
+  detached?: boolean;
+}
+
+export interface OmpDaemonDetail extends OmpDaemonInfo {
+  spec?: OmpDaemonSpec;
+}
+
 export interface OmpPsScope {
   kind: 'project' | 'global' | string;
   projectDir?: string;
@@ -43,9 +67,195 @@ export interface OmpWorktreeInfo {
   [key: string]: unknown;
 }
 
-// Quản lý các daemon background processes và git worktrees
+
+// Stream log realtime from daemon process via --follow flag
+export class ProcessLogFollower {
+  private child: ChildProcess | null = null;
+  private rlStdout: readline.Interface | null = null;
+  private rlStderr: readline.Interface | null = null;
+  private idleTimer: NodeJS.Timeout | null = null;
+  private runningName: string | null = null;
+
+  public get currentProcessName(): string | null {
+    return this.runningName;
+  }
+
+  public isRunning(): boolean {
+    return this.child !== null && !this.child.killed;
+  }
+
+  public start(
+    binaryPath: string,
+    name: string,
+    options: { lines?: number; head?: boolean; grep?: string; global?: string } = {},
+    onLine: (line: string) => void
+  ): { success: boolean; error?: string } {
+    this.stop();
+
+    const cleanName = String(name || '').trim();
+    if (!cleanName) {
+      return { success: false, error: tm('electron.ops.processNameEmpty') };
+    }
+
+    const args = ['ps', 'logs', cleanName, '--follow'];
+    if (options.lines !== undefined) {
+      args.push(`--lines=${options.lines}`);
+    }
+    if (options.head) {
+      args.push('--head');
+    }
+    if (options.grep) {
+      args.push(`--grep=${options.grep}`);
+    }
+    if (options.global) {
+      args.push(`--global=${options.global}`);
+    }
+
+    try {
+      const child = spawn(binaryPath, args, {
+        env: {
+          ...process.env,
+          PATH: buildExtendedPath(),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      this.child = child;
+      this.runningName = cleanName;
+
+      // 10 minutes idle timeout to prevent orphan processes
+      this.idleTimer = setTimeout(() => {
+        this.stop();
+      }, 10 * 60 * 1000);
+
+      if (child.stdout) {
+        this.rlStdout = readline.createInterface({ input: child.stdout });
+        this.rlStdout.on('line', (line) => {
+          onLine(line);
+        });
+      }
+
+      if (child.stderr) {
+        this.rlStderr = readline.createInterface({ input: child.stderr });
+        this.rlStderr.on('line', (line) => {
+          onLine(line);
+        });
+      }
+
+      child.on('error', (err) => {
+        if (this.child === child) {
+          onLine(`[Process log error: ${err.message}]`);
+          this.stop();
+        }
+      });
+
+      child.on('close', () => {
+        if (this.child === child) {
+          this.stop();
+        }
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      this.stop();
+      return { success: false, error: err?.message || tm('electron.ops.followLogsFailed', { name: cleanName }) };
+    }
+  }
+  public stop(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    if (this.rlStdout) {
+      this.rlStdout.close();
+      this.rlStdout = null;
+    }
+    if (this.rlStderr) {
+      this.rlStderr.close();
+      this.rlStderr = null;
+    }
+    if (this.child) {
+      const childToKill = this.child;
+      this.child = null;
+      try {
+        if (!childToKill.killed) {
+          childToKill.kill('SIGTERM');
+          setTimeout(() => {
+            try {
+              if (!childToKill.killed) {
+                childToKill.kill('SIGKILL');
+              }
+            } catch {}
+          }, 1000).unref();
+        }
+      } catch {}
+    }
+    this.runningName = null;
+  }
+}
+// Manage daemon background processes and git worktrees
 export class OpsManager {
-  // 1. Danh sách background processes
+  private logFollower = new ProcessLogFollower();
+
+  public getLogFollower(): ProcessLogFollower {
+    return this.logFollower;
+  }
+
+  public startLogFollow(
+    binaryPath: string,
+    name: string,
+    options: { lines?: number; head?: boolean; grep?: string; global?: string },
+    onLine: (line: string) => void
+  ): { success: boolean; error?: string } {
+    return this.logFollower.start(binaryPath, name, options, onLine);
+  }
+
+  public stopLogFollow(): { success: boolean } {
+    this.logFollower.stop();
+    return { success: true };
+  }
+
+  public dispose(): void {
+    this.logFollower.stop();
+  }
+
+  // Daemon details (ps info <name> --json [--global])
+  public async info(
+    binaryPath: string,
+    name: string,
+    options?: { global?: string }
+  ): Promise<{ success: boolean; daemon?: OmpDaemonDetail; error?: string }> {
+    const cleanName = String(name || '').trim();
+    if (!cleanName) {
+      return { success: false, error: tm('electron.ops.processNameEmpty') };
+    }
+
+    const args = ['ps', 'info', cleanName, '--json'];
+    if (options?.global) {
+      args.push(`--global=${options.global}`);
+    }
+
+    try {
+      const { stdout } = await execFileAsync(binaryPath, args, {
+        env: {
+          ...process.env,
+          PATH: buildExtendedPath(),
+        },
+        timeout: 15000,
+        encoding: 'utf-8',
+      });
+
+      const daemon: OmpDaemonDetail = JSON.parse(stdout || '{}');
+      return { success: true, daemon };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || tm('electron.ops.getInfoFailed', { name: cleanName }),
+      };
+    }
+  }
+
+  // 1. List background processes
   public async listProcesses(
     binaryPath: string,
     options?: { all?: boolean; global?: string }
@@ -75,12 +285,12 @@ export class OpsManager {
       return {
         success: false,
         scopes: [],
-        error: err?.message || 'Lỗi khi liệt kê background processes',
+        error: err?.message || tm('electron.ops.listProcessesFailed'),
       };
     }
   }
 
-  // 2. Điều khiển process (stop / kill / restart)
+  // 2. Control process (stop / kill / restart)
   public async controlProcess(
     binaryPath: string,
     action: 'stop' | 'kill' | 'restart',
@@ -89,7 +299,7 @@ export class OpsManager {
   ): Promise<{ success: boolean; message?: string; error?: string }> {
     const cleanName = String(name || '').trim();
     if (!cleanName) {
-      return { success: false, error: 'Tên process không được để trống' };
+      return { success: false, error: tm('electron.ops.processNameEmpty') };
     }
 
     const args = ['ps', action, cleanName];
@@ -111,16 +321,16 @@ export class OpsManager {
       });
 
       const output = `${stdout}\n${stderr}`.trim();
-      return { success: true, message: output || `Đã thực hiện ${action} thành công cho ${cleanName}` };
+      return { success: true, message: output || tm('electron.ops.controlProcessSuccess', { action, name: cleanName }) };
     } catch (err: any) {
       return {
         success: false,
-        error: err?.message || `Lỗi khi thực hiện ${action} process ${cleanName}`,
+        error: err?.message || tm('electron.ops.controlProcessFailed', { action, name: cleanName }),
       };
     }
   }
 
-  // 3. Đọc logs của process
+  // 3. Read process logs
   public async getProcessLogs(
     binaryPath: string,
     name: string,
@@ -128,7 +338,7 @@ export class OpsManager {
   ): Promise<{ success: boolean; logs?: string; error?: string }> {
     const cleanName = String(name || '').trim();
     if (!cleanName) {
-      return { success: false, error: 'Tên process không được để trống' };
+      return { success: false, error: tm('electron.ops.processNameEmpty') };
     }
 
     const args = ['ps', 'logs', cleanName];
@@ -160,12 +370,12 @@ export class OpsManager {
     } catch (err: any) {
       return {
         success: false,
-        error: err?.message || `Lỗi khi lấy logs cho process ${cleanName}`,
+        error: err?.message || tm('electron.ops.getLogsFailed', { name: cleanName }),
       };
     }
   }
 
-  // 4. Danh sách worktrees
+  // 4. List worktrees
   public async listWorktrees(
     binaryPath: string
   ): Promise<{ success: boolean; worktrees?: OmpWorktreeInfo[]; error?: string }> {
@@ -186,12 +396,12 @@ export class OpsManager {
       return {
         success: false,
         worktrees: [],
-        error: err?.message || 'Lỗi khi liệt kê worktrees',
+        error: err?.message || tm('electron.ops.listWorktreesFailed'),
       };
     }
   }
 
-  // 5. Dọn dẹp worktrees
+  // 5. Clean worktrees
   public async clearWorktrees(
     binaryPath: string,
     options?: { all?: boolean; dryRun?: boolean }
@@ -219,7 +429,7 @@ export class OpsManager {
     } catch (err: any) {
       return {
         success: false,
-        error: err?.message || 'Lỗi khi dọn dẹp worktrees',
+        error: err?.message || tm('electron.ops.clearWorktreesFailed'),
       };
     }
   }

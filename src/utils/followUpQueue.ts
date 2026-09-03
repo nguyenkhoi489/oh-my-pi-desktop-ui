@@ -5,7 +5,7 @@ export interface FollowUpQueueItem {
   timestamp: number;
 }
 
-// Engine giữ hàng đợi thật; cắt các item cũ nhất đã được engine tiêu thụ theo queuedMessageCount
+// Engine maintains queue; drop oldest items consumed by engine per queuedMessageCount
 export function reconcileFollowUpQueue(
   queue: FollowUpQueueItem[],
   engineQueuedCount: number

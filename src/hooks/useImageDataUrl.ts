@@ -5,7 +5,7 @@ const dataUrlCache = new Map<string, string>();
 const isDirectlyRenderable = (src: string): boolean =>
   /^(blob:|data:|https?:)/.test(src);
 
-// Phân giải đường dẫn ảnh trên đĩa thành data URL qua IPC (giữ nguyên blob:/data:/http)
+// Resolve image path on disk to data URL via IPC (preserves blob:/data:/http)
 export function useImageDataUrl(src: string): string {
   const [resolved, setResolved] = useState<string>(() => {
     if (!src) return '';

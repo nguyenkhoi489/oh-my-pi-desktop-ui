@@ -1,7 +1,7 @@
 import type { EngineConfigEntry } from '../types/index.ts';
 import type { I18nKey } from '../../shared/i18n/index.ts';
 
-// Danh sách các cấu hình thường dùng được ghim lên nhóm đầu tiên
+// Pinned common configuration keys at top group
 export const PINNED_CONFIG_KEYS = [
   'tools.approvalMode',
   'defaultThinkingLevel',
@@ -31,60 +31,60 @@ export interface SessionOverrideInfo {
   defaultDesc: string;
 }
 
-// Các key cấu hình engine bị ghi đè bởi trạng thái phiên hoặc cài đặt ứng dụng
+// Engine config keys overridden by session state or app settings
 export const SESSION_OVERRIDE_KEYS: Record<string, SessionOverrideInfo> = {
   'tools.approvalMode': {
     appSetting: 'approvalMode',
     descriptionKey: 'engineConfig.override.approvalMode',
-    defaultDesc: 'Ghi đè bởi chế độ phê duyệt (Approval Mode) trong phiên làm việc',
+    defaultDesc: 'Overridden by session Approval Mode',
   },
   steeringMode: {
     appSetting: 'steeringMode (RPC)',
     descriptionKey: 'engineConfig.override.steeringMode',
-    defaultDesc: 'Ghi đè bởi chế độ điều hướng (Steering Mode) qua RPC phiên',
+    defaultDesc: 'Overridden by session Steering Mode via RPC',
   },
   followUpMode: {
     appSetting: 'followUpMode (RPC)',
     descriptionKey: 'engineConfig.override.followUpMode',
-    defaultDesc: 'Ghi đè bởi chế độ hàng đợi tiếp theo qua RPC phiên',
+    defaultDesc: 'Overridden by session follow-up queue mode via RPC',
   },
   interruptMode: {
     appSetting: 'interruptMode (RPC)',
     descriptionKey: 'engineConfig.override.interruptMode',
-    defaultDesc: 'Ghi đè bởi chế độ ngắt qua RPC phiên',
+    defaultDesc: 'Overridden by session interrupt mode via RPC',
   },
   defaultThinkingLevel: {
     appSetting: 'thinkingLevel',
     descriptionKey: 'engineConfig.override.thinkingLevel',
-    defaultDesc: 'Ghi đè bởi mức độ suy nghĩ (Thinking Level) trong phiên làm việc',
+    defaultDesc: 'Overridden by session Thinking Level',
   },
   modelRoles: {
     appSetting: 'modelRoles (config.yml)',
     descriptionKey: 'engineConfig.override.modelRoles',
-    defaultDesc: 'Ghi đè bởi trình chỉnh sửa Model Roles trong tab Providers',
+    defaultDesc: 'Overridden by Model Roles editor in Providers tab',
   },
   autoResume: {
     appSetting: 'autoResume',
     descriptionKey: 'engineConfig.override.autoResume',
-    defaultDesc: 'OMP Desktop tự động quản lý vòng đời và khôi phục phiên',
+    defaultDesc: 'OMP Desktop automatically manages lifecycle and session recovery',
   },
 };
 
-// Giới hạn tối đa số dòng cấu hình render đồng thời để đảm bảo hiệu năng
+// Max config rows to render concurrently for performance
 export const MAX_RENDER_CONFIG_ROWS = 200;
 
-// Xóa dấu tiếng Việt và chuẩn hóa chữ thường phục vụ tìm kiếm
+// Strip accents and normalize lowercase for search
 export function removeAccents(str: string): string {
   if (!str) return '';
   return str
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'd')
+    .replace(/\u0111/g, 'd')
+    .replace(/\u0110/g, 'd')
     .toLowerCase();
 }
 
-// Lọc danh sách cấu hình theo từ khóa (tên key hoặc mô tả không dấu)
+// Filter config entries by keyword (key name or description)
 export function filterEntries(entries: EngineConfigEntry[], query: string): EngineConfigEntry[] {
   if (!query || !query.trim()) {
     return entries;
@@ -97,7 +97,7 @@ export function filterEntries(entries: EngineConfigEntry[], query: string): Engi
   });
 }
 
-// Nhóm các cấu hình theo prefix đầu tiên trước dấu chấm
+// Group configs by first prefix before dot
 export function groupByPrefix(entries: EngineConfigEntry[]): Record<string, EngineConfigEntry[]> {
   const groups: Record<string, EngineConfigEntry[]> = {};
 
@@ -110,7 +110,7 @@ export function groupByPrefix(entries: EngineConfigEntry[]): Record<string, Engi
     groups[prefix].push(entry);
   }
 
-  // Sắp xếp các entry trong từng nhóm theo thứ tự bảng chữ cái
+  // Sort entries in each group alphabetically
   for (const prefix of Object.keys(groups)) {
     groups[prefix].sort((a, b) => a.key.localeCompare(b.key));
   }
@@ -124,7 +124,7 @@ export interface CoerceResult {
   error?: I18nKey;
 }
 
-// Chuyển đổi và kiểm tra tính hợp lệ của giá trị nhập trước khi gửi sang engine
+// Cast and validate entered value before sending to engine
 export function coerceInput(type: string, raw: unknown): CoerceResult {
   const t = (type || 'string').toLowerCase();
 
@@ -231,12 +231,12 @@ export function coerceInput(type: string, raw: unknown): CoerceResult {
     };
   }
 
-  // Mặc định string hoặc enum
+  // Default string or enum
   const strVal = raw === undefined || raw === null ? '' : typeof raw === 'object' ? JSON.stringify(raw) : String(raw);
   return { value: strVal, stringified: strVal };
 }
 
-// Định dạng giá trị config hiển thị lên giao diện
+// Format config value for UI display
 export function formatConfigValue(value: unknown): string {
   if (value === undefined || value === null) {
     return '';
