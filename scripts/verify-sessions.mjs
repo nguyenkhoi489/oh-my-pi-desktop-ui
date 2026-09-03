@@ -200,7 +200,7 @@ console.log('[Test 4] History Translation (messages-page.json fixture)');
   const bridge = new OmpBridge(mockWindow);
   const chatMessages = bridge.translateHistoryMessages(fixtureRaw.messages);
 
-  assert(chatMessages.length === 3, `translateHistoryMessages returned 3 ChatMessages (got ${chatMessages.length})`);
+  assert(chatMessages.length === 2, `translateHistoryMessages returned 2 ChatMessages for single turn (got ${chatMessages.length})`);
 
   // Message 0: User
   const msg0 = chatMessages[0];
@@ -208,10 +208,11 @@ console.log('[Test 4] History Translation (messages-page.json fixture)');
   assert(msg0.content.includes('Use the write tool to create a file named note.txt'), 'Message 0 contains user prompt');
   assert(msg0.timestamp === 1788264409094, 'Message 0 timestamp preserved');
 
-  // Message 1: Assistant with toolCall + toolResult joined
+  // Message 1: Assistant with toolCall + toolResult and final reply joined into single turn message
   const msg1 = chatMessages[1];
   assert(msg1.role === 'assistant', 'Message 1 role is assistant');
-  assert(msg1.content.includes('Tôi sẽ tạo file `note.txt`'), 'Message 1 contains assistant text');
+  assert(msg1.content.includes('Tôi sẽ tạo file `note.txt`'), 'Message 1 contains introductory assistant text');
+  assert(msg1.content.includes('Đã tạo thành công file `note.txt`'), 'Message 1 contains final assistant text');
   assert(Array.isArray(msg1.toolCalls) && msg1.toolCalls.length === 1, 'Message 1 contains 1 toolCall');
   
   const tc = msg1.toolCalls[0];
@@ -221,13 +222,72 @@ console.log('[Test 4] History Translation (messages-page.json fixture)');
   assert(tc.params.path === 'note.txt', 'ToolCall params path matches');
   assert(typeof tc.result === 'string' && tc.result.includes('Successfully wrote 13 bytes'), 'ToolCall result text joined');
 
-  // Message 2: Final assistant reply
-  const msg2 = chatMessages[2];
-  assert(msg2.role === 'assistant', 'Message 2 role is assistant');
-  assert(msg2.content.includes('Đã tạo thành công file `note.txt`'), 'Message 2 text matches');
-  assert(!msg2.toolCalls || msg2.toolCalls.length === 0, 'Message 2 has no tool calls');
+  // Test consecutive multi-step tool calls grouped into a single unified assistant turn
+  const multiToolRaw = [
+    {
+      role: 'user',
+      content: [{ type: 'text', text: 'Refactor auth module' }],
+      timestamp: 1000,
+    },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'thinking', text: 'Analyzing files...' },
+        { type: 'toolCall', id: 'tc_read_1', name: 'read', arguments: { path: 'src/auth.ts' } },
+      ],
+      timestamp: 1100,
+    },
+    {
+      role: 'toolResult',
+      toolCallId: 'tc_read_1',
+      content: [{ type: 'text', text: 'file content' }],
+      timestamp: 1200,
+    },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'toolCall', id: 'tc_edit_2', name: 'edit', arguments: { path: 'src/auth.ts' } },
+      ],
+      timestamp: 1300,
+    },
+    {
+      role: 'toolResult',
+      toolCallId: 'tc_edit_2',
+      content: [{ type: 'text', text: 'applied patch' }],
+      timestamp: 1400,
+    },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'toolCall', id: 'tc_bash_3', name: 'bash', arguments: { command: 'npm test' } },
+      ],
+      timestamp: 1500,
+    },
+    {
+      role: 'toolResult',
+      toolCallId: 'tc_bash_3',
+      content: [{ type: 'text', text: 'all tests pass' }],
+      timestamp: 1600,
+    },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'Refactored auth module successfully.' },
+      ],
+      timestamp: 1700,
+    },
+  ];
 
-  // Test error toolResult branch & thinking block
+  const multiToolChatMessages = bridge.translateHistoryMessages(multiToolRaw);
+  assert(multiToolChatMessages.length === 2, `Multi-step tools grouped into exactly 2 ChatMessages (got ${multiToolChatMessages.length})`);
+  const assistantTurn = multiToolChatMessages[1];
+  assert(assistantTurn.role === 'assistant', 'Turn is assistant');
+  assert(assistantTurn.toolCalls && assistantTurn.toolCalls.length === 3, `All 3 tool calls grouped together (got ${assistantTurn.toolCalls?.length})`);
+  assert(assistantTurn.toolCalls[0].name === 'read' && assistantTurn.toolCalls[0].status === 'completed', 'Tool 1 is read completed');
+  assert(assistantTurn.toolCalls[1].name === 'edit' && assistantTurn.toolCalls[1].status === 'completed', 'Tool 2 is edit completed');
+  assert(assistantTurn.toolCalls[2].name === 'bash' && assistantTurn.toolCalls[2].status === 'completed', 'Tool 3 is bash completed');
+  assert(assistantTurn.content === 'Refactored auth module successfully.', 'Assistant content matches final reply');
+  assert(assistantTurn.thinking && assistantTurn.thinking.thought === 'Analyzing files...', 'Thinking preserved');
   const errorAndThinkingRaw = [
     {
       role: 'user',

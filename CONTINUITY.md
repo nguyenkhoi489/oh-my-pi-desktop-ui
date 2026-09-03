@@ -14,6 +14,24 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-03 — Unify Multi-Step Tool Calls into Seamless Assistant Turns in Session History
+
+- **State:** Đã khắc phục triệt để tình trạng các tool calls (`read`, `edit`, `bash`, ...) bị phân mảnh, xa cách và lặp lại nhiều header OMP Agent khi xem lại các session chat cũ:
+  - `electron/omp-bridge.ts`: Cập nhật `translateHistoryMessages` tự động gộp các raw `assistant` messages kế tiếp nhau trong cùng 1 turn hội thoại thành 1 `ChatMessage` trợ lý duy nhất (gộp mảng `toolCalls` theo thứ tự thực thi, nối chuỗi `content`, và bảo toàn `thinking`).
+  - `src/components/AgentPanel/ChatHistory.tsx`:
+    - Chỉ render container `MarkdownRenderer` khi `msg.content` thực sự có nội dung, loại bỏ hoàn toàn padding thừa khi tin nhắn chỉ chứa tool calls.
+    - Chỉ hiển thị nút `Copy` khi có nội dung phản hồi văn bản.
+  - `scripts/verify-sessions.mjs`: Cập nhật Test 4 kiểm tra cấu trúc gom nhóm 1 turn hoàn chỉnh từ fixture và bổ sung test case multi-step tool calls (`read` -> `edit` -> `bash`).
+  - Verification: `scripts/verify-sessions.mjs` (57/57 passed), `scripts/verify-composer-attach.mjs` (38/38 passed), `scripts/verify-steering.mjs` (80/80 passed), `npm run test:i18n` (3200/3200 passed), `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Sẵn sàng nhận các yêu cầu tiếp theo từ người dùng.
+- **Refs:**
+  - `plans/reports/fix-260903-2030-session-toolcalls-grouping.md`
+  - `electron/omp-bridge.ts`
+  - `src/components/AgentPanel/ChatHistory.tsx`
+  - `scripts/verify-sessions.mjs`
+
 ## 2026-09-03 — Eliminate Duplicate Attached Context Cards in Chat History
 
 - **State:** Đã khắc phục triệt để lỗi nhân đôi 2 thẻ Attached Context (1 thẻ ở trên và 1 thẻ ở dưới tin nhắn user) khi đính kèm file/ảnh trong khung chat:

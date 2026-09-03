@@ -310,24 +310,26 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                   OMP Agent
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => handleCopyMessage(msg.content, msg.id)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 text-[11px] flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-surface-highlight transition-colors cursor-pointer"
-                title={t('chatHistory.copyResponse')}
-              >
-                {copiedMsgId === msg.id ? (
-                  <>
-                    <Check className="w-3 h-3 text-emerald-500" />
-                    <span className="text-emerald-500 text-[10.5px]">{t('chatHistory.copied')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3" />
-                    <span className="text-[10.5px]">Copy</span>
-                  </>
-                )}
-              </button>
+              {msg.content && msg.content.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyMessage(msg.content, msg.id)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 text-[11px] flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-surface-highlight transition-colors cursor-pointer"
+                  title={t('chatHistory.copyResponse')}
+                >
+                  {copiedMsgId === msg.id ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-500" />
+                      <span className="text-emerald-500 text-[10.5px]">{t('chatHistory.copied')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span className="text-[10.5px]">Copy</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Thinking Block if attached */}
@@ -342,10 +344,12 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
               </div>
             )}
 
-            {/* Message Bubble */}
-            <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed bg-transparent text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
-              <MarkdownRenderer content={msg.content} />
-            </div>
+            {/* Message Bubble only if content is present */}
+            {msg.content && msg.content.trim().length > 0 && (
+              <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed bg-transparent text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
+                <MarkdownRenderer content={msg.content} />
+              </div>
+            )}
           </div>
         );
       })}

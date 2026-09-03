@@ -2435,15 +2435,40 @@ export class OmpBridge {
         } else if (typeof (msg as any).text === 'string') {
           textParts.push((msg as any).text);
         }
-
-        result.push({
-          id: `msg-assistant-${timestamp}-${i}`,
-          role: 'assistant',
-          content: textParts.join('\n'),
-          timestamp,
-          ...(thinkingBlock ? { thinking: thinkingBlock } : {}),
-          ...(toolCalls.length > 0 ? { toolCalls } : {}),
-        });
+        const lastMsg = result[result.length - 1];
+        if (lastMsg && lastMsg.role === 'assistant') {
+          const incomingText = textParts.join('\n').trim();
+          if (incomingText) {
+            lastMsg.content = lastMsg.content
+              ? `${lastMsg.content}\n\n${incomingText}`
+              : incomingText;
+          }
+          if (thinkingBlock) {
+            if (!lastMsg.thinking) {
+              lastMsg.thinking = thinkingBlock;
+            } else if (thinkingBlock.thought) {
+              lastMsg.thinking.thought = lastMsg.thinking.thought
+                ? `${lastMsg.thinking.thought}\n\n${thinkingBlock.thought}`
+                : thinkingBlock.thought;
+            }
+          }
+          if (toolCalls.length > 0) {
+            if (!lastMsg.toolCalls) {
+              lastMsg.toolCalls = [];
+            }
+            lastMsg.toolCalls.push(...toolCalls);
+          }
+          lastMsg.timestamp = timestamp;
+        } else {
+          result.push({
+            id: `msg-assistant-${timestamp}-${i}`,
+            role: 'assistant',
+            content: textParts.join('\n'),
+            timestamp,
+            ...(thinkingBlock ? { thinking: thinkingBlock } : {}),
+            ...(toolCalls.length > 0 ? { toolCalls } : {}),
+          });
+        }
       } else if (role === 'fileMention') {
         const rawFiles = Array.isArray((msg as any).files) ? (msg as any).files : [];
         const files = rawFiles.map((f: any) => {
