@@ -129,6 +129,8 @@ export const vi = {
   'ops.processes.actions.restart': 'Khởi động lại',
   'ops.processes.actions.kill': 'Ép dừng (Kill)',
   'ops.processes.actions.killConfirm': 'Bạn có chắc muốn ép dừng (kill) process {name}?',
+  'ops.processes.actions.remove': 'Xóa tiến trình',
+  'ops.processes.actions.removeConfirm': 'Bạn có chắc muốn xóa lịch sử tiến trình {name}?',
   'ops.processes.info.title': 'Thông tin chi tiết Daemon: {name}',
   'ops.processes.info.close': 'Đóng',
   'ops.processes.info.specTitle': 'Cấu hình khởi chạy (Spec)',
@@ -1513,6 +1515,8 @@ export const vi = {
   "electron.ops.getLogsFailed": "Lỗi khi lấy logs cho process {name}",
   "electron.ops.listWorktreesFailed": "Lỗi khi liệt kê worktrees",
   "electron.ops.clearWorktreesFailed": "Lỗi khi dọn dẹp worktrees",
+  "electron.ops.removeProcessSuccess": "Đã xóa tiến trình {name} thành công",
+  "electron.ops.removeProcessFailed": "Lỗi khi xóa tiến trình {name}",
   "electron.profile.invalidOrDuplicateName": "Tên profile không hợp lệ hoặc trùng với default",
   "electron.profile.createDirError": "Lỗi tạo thư mục profile",
   "electron.profile.cannotDeleteDefault": "Không thể xoá profile mặc định (default)",
@@ -1621,6 +1625,12 @@ export const vi = {
   'electron.main.invalidDashboardOptions': 'Cổng hoặc host dashboard không hợp lệ',
   'join.heading': 'Tham gia Collab Session',
   'thread.joinCollabTitle': 'Tham gia Collab session (/join)',
+  'markdown.mermaid.loading': 'Đang dựng biểu đồ...',
+  'markdown.mermaid.error': 'Lỗi cú pháp Mermaid. Bấm nút "Code" ở trên để xem mã nguồn.',
+  'markdown.mermaid.viewCode': 'Xem mã nguồn',
+  'markdown.mermaid.code': 'Code',
+  'markdown.copy': 'Copy',
+  'markdown.copied': 'Copied!',
 } as const;
 
 export type I18nKey = keyof typeof vi;

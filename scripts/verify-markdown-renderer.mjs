@@ -1,18 +1,19 @@
 /**
- * Verification Script: MarkdownRenderer & Preview Formatting
+ * Verification Script: MarkdownRenderer & Rich Preview Formatting
  * 
  * Verifies that assistant responses and artifacts preview rich Markdown:
  * 1. Headings (H1 - H6) rendered with appropriate typography tags and classes.
  * 2. Bold, Italic, and Strikethrough formatted properly.
- * 3. Nested ordered and unordered lists with bold inline code headers.
- * 4. Inline code spans styled with pill background and font-mono.
- * 5. Fenced code blocks rendered with language badge, copy button, and code element.
+ * 3. Fenced code blocks rendered with language badge, copy button, and Prism syntax highlighting.
+ * 4. GitHub-style alerts ([!NOTE], [!TIP], etc.) styled with distinctive callout boxes.
+ * 5. User screenshot sample text renders with clean nested hierarchy instead of raw markdown text.
  * 6. Tables rendered with headers, cells, and border structure (fixing [object Object] bug).
- * 7. GitHub-style alerts ([!NOTE], [!TIP], etc.) styled with distinctive callout boxes.
- * 8. User screenshot sample text renders with clean nested hierarchy instead of raw markdown text.
+ * 7. KaTeX Math equations (Inline $E = mc^2$ and Block $$\int_0^1 x dx$$).
+ * 8. Mermaid Diagrams (Emits .mermaid-block-wrapper, container, toggle button, and encoded source).
+ * 9. GFM Task List checkboxes (- [ ] and - [x]).
  */
 
-import { Marked } from 'marked';
+import { parseMarkdown, defaultMarkedInstance } from '../src/utils/markdownParser.ts';
 
 let passed = 0;
 let failed = 0;
@@ -30,122 +31,12 @@ function assert(condition, message) {
 
 console.log('=== Starting MarkdownRenderer Verification Suite ===\n');
 
-const markedInstance = new Marked({
-  gfm: true,
-  breaks: true,
-  renderer: {
-    heading({ text, depth }) {
-      const headingStyles = {
-        1: 'text-lg font-bold text-slate-900 dark:text-zinc-100 mt-4 mb-2 first:mt-0',
-        2: 'text-base font-bold text-slate-900 dark:text-zinc-100 mt-3.5 mb-1.5 first:mt-0',
-        3: 'text-[14px] font-semibold text-slate-800 dark:text-zinc-200 mt-3 mb-1 first:mt-0',
-        4: 'text-[13.5px] font-semibold text-slate-800 dark:text-zinc-200 mt-2.5 mb-1 first:mt-0',
-        5: 'text-[13px] font-semibold text-slate-800 dark:text-zinc-200 mt-2 mb-0.5 first:mt-0',
-        6: 'text-[12px] font-semibold text-slate-700 dark:text-zinc-300 mt-1.5 mb-0.5 uppercase tracking-wider first:mt-0',
-      };
-      const cls = headingStyles[depth] || headingStyles[3];
-      return `<h${depth} class="${cls}">${text}</h${depth}>`;
-    },
-
-    code({ text, lang }) {
-      const language = (lang || 'text').trim();
-      const escaped = text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
-      return `<div class="code-block-wrapper my-3 rounded-xl overflow-hidden border border-border bg-[#f6f8fa] dark:bg-[#14161d] shadow-xs">
-        <div class="flex items-center justify-between px-3.5 py-1.5 bg-slate-100 dark:bg-[#1a1d26] border-b border-border text-[11px] font-mono text-slate-500 dark:text-zinc-400">
-          <span class="font-semibold uppercase tracking-wider text-[10px] text-slate-600 dark:text-zinc-300">${language}</span>
-          <button type="button" class="copy-code-btn flex items-center gap-1 text-[11px] text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 px-2 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer" data-code="${encodeURIComponent(text)}">
-            <span class="copy-text">Copy</span>
-          </button>
-        </div>
-        <pre class="p-3.5 overflow-x-auto text-[12.5px] leading-relaxed font-mono text-slate-800 dark:text-zinc-200 bg-[#f8fafc]/70 dark:bg-[#0f1117] m-0 border-0 rounded-none"><code class="language-${language}">${escaped}</code></pre>
-      </div>`;
-    },
-
-    codespan({ text }) {
-      return `<code class="px-1.5 py-0.5 rounded bg-rose-500/10 dark:bg-rose-950/35 text-rose-600 dark:text-rose-400 font-mono text-[12px] border border-rose-500/20 dark:border-rose-800/40 font-medium">${text}</code>`;
-    },
-
-    link({ href, title, text }) {
-      const titleAttr = title ? `title="${title}"` : '';
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-medium transition-colors inline-flex items-center gap-0.5" ${titleAttr}><span>${text}</span></a>`;
-    },
-
-    blockquote({ text }) {
-      const clean = text.trim();
-      const alertMatch = clean.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s*\n)?\s*([\s\S]*)$/i);
-      if (alertMatch) {
-        const type = alertMatch[1].toUpperCase();
-        const body = alertMatch[2];
-        const alertConfig = {
-          NOTE: { border: 'border-blue-500', bg: 'bg-blue-500/10', titleCls: 'text-blue-600 dark:text-blue-400', title: 'Note' },
-          TIP: { border: 'border-emerald-500', bg: 'bg-emerald-500/10', titleCls: 'text-emerald-600 dark:text-emerald-400', title: 'Tip' },
-          IMPORTANT: { border: 'border-purple-500', bg: 'bg-purple-500/10', titleCls: 'text-purple-600 dark:text-purple-400', title: 'Important' },
-          WARNING: { border: 'border-amber-500', bg: 'bg-amber-500/10', titleCls: 'text-amber-600 dark:text-amber-400', title: 'Warning' },
-          CAUTION: { border: 'border-rose-500', bg: 'bg-rose-500/10', titleCls: 'text-rose-600 dark:text-rose-400', title: 'Caution' },
-        };
-        const cfg = alertConfig[type] || alertConfig.NOTE;
-        return `<div class="my-3 p-3.5 rounded-xl border-l-4 ${cfg.border} ${cfg.bg} text-[13px] leading-relaxed shadow-xs">
-          <div class="font-semibold text-xs mb-1 uppercase tracking-wider ${cfg.titleCls}">${cfg.title}</div>
-          <div class="text-slate-800 dark:text-zinc-200">${body}</div>
-        </div>`;
-      }
-      return `<blockquote class="my-2.5 border-l-3 border-slate-300 dark:border-zinc-700 pl-3.5 py-0.5 italic text-slate-600 dark:text-zinc-400">${text}</blockquote>`;
-    },
-
-    table(token) {
-      let headerHtml = '';
-      if (token.header && Array.isArray(token.header)) {
-        for (let i = 0; i < token.header.length; i++) {
-          headerHtml += this.tablecell(token.header[i]);
-        }
-      }
-      headerHtml = `<thead class="bg-surface-highlight font-semibold text-slate-900 dark:text-zinc-100">${this.tablerow({ text: headerHtml })}</thead>`;
-
-      let bodyHtml = '';
-      if (token.rows && Array.isArray(token.rows)) {
-        for (let i = 0; i < token.rows.length; i++) {
-          let rowHtml = '';
-          for (let j = 0; j < token.rows[i].length; j++) {
-            rowHtml += this.tablecell(token.rows[i][j]);
-          }
-          bodyHtml += this.tablerow({ text: rowHtml });
-        }
-      }
-      bodyHtml = `<tbody class="divide-y divide-border bg-transparent">${bodyHtml}</tbody>`;
-
-      return `<div class="overflow-x-auto my-3"><table class="min-w-full text-xs text-left border border-border border-collapse">${headerHtml}${bodyHtml}</table></div>`;
-    },
-
-    tablerow(token) {
-      return `<tr class="hover:bg-surface-highlight/40 transition-colors">${token.text}</tr>`;
-    },
-
-    tablecell(token) {
-      const tag = token.header ? 'th' : 'td';
-      const alignCls = token.align ? ` text-${token.align}` : '';
-      const padCls = token.header
-        ? 'px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100 border border-border'
-        : 'px-3.5 py-2 text-slate-700 dark:text-zinc-300 border border-border';
-      const content = token.tokens ? this.parser.parseInline(token.tokens) : (token.text || '');
-      return `<${tag} class="${padCls}${alignCls}">${content}</${tag}>`;
-    },
-
-    hr() {
-      return `<hr class="my-4 border-t border-border" />`;
-    },
-  },
-});
-
 // ----------------------------------------------------
 // Test 1: Headings rendering
 // ----------------------------------------------------
 console.log('[Test 1] Headings Typography & Classes');
 {
-  const html = markedInstance.parse('# Heading 1\n## Heading 2\n### Heading 3');
+  const html = defaultMarkedInstance.parse('# Heading 1\n## Heading 2\n### Heading 3');
   assert(html.includes('<h1 class="text-lg font-bold'), 'H1 rendered with text-lg font-bold');
   assert(html.includes('<h2 class="text-base font-bold'), 'H2 rendered with text-base font-bold');
   assert(html.includes('<h3 class="text-[14px] font-semibold'), 'H3 rendered with text-[14px] font-semibold');
@@ -157,7 +48,7 @@ console.log();
 // ----------------------------------------------------
 console.log('[Test 2] Inline Code, Bold & Formatting');
 {
-  const html = markedInstance.parse('Here is `inline-code` and **bold text** with *italic*.');
+  const html = defaultMarkedInstance.parse('Here is `inline-code` and **bold text** with *italic*.');
   assert(html.includes('<code class="px-1.5 py-0.5 rounded bg-rose-500/10'), 'Inline code has styled background & border');
   assert(html.includes('<strong>bold text</strong>'), 'Bold text rendered as <strong>');
   assert(html.includes('<em>italic</em>'), 'Italic text rendered as <em>');
@@ -165,17 +56,19 @@ console.log('[Test 2] Inline Code, Bold & Formatting');
 console.log();
 
 // ----------------------------------------------------
-// Test 3: Fenced Code Blocks with Language & Copy
+// Test 3: Fenced Code Blocks with Language, Copy & Prism Highlighting
 // ----------------------------------------------------
-console.log('[Test 3] Fenced Code Blocks with Header & Copy Button');
+console.log('[Test 3] Fenced Code Blocks with Header, Copy Button & Prism Highlighting');
 {
   const codeSample = '```typescript\ninterface Config {\n  port: number;\n}\n```';
-  const html = markedInstance.parse(codeSample);
+  const html = defaultMarkedInstance.parse(codeSample);
   assert(html.includes('class="code-block-wrapper'), 'Contains code-block-wrapper container');
   assert(html.includes('typescript'), 'Displays language badge: typescript');
   assert(html.includes('class="copy-code-btn'), 'Contains copy code button');
   assert(html.includes('data-code="interface%20Config'), 'Button encodes code payload');
   assert(html.includes('<code class="language-typescript">'), 'Pre block contains language class');
+  assert(html.includes('token keyword">interface</span>'), 'Prism highlights keyword "interface"');
+  assert(html.includes('token builtin">number</span>'), 'Prism highlights builtin type "number"');
 }
 console.log();
 
@@ -185,7 +78,7 @@ console.log();
 console.log('[Test 4] GitHub-Style Callout Alerts');
 {
   const alertSample = '> [!TIP]\n> Always verify live tests before shipping.';
-  const html = markedInstance.parse(alertSample);
+  const html = defaultMarkedInstance.parse(alertSample);
   assert(html.includes('border-emerald-500') && html.includes('Tip'), 'Tip alert rendered with emerald callout');
 }
 console.log();
@@ -206,7 +99,7 @@ console.log('[Test 5] User Screenshot Sample Text Rendering');
 2. **\`admin-ui/src/pages/dashboard-overview-page.tsx\`**:
   - Điều chỉnh chiều cao skeleton loader từ \`h-28\` thành \`h-36\` để khớp với kích thước card mới.`;
 
-  const html = markedInstance.parse(screenshotSample);
+  const html = defaultMarkedInstance.parse(screenshotSample);
 
   // Assert it does NOT contain unparsed markdown hashes or raw backtick-asterisk chains
   assert(html.includes('<h3 class="text-[14px] font-semibold text-slate-800 dark:text-zinc-200 mt-3 mb-1 first:mt-0">Thay đổi đã thực hiện:</h3>'), 'Header "### Thay đổi đã thực hiện:" parsed to <h3>');
@@ -241,7 +134,7 @@ console.log('[Test 6] Tech Stack Table Rendering');
 | Frontend | React 19, React Router 7, Tailwind CSS 4, Vite 5 |
 | Deployment | PM2, Nginx |`;
 
-  const html = markedInstance.parse(tableSample);
+  const html = defaultMarkedInstance.parse(tableSample);
   assert(!html.includes('[object Object]'), 'Output does NOT contain [object Object]');
   assert(html.includes('<table class="min-w-full text-xs text-left border border-border border-collapse">'), 'Table rendered with table tag and border-border');
   assert(html.includes('<th class="px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100 border border-border">Layer</th>'), 'Header cell Layer rendered');
@@ -250,6 +143,80 @@ console.log('[Test 6] Tech Stack Table Rendering');
   assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300 border border-border">Node.js &gt;= 20</td>'), 'Data cell Node.js >= 20 rendered');
   assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300 border border-border">Fastify 5</td>'), 'Data cell Fastify 5 rendered');
   assert(html.includes('<td class="px-3.5 py-2 text-slate-700 dark:text-zinc-300 border border-border">SQLite (better-sqlite3, WAL mode)</td>'), 'Data cell SQLite rendered');
+}
+console.log();
+
+// ----------------------------------------------------
+// Test 7: KaTeX Math Equations (Inline & Block)
+// ----------------------------------------------------
+console.log('[Test 7] KaTeX Math Equations');
+{
+  const mathSample = `Phương trình năng lượng: $E = mc^2$ và tích phân Gaussian:
+
+$$
+\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}
+$$`;
+
+  const html = parseMarkdown(mathSample, false);
+  assert(html.includes('class="katex"'), 'Inline equation renders with katex class');
+  assert(html.includes('<math xmlns="http://www.w3.org/1998/Math/MathML">'), 'Equation includes MathML accessibility markup');
+  assert(html.includes('class="katex-block'), 'Block equation rendered inside .katex-block container');
+  assert(html.includes('class="katex-html"'), 'Equation includes HTML display markup');
+}
+console.log();
+
+// ----------------------------------------------------
+// Test 8: Mermaid Diagrams
+// ----------------------------------------------------
+console.log('[Test 8] Mermaid Diagrams');
+{
+  const mermaidSample = `\`\`\`mermaid
+flowchart TD
+    Start --> Stop
+\`\`\``;
+
+  const html = parseMarkdown(mermaidSample, false);
+  assert(html.includes('class="mermaid-block-wrapper'), 'Mermaid block has wrapper container');
+  assert(html.includes('class="mermaid-diagram-container'), 'Mermaid diagram container present');
+  assert(html.includes('data-mermaid="flowchart%20TD'), 'Container encodes raw diagram source for client render');
+  assert(html.includes('class="view-mermaid-source-btn'), 'Toggle source code button present');
+  assert(html.includes('class="mermaid-source-code hidden'), 'Source code initially hidden');
+}
+console.log();
+
+// ----------------------------------------------------
+// Test 9: GFM Task Lists Checkboxes
+// ----------------------------------------------------
+console.log('[Test 9] GFM Task List Checkboxes');
+{
+  const taskSample = `- [ ] Task cần làm\n- [x] Task đã hoàn thành`;
+  const html = parseMarkdown(taskSample, false);
+  assert(html.includes('type="checkbox"'), 'Task list contains checkbox inputs');
+  assert(html.includes('class="task-list-item-checkbox'), 'Checkbox styled with task-list-item-checkbox');
+  assert(html.includes('checked=""'), 'Completed task has checked attribute');
+}
+console.log();
+// ----------------------------------------------------
+// Test 10: Localization of Markdown Buttons & Labels
+// ----------------------------------------------------
+console.log('[Test 10] Localization of Markdown Buttons & Labels');
+{
+  const sample = '```mermaid\ngraph TD\nA-->B\n```\n\n```ts\nconst x = 1;\n```';
+  const mockViT = (key) => {
+    if (key === 'markdown.mermaid.viewCode') return 'Xem mã nguồn';
+    if (key === 'markdown.mermaid.code') return 'Mã nguồn';
+    if (key === 'markdown.copy') return 'Sao chép';
+    if (key === 'markdown.mermaid.loading') return 'Đang tải sơ đồ...';
+    return key;
+  };
+  const viHtml = parseMarkdown(sample, { t: mockViT, sanitize: false });
+  assert(viHtml.includes('title="Xem mã nguồn"'), 'Mermaid view code button localized');
+  assert(viHtml.includes('Mã nguồn'), 'Mermaid code label localized');
+  assert(viHtml.includes('Đang tải sơ đồ...'), 'Mermaid loading text localized');
+  assert(viHtml.includes('Sao chép'), 'Copy code button text localized');
+
+  const defaultHtml = parseMarkdown(sample, { sanitize: false });
+  assert(defaultHtml.includes('class="copy-code-btn'), 'Default render includes copy button');
 }
 console.log();
 
