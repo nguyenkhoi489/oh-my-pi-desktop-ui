@@ -320,6 +320,84 @@ console.log('[Test 4] History Translation (messages-page.json fixture)');
   assert(errAssistant.toolCalls && errAssistant.toolCalls.length === 1, 'Error assistant has 1 tool call');
   assert(errAssistant.toolCalls[0].status === 'failed', 'ToolCall status is "failed" when isError is true');
   assert(errAssistant.toolCalls[0].error === 'Permission denied EACCES', 'ToolCall error message captured');
+  // Test trailing tool call without toolResult or with alternative tool_call_id property
+  const trailingToolRaw = [
+    {
+      role: 'user',
+      content: [{ type: 'text', text: 'Check system info' }],
+      timestamp: 1000,
+    },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'toolCall', id: 'call_uname_01', name: 'bash', arguments: { command: 'uname -a' } },
+      ],
+      timestamp: 2000,
+    },
+    {
+      role: 'toolResult',
+      tool_call_id: 'call_uname_01', // alternative field name from some LLM providers
+      content: [{ type: 'text', text: 'Darwin Kernel Version' }],
+      isError: false,
+      timestamp: 2500,
+    },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'toolCall', id: 'call_trailing_read', name: 'read', arguments: { path: 'package.json' } },
+      ],
+      timestamp: 3000,
+    },
+    // Note: No toolResult for call_trailing_read (trailing tool)
+  ];
+
+  const trailingMessages = bridge.translateHistoryMessages(trailingToolRaw);
+  assert(trailingMessages.length === 2, 'Trailing tool history translated to 2 messages');
+  const trailingAssistant = trailingMessages[1];
+  assert(trailingAssistant.toolCalls && trailingAssistant.toolCalls.length === 2, 'Trailing assistant has 2 tool calls');
+  assert(trailingAssistant.toolCalls[0].status === 'completed', 'Tool with tool_call_id matched and marked completed');
+  assert(trailingAssistant.toolCalls[1].status === 'completed', 'Trailing tool without toolResult is safely normalized to completed');
+
+  // Test assistant plain string content after bash tool & system messages
+  const bashAndTextRaw = [
+    {
+      role: 'system',
+      content: 'System initialization complete.',
+      timestamp: 500,
+    },
+    {
+      role: 'user',
+      content: 'Run build command',
+      timestamp: 1000,
+    },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'toolCall', id: 'call_bash_build', name: 'bash', arguments: { command: 'npm run build' } },
+      ],
+      timestamp: 1500,
+    },
+    {
+      role: 'toolResult',
+      toolCallId: 'call_bash_build',
+      content: 'Build completed with 0 errors.',
+      isError: false,
+      timestamp: 2000,
+    },
+    {
+      role: 'assistant',
+      content: 'Đã hoàn tất build dự án thành công. Sẵn sàng cho bước tiếp theo.', // Plain string content!
+      timestamp: 2500,
+    },
+  ];
+
+  const bashAndTextMessages = bridge.translateHistoryMessages(bashAndTextRaw);
+  assert(bashAndTextMessages.length === 3, `bashAndText translated to 3 ChatMessages (system, user, assistant) - got ${bashAndTextMessages.length}`);
+  assert(bashAndTextMessages[0].role === 'system' && bashAndTextMessages[0].content === 'System initialization complete.', 'System message captured');
+  assert(bashAndTextMessages[1].role === 'user' && bashAndTextMessages[1].content === 'Run build command', 'User message captured');
+  assert(bashAndTextMessages[2].role === 'assistant', 'Third message is assistant');
+  assert(bashAndTextMessages[2].toolCalls?.length === 1 && bashAndTextMessages[2].toolCalls[0].name === 'bash', 'Assistant contains bash tool');
+  assert(bashAndTextMessages[2].content.includes('Đã hoàn tất build dự án thành công'), 'Assistant text after bash tool preserved');
 }
 console.log();
 

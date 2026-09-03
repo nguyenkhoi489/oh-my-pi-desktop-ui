@@ -721,15 +721,26 @@ export function useOmpRpc() {
         rafIdRef.current = null;
       }
       tokenBufferRef.current = '';
-      const currentTools = activeToolCallsRef.current;
+      const currentTools = activeToolCallsRef.current.map((tc) => {
+        if (tc.status === 'running') {
+          return {
+            ...tc,
+            status: tc.error ? ('failed' as const) : ('completed' as const),
+            endTime: tc.endTime || Date.now(),
+          };
+        }
+        return tc;
+      });
+      const rawMsgTools = msg.toolCalls && msg.toolCalls.length > 0
+        ? msg.toolCalls.map((tc) =>
+            tc.status === 'running'
+              ? { ...tc, status: tc.error ? ('failed' as const) : ('completed' as const), endTime: tc.endTime || Date.now() }
+              : tc
+          )
+        : undefined;
       const finalMsg: ChatMessage = {
         ...msg,
-        toolCalls:
-          msg.toolCalls && msg.toolCalls.length > 0
-            ? msg.toolCalls
-            : currentTools.length > 0
-              ? [...currentTools]
-              : undefined,
+        toolCalls: rawMsgTools || (currentTools.length > 0 ? [...currentTools] : undefined),
       };
       setMessages((prev) => {
         // Guard against duplicate fileMention if same files already exist

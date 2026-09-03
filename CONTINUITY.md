@@ -14,6 +14,42 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-03 — Preserve Complete Assistant Text and System Messages in Session History
+
+- **State:** Đã khắc phục triệt để lỗi mất văn bản phản hồi/kết luận của Agent (sau các lệnh `bash` / tool calls) và mất tin nhắn `system` khi xem lại lịch sử session:
+  - `electron/omp-bridge.ts`:
+    - Mở rộng trích xuất văn bản đa dạng cho `msg.content` (hỗ trợ `string` trực tiếp, mảng `string[]`, các object blocks với `text`/`content`/`value`, các trường `output`/`prompt`/`text`).
+    - Bổ sung nhánh xử lý đầy đủ cho `role === 'system'`, đảm bảo các tin nhắn hệ thống không bị drop.
+    - Chuẩn hóa trích xuất kết quả `toolResult` toàn diện thay vì chỉ lấy dòng đầu tiên.
+  - `scripts/verify-sessions.mjs`: Bổ sung test case kiểm tra tin nhắn trợ lý có `content` dạng plain string sau lệnh `bash` và tin nhắn hệ thống.
+  - Verification: `scripts/verify-sessions.mjs` (67/67 passed), `npm run test:i18n` (3200/3200 passed), `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Sẵn sàng cho các yêu cầu tiếp theo từ người dùng.
+- **Refs:**
+  - `plans/reports/fix-260903-2055-missing-assistant-text-history.md`
+  - `electron/omp-bridge.ts`
+  - `scripts/verify-sessions.mjs`
+
+## 2026-09-03 — Resolve Stuck Tool Call Spinner upon Session Completion
+
+- **State:** Đã khắc phục triệt để lỗi tool call cuối cùng (`read`, ...) bị kẹt icon quay tròn (`running`) sau khi session hoặc turn đã hoàn tất:
+  - `electron/omp-bridge.ts`:
+    - Mở rộng nhận diện ID đa dạng trong `toolResult` (`tool_call_id`, `tool_use_id`, `call_id`) kèm cơ chế fallback tìm tool call `running` gần nhất.
+    - Bổ sung post-processing sweep trong `translateHistoryMessages` để chuẩn hóa tất cả tool calls trong session history về `completed` (hoặc `failed` nếu có lỗi) kèm `endTime`.
+    - Cập nhật `turn_end`, `agent_end` và `abort` để phát sự kiện đồng bộ `completed` cho các active tool calls còn lại trước khi dọn dẹp bộ nhớ.
+  - `src/hooks/useOmpRpc.ts`: Chuẩn hóa toàn bộ tool calls trong `activeToolCallsRef.current` và `msg.toolCalls` sang `completed` khi nhận sự kiện `onOmpMessageComplete`.
+  - `scripts/verify-sessions.mjs`: Bổ sung test case kiểm tra tool call không có `toolResult` hoặc có `tool_call_id` không chuẩn.
+  - Verification: `scripts/verify-sessions.mjs` (61/61 passed), `scripts/verify-tool-events.mjs` (56/56 passed), `npm run test:i18n` (3200/3200 passed), `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Sẵn sàng cho các yêu cầu tiếp theo từ người dùng.
+- **Refs:**
+  - `plans/reports/fix-260903-2045-stuck-toolcall-spinner-resolved.md`
+  - `electron/omp-bridge.ts`
+  - `src/hooks/useOmpRpc.ts`
+  - `scripts/verify-sessions.mjs`
+
 ## 2026-09-03 — Unify Multi-Step Tool Calls into Seamless Assistant Turns in Session History
 
 - **State:** Đã khắc phục triệt để tình trạng các tool calls (`read`, `edit`, `bash`, ...) bị phân mảnh, xa cách và lặp lại nhiều header OMP Agent khi xem lại các session chat cũ:

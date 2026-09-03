@@ -2376,11 +2376,16 @@ export class OmpBridge {
 
       if (role === 'user') {
         let userText = '';
-        if (Array.isArray(msg.content)) {
+        if (typeof msg.content === 'string') {
+          userText = msg.content;
+        } else if (Array.isArray(msg.content)) {
           const parts: string[] = [];
           for (const b of msg.content) {
-            if (b && (b.type === 'text' || !b.type) && typeof (b as any).text === 'string') {
-              parts.push((b as any).text);
+            if (typeof b === 'string') {
+              parts.push(b);
+            } else if (b && typeof b === 'object') {
+              const txt = (b as any).text || (b as any).content || (b as any).value;
+              if (typeof txt === 'string') parts.push(txt);
             }
           }
           userText = parts.join('\n');
@@ -2397,16 +2402,75 @@ export class OmpBridge {
           timestamp,
           steering: Boolean(msg && typeof msg === 'object' && 'steering' in msg && msg.steering) || undefined,
         });
+      } else if (role === 'system') {
+        let systemText = '';
+        if (typeof msg.content === 'string') {
+          systemText = msg.content;
+        } else if (Array.isArray(msg.content)) {
+          const parts: string[] = [];
+          for (const b of msg.content) {
+            if (typeof b === 'string') {
+              parts.push(b);
+            } else if (b && typeof b === 'object') {
+              const txt = (b as any).text || (b as any).content || (b as any).value;
+              if (typeof txt === 'string') parts.push(txt);
+            }
+          }
+          systemText = parts.join('\n');
+        } else if (typeof (msg as any).text === 'string') {
+          systemText = (msg as any).text;
+        }
+
+        if (systemText.trim()) {
+          result.push({
+            id: `msg-system-${timestamp}-${i}`,
+            role: 'system',
+            content: systemText,
+            timestamp,
+          });
+        }
       } else if (role === 'assistant') {
         const textParts: string[] = [];
         let thinkingBlock: ThinkingBlock | undefined;
         const toolCalls: ToolCall[] = [];
 
-        if (Array.isArray(msg.content)) {
-          for (const block of msg.content) {
-            if (!block || typeof block !== 'object') continue;
-            if (block.type === 'text' && typeof (block as any).text === 'string') {
-              textParts.push((block as any).text);
+        const rawContent = (msg as any).content;
+        if (typeof rawContent === 'string') {
+          if (rawContent.trim()) {
+            textParts.push(rawContent);
+          }
+        } else if (Array.isArray(rawContent)) {
+          for (const block of rawContent) {
+            if (!block) continue;
+            if (typeof block === 'string') {
+              const strBlock = String(block).trim();
+              if (strBlock) textParts.push(strBlock);
+              continue;
+            }
+            if (typeof block !== 'object') continue;
+            if (
+              block.type === 'toolCall' ||
+              block.type === 'tool_use' ||
+              block.type === 'tool_call'
+            ) {
+              const tcBlock = block as any;
+              const tcId = String(
+                tcBlock.id ||
+                tcBlock.toolCallId ||
+                tcBlock.tool_use_id ||
+                tcBlock.tool_call_id ||
+                tcBlock.call_id ||
+                `tc-${timestamp}-${toolCalls.length}`
+              );
+              const tc: ToolCall = {
+                id: tcId,
+                name: String(tcBlock.name || tcBlock.toolName || tcBlock.tool || 'tool'),
+                params: (tcBlock.arguments || tcBlock.args || tcBlock.input || {}) as Record<string, any>,
+                status: 'running',
+                startTime: timestamp,
+              };
+              toolCalls.push(tc);
+              toolCallsMap.set(tcId, tc);
             } else if (block.type === 'thinking' || (block as any).thought) {
               const thought =
                 typeof (block as any).text === 'string'
@@ -2418,22 +2482,17 @@ export class OmpBridge {
                 timestamp,
                 completed: true,
               };
-            } else if (block.type === 'toolCall') {
-              const tcBlock = block as any;
-              const tcId = String(tcBlock.id || `tc-${timestamp}-${toolCalls.length}`);
-              const tc: ToolCall = {
-                id: tcId,
-                name: String(tcBlock.name || 'tool'),
-                params: (tcBlock.arguments as Record<string, any>) || {},
-                status: 'running',
-                startTime: timestamp,
-              };
-              toolCalls.push(tc);
-              toolCallsMap.set(tcId, tc);
+            } else {
+              const txt = (block as any).text || (block as any).content || (block as any).value;
+              if (typeof txt === 'string' && txt.trim()) {
+                textParts.push(txt);
+              }
             }
           }
         } else if (typeof (msg as any).text === 'string') {
           textParts.push((msg as any).text);
+        } else if (typeof (msg as any).output === 'string') {
+          textParts.push((msg as any).output);
         }
         const lastMsg = result[result.length - 1];
         if (lastMsg && lastMsg.role === 'assistant') {
@@ -2495,25 +2554,67 @@ export class OmpBridge {
           timestamp,
         });
       } else if (role === 'toolResult') {
-        const toolCallId = (msg.toolCallId || (msg as any).id) as string;
-        if (toolCallId && toolCallsMap.has(toolCallId)) {
-          const tc = toolCallsMap.get(toolCallId)!;
+        const toolCallId = String(
+          msg.toolCallId ||
+          (msg as any).tool_call_id ||
+          (msg as any).tool_use_id ||
+          (msg as any).toolUseId ||
+          (msg as any).call_id ||
+          (msg as any).callId ||
+          msg.id ||
+          ''
+        );
+        let tc = toolCallId ? toolCallsMap.get(toolCallId) : undefined;
+        if (!tc) {
+          for (const item of toolCallsMap.values()) {
+            if (item.status === 'running') {
+              tc = item;
+              break;
+            }
+          }
+        }
+        if (tc) {
           tc.status = msg.isError ? 'failed' : 'completed';
           tc.endTime = timestamp;
 
           let resultText = '';
-          if (
-            Array.isArray(msg.content) &&
-            msg.content[0] &&
-            typeof (msg.content[0] as any).text === 'string'
-          ) {
-            resultText = (msg.content[0] as any).text;
+          if (typeof msg.content === 'string') {
+            resultText = msg.content;
+          } else if (Array.isArray(msg.content)) {
+            const parts: string[] = [];
+            for (const b of msg.content) {
+              if (typeof b === 'string') {
+                parts.push(b);
+              } else if (b && typeof b === 'object') {
+                const txt = (b as any).text || (b as any).content || (b as any).value;
+                if (typeof txt === 'string') parts.push(txt);
+              }
+            }
+            resultText = parts.join('\n');
+          } else if (typeof (msg as any).text === 'string') {
+            resultText = (msg as any).text;
+          } else if (typeof (msg as any).output === 'string') {
+            resultText = (msg as any).output;
           }
           tc.result = resultText || msg.details || msg.content;
           if (msg.isError) {
             tc.error =
               resultText ||
               (typeof msg.details === 'string' ? msg.details : 'Tool execution failed');
+          }
+        }
+      }
+    }
+
+    // Ensure no toolCall in session history remains stuck in running status
+    for (const chatMsg of result) {
+      if (chatMsg.toolCalls && chatMsg.toolCalls.length > 0) {
+        for (const tc of chatMsg.toolCalls) {
+          if (tc.status === 'running') {
+            tc.status = tc.error ? 'failed' : 'completed';
+            if (!tc.endTime) {
+              tc.endTime = chatMsg.timestamp || Date.now();
+            }
           }
         }
       }
@@ -3286,6 +3387,15 @@ export class OmpBridge {
 
       case 'turn_end':
         this.setStatus('idle');
+        for (const tc of this.activeToolCalls.values()) {
+          if (tc.status === 'running') {
+            tc.status = tc.error ? 'failed' : 'completed';
+            tc.endTime = Date.now();
+            if (this.window && !this.window.isDestroyed()) {
+              this.window.webContents.send('omp:tool-call', tc);
+            }
+          }
+        }
         if (this.retryState.isRetrying) {
           this.retryState = { isRetrying: false };
           if (this.window && !this.window.isDestroyed()) {
@@ -3297,6 +3407,15 @@ export class OmpBridge {
       case 'agent_end':
         this.setStatus('idle');
         this.thinkingAccumulator.reset();
+        for (const tc of this.activeToolCalls.values()) {
+          if (tc.status === 'running') {
+            tc.status = tc.error ? 'failed' : 'completed';
+            tc.endTime = Date.now();
+            if (this.window && !this.window.isDestroyed()) {
+              this.window.webContents.send('omp:tool-call', tc);
+            }
+          }
+        }
         this.activeToolCalls.clear();
         this.writeSnapshots.clear();
         for (const id of this.pendingUiRequests.keys()) {
