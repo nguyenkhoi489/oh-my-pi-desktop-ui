@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import electronPkg from 'electron';
 import type { OmpThinkingLevel, OmpApprovalMode } from './types.ts';
+import { sanitizeLaunchOptions, type OmpLaunchOptions } from './launch-args.ts';
 
 export interface AppSettings {
   theme?: 'light' | 'dark';
@@ -20,6 +21,7 @@ export interface AppSettings {
   interruptMode?: string;
   profile?: string;
   hostToolsEnabled?: boolean;
+  launchOptions?: OmpLaunchOptions;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -119,6 +121,9 @@ export class SettingsStore {
     if (typeof raw.hostToolsEnabled === 'boolean') {
       clean.hostToolsEnabled = raw.hostToolsEnabled;
     }
+    if (raw.launchOptions && typeof raw.launchOptions === 'object') {
+      clean.launchOptions = sanitizeLaunchOptions(raw.launchOptions);
+    }
     return clean;
   }
 
@@ -201,6 +206,12 @@ export class SettingsStore {
     }
     if ('hostToolsEnabled' in partial && typeof partial.hostToolsEnabled === 'boolean') {
       next.hostToolsEnabled = partial.hostToolsEnabled;
+    }
+    if ('launchOptions' in partial) {
+      next.launchOptions =
+        partial.launchOptions && typeof partial.launchOptions === 'object'
+          ? sanitizeLaunchOptions(partial.launchOptions)
+          : undefined;
     }
 
     this.settings = next;

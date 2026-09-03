@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { ExtensionsTab } from './ops/ExtensionsTab.tsx';
 import {
   X,
   Cpu,
@@ -19,9 +20,6 @@ import {
   FileText,
   AlertTriangle,
   FolderGit2,
-  Plus,
-  Link,
-  Package,
 } from 'lucide-react';
 import type {
   EngineUpdateCheckResult,
@@ -30,7 +28,6 @@ import type {
   MaintenanceEvent,
   OmpPsScope,
   OmpWorktreeInfo,
-  OmpPluginInfo,
   OmpAgentItem,
 } from '../../types';
 
@@ -72,17 +69,7 @@ export const OpsModal: React.FC<OpsModalProps> = ({
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearAllFlag, setClearAllFlag] = useState(false);
 
-  // Plugins State (Phase 14)
-  const [plugins, setPlugins] = useState<OmpPluginInfo[]>([]);
-  const [isLoadingPlugins, setIsLoadingPlugins] = useState(false);
-  const [pluginError, setPluginError] = useState<string | null>(null);
-  const [installTarget, setInstallTarget] = useState('');
-  const [installScope, setInstallScope] = useState<'user' | 'project'>('user');
-  const [installForce, setInstallForce] = useState(false);
-  const [isInstallingPlugin, setIsInstallingPlugin] = useState(false);
-  const [linkPath, setLinkPath] = useState('');
-  const [isLinkingPlugin, setIsLinkingPlugin] = useState(false);
-
+  // Plugins Tab handled by ExtensionsTab component
   // Agents State (Phase 15)
   const [agents, setAgents] = useState<OmpAgentItem[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
@@ -155,23 +142,7 @@ export const OpsModal: React.FC<OpsModalProps> = ({
     }
   };
 
-  const fetchPlugins = async () => {
-    if (!window.electronAPI?.listPlugins) return;
-    setIsLoadingPlugins(true);
-    setPluginError(null);
-    try {
-      const res = await window.electronAPI.listPlugins();
-      if (res.success && res.plugins) {
-        setPlugins(res.plugins);
-      } else {
-        setPluginError(res.error || 'Không thể tải danh sách plugins');
-      }
-    } catch (err: any) {
-      setPluginError(err?.message || 'Lỗi khi tải danh sách plugins');
-    } finally {
-      setIsLoadingPlugins(false);
-    }
-  };
+  // Plugins fetch handled by ExtensionsTab
 
   const fetchAgents = async () => {
     if (!window.electronAPI?.listAgents) return;
@@ -201,7 +172,7 @@ export const OpsModal: React.FC<OpsModalProps> = ({
       } else if (activeTab === 'worktrees') {
         fetchWorktrees();
       } else if (activeTab === 'extensions') {
-        fetchPlugins();
+        // Handled by ExtensionsTab
       } else if (activeTab === 'agents') {
         fetchAgents();
       }
@@ -341,75 +312,7 @@ export const OpsModal: React.FC<OpsModalProps> = ({
     }
   };
 
-  // Plugin Actions (Phase 14)
-  const handleInstallPlugin = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const target = installTarget.trim();
-    if (!target || !window.electronAPI?.installPlugin || isInstallingPlugin) return;
-
-    setIsInstallingPlugin(true);
-    setPluginError(null);
-    try {
-      const res = await window.electronAPI.installPlugin(target, {
-        scope: installScope,
-        force: installForce,
-      });
-      if (res.success) {
-        setInstallTarget('');
-        setNeedRestart(true);
-        await fetchPlugins();
-      } else {
-        setPluginError(res.error || 'Lỗi khi cài đặt plugin');
-      }
-    } catch (err: any) {
-      setPluginError(err?.message || 'Lỗi khi cài đặt plugin');
-    } finally {
-      setIsInstallingPlugin(false);
-    }
-  };
-
-  const handleUninstallPlugin = async (pluginName: string, scope?: string) => {
-    if (!window.electronAPI?.uninstallPlugin) return;
-    if (!confirm(`Bạn có chắc muốn gỡ plugin ${pluginName}?`)) return;
-
-    try {
-      const res = await window.electronAPI.uninstallPlugin(pluginName, {
-        scope: scope === 'project' ? 'project' : 'user',
-      });
-      if (res.success) {
-        setNeedRestart(true);
-        await fetchPlugins();
-      } else {
-        alert(`Lỗi: ${res.error}`);
-      }
-    } catch (err: any) {
-      alert(`Lỗi: ${err?.message || String(err)}`);
-    }
-  };
-
-  const handleLinkPlugin = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const p = linkPath.trim();
-    if (!p || !window.electronAPI?.linkPlugin || isLinkingPlugin) return;
-
-    setIsLinkingPlugin(true);
-    setPluginError(null);
-    try {
-      const res = await window.electronAPI.linkPlugin(p);
-      if (res.success) {
-        setLinkPath('');
-        setNeedRestart(true);
-        await fetchPlugins();
-      } else {
-        setPluginError(res.error || 'Lỗi khi liên kết plugin');
-      }
-    } catch (err: any) {
-      setPluginError(err?.message || 'Lỗi khi liên kết plugin');
-    } finally {
-      setIsLinkingPlugin(false);
-    }
-  };
-
+  // Plugin actions handled by ExtensionsTab
   // Agents Actions (Phase 15)
   const handleUnpackAgents = async () => {
     if (!window.electronAPI?.unpackAgents || isUnpackingAgents) return;
@@ -1044,161 +947,9 @@ export const OpsModal: React.FC<OpsModalProps> = ({
           )}
 
           {/* TAB 4: EXTENSIONS (Phase 14) */}
+          {/* TAB 4: EXTENSIONS (Phase 14 & Expansion) */}
           {activeTab === 'extensions' && (
-            <div className="space-y-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
-                    <Puzzle className="w-4 h-4 text-purple-500" />
-                    <span>Plugins & Extensions (`omp plugin`)</span>
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                    Cài đặt và quản lý các plugin mở rộng, MCP servers và custom tools.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={fetchPlugins}
-                  disabled={isLoadingPlugins}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300 border border-border transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingPlugins ? 'animate-spin' : ''}`} />
-                  <span>Làm mới</span>
-                </button>
-              </div>
-
-              {pluginError && (
-                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs">
-                  {pluginError}
-                </div>
-              )}
-
-              {/* Install form */}
-              <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3">
-                <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-                  <Package className="w-3.5 h-3.5 text-blue-500" />
-                  <span>Cài đặt plugin từ npm / registry</span>
-                </h4>
-                <form onSubmit={handleInstallPlugin} className="space-y-2.5">
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      type="text"
-                      value={installTarget}
-                      onChange={(e) => setInstallTarget(e.target.value)}
-                      placeholder="Nhập tên package (ví dụ: @omp/plugin-github, omp-mcp-server)..."
-                      disabled={isInstallingPlugin}
-                      className="flex-1 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none"
-                    />
-                    <select
-                      value={installScope}
-                      onChange={(e) => setInstallScope(e.target.value as any)}
-                      className="px-2.5 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-700 dark:text-zinc-300 outline-none"
-                    >
-                      <option value="user">User scope (~/.omp)</option>
-                      <option value="project">Project scope (./.omp)</option>
-                    </select>
-                    <button
-                      type="submit"
-                      disabled={!installTarget.trim() || isInstallingPlugin}
-                      className="flex items-center justify-center gap-1 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-sm transition-colors cursor-pointer disabled:opacity-50 shrink-0"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>{isInstallingPlugin ? 'Đang cài...' : 'Cài đặt'}</span>
-                    </button>
-                  </div>
-
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={installForce}
-                      onChange={(e) => setInstallForce(e.target.checked)}
-                      className="rounded border-border text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Ép cài đặt lại nếu đã tồn tại (--force)
-                    </span>
-                  </label>
-                </form>
-              </div>
-
-              {/* Local Link form */}
-              <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3">
-                <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-                  <Link className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Liên kết plugin phát triển cục bộ (`omp plugin link`)</span>
-                </h4>
-                <form onSubmit={handleLinkPlugin} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={linkPath}
-                    onChange={(e) => setLinkPath(e.target.value)}
-                    placeholder="Đường dẫn thư mục plugin local (ví dụ: ./packages/my-plugin)..."
-                    disabled={isLinkingPlugin}
-                    className="flex-1 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!linkPath.trim() || isLinkingPlugin}
-                    className="flex items-center gap-1 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs shadow-sm transition-colors cursor-pointer disabled:opacity-50 shrink-0"
-                  >
-                    <Link className="w-3.5 h-3.5" />
-                    <span>{isLinkingPlugin ? 'Đang link...' : 'Liên kết'}</span>
-                  </button>
-                </form>
-              </div>
-
-              {/* Installed Plugins list */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200">
-                  Plugins đã cài đặt ({plugins.length})
-                </h4>
-
-                {plugins.length === 0 && !isLoadingPlugins ? (
-                  <div className="p-6 text-center text-slate-400 dark:text-zinc-500 border border-dashed border-border rounded-xl text-xs">
-                    Chưa có plugin nào được cài đặt.
-                  </div>
-                ) : (
-                  plugins.map((p) => (
-                    <div
-                      key={p.name}
-                      className="p-3 rounded-xl border border-border bg-surface/30 flex items-center justify-between text-xs"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-semibold text-slate-800 dark:text-zinc-200">
-                            {p.name}
-                          </span>
-                          {p.version && (
-                            <span className="px-1.5 py-0.2 rounded bg-surface border border-border text-[10px] font-mono text-zinc-400">
-                              v{p.version}
-                            </span>
-                          )}
-                          {p.source && (
-                            <span className="px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-500 border border-purple-500/20 text-[10px]">
-                              {p.source}
-                            </span>
-                          )}
-                        </div>
-                        {p.description && (
-                          <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                            {p.description}
-                          </p>
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleUninstallPlugin(p.name, p.scope)}
-                        className="px-2.5 py-1 rounded bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 text-xs transition-colors cursor-pointer"
-                      >
-                        Gỡ cài đặt
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            <ExtensionsTab onRestartEngine={onRestartEngine} setNeedRestart={setNeedRestart} />
           )}
 
           {/* TAB 5: AGENTS (Phase 15) */}

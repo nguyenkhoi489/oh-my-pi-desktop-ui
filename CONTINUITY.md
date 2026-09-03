@@ -15,6 +15,49 @@ Entry template:
 - **Refs:** report/journal/plan paths
 ```
 
+## 2026-09-03 — Phase 5: Plugin Manager Expansion
+
+- **State:** Đã hoàn thành toàn bộ Phase 5 của roadmap OMP Parity Gap:
+  - `electron/extension-manager.ts`: Mở rộng `ExtensionManager` với các phương thức: `doctor` (`--fix`, `--local`), `features` (`--local`), `toggleFeature` (`--enable`/`--disable`), `setPluginConfig` (`--set k=v`), `getPluginConfig`, `togglePlugin` (`enable`/`disable`), `upgrade` (`--dry-run`, `--local`), `discover` (parse `Available Plugins` hoặc JSON, fallback khi rỗng), `marketplace` (`list`, `add`, `remove`), cùng helper `parseJsonOrEmpty` loại bỏ ANSI codes và parse an toàn.
+  - `electron/main.ts` & `electron/preload.ts`: Đăng ký và expose 9 IPC handlers mới (`omp:plugin-doctor`, `omp:plugin-features`, `omp:plugin-feature-toggle`, `omp:plugin-config-set`, `omp:plugin-config-get`, `omp:plugin-toggle`, `omp:plugin-upgrade`, `omp:plugin-discover`, `omp:plugin-marketplace`), cập nhật `omp:plugin-list`, `omp:plugin-install`, `omp:plugin-uninstall` với các cờ `local` và `dryRun`.
+  - `electron/types.ts` & `src/types/index.ts`: Bổ sung `OmpPluginDoctorItem`, `OmpPluginFeatureItem`, `OmpMarketplaceItem`, `OmpDiscoverPluginItem`, cập nhật `OmpPluginInfo` và `ElectronAPI`.
+  - `src/components/Modals/ops/ExtensionsTab.tsx`: Tách và mở rộng toàn bộ tab Extensions từ `OpsModal.tsx` thành component `React.memo` riêng biệt: Doctor card kèm nút Kiểm tra & Sửa lỗi tự động (`--fix`), toolbar với toggle `--local` và Upgrade All, form Cài đặt/Liên kết có checkbox `--dry-run`/`--force`, danh sách plugin có nút Bật/Tắt, Features modal, Config modal, Upgrade button, Uninstall với preview dry-run, Marketplace manager (thêm/xóa nguồn) và Discover list kèm nút Install.
+  - `src/components/Modals/OpsModal.tsx`: Tích hợp gọn gàng `<ExtensionsTab onRestartEngine={onRestartEngine} setNeedRestart={setNeedRestart} />` và loại bỏ logic inline cũ.
+  - `shared/i18n/vi.ts` & `shared/i18n/en.ts`: Bổ sung đồng bộ 37 khóa i18n cho ExtensionsTab và Plugin Manager Expansion.
+  - `scripts/verify-extension-manager-expansion.mjs`: Test suite 7 checks kiểm tra `parseJsonOrEmpty`, validation input, live `doctor` run, text parsing discover/marketplace, IPC/Preload contract, types và UI integration.
+  - `package.json`: Thêm script `test:extension-manager-expansion` vào chuỗi `npm test`.
+  - Verification: `test:extension-manager` (5/5 passed), `test:extension-manager-expansion` (7/7 passed), toàn bộ test suite (`npm test`, ~46 suites) pass 100%, cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) 0 lỗi.
+- **In-flight:** Không có. Sẵn sàng cho Phase tiếp theo.
+- **Next:**
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-05-plugin-manager-expansion.md`
+  - `scripts/verify-extension-manager-expansion.mjs`
+
+---
+## 2026-09-03 — Phase 4: Launch Options
+
+- **State:** Đã hoàn thành toàn bộ Phase 4 của roadmap OMP Parity Gap:
+  - `electron/launch-args.ts`: Module chứa kiểu `OmpLaunchOptions`, hàm `expandHomeDir` (mở rộng `~`), `sanitizeLaunchOptions` (chuẩn hóa dữ liệu mảng chuỗi, boolean, string), và `buildLaunchArgs` (xây dựng danh sách tham số argv cho 18 cờ khởi động: `--add-dir`, `--tools`/`--no-tools`, `--no-lsp`, `--no-pty`, `--skills`/`--no-skills`, `--no-rules`, `-e`/`--hook`/`--no-extensions`, `--advisor`, `--prewalk`/`--prewalk-into`, `--plan-yolo`/`--plan-yolo-into`, `--max-time`, `--service-tier`, `--system-prompt`/`--append-system-prompt`, `--config`, `--models`, `--hide-thinking`, `--no-title`).
+  - `electron/settings-store.ts`: Bổ sung trường `launchOptions` vào `AppSettings` kèm sanitization và persistence.
+  - `electron/omp-bridge.ts`: Kết nối `buildLaunchArgs(settings.launchOptions)` vào `startProcess` (chèn trước `extraArgs`).
+  - `electron/main.ts` & `electron/preload.ts`: Thêm IPC handler `fs:select-file` và expose qua context bridge `window.electronAPI.selectFile`.
+  - `electron/types.ts` & `src/types/index.ts`: Bổ sung `OmpLaunchOptions`, cập nhật `AppSettings` và `ElectronAPI`.
+  - `src/components/Modals/settings/LaunchOptionsSection.tsx`: UI section hoàn chỉnh trong tab Engine quản lý thêm/xóa thư mục bổ sung, config overlays, extensions, hooks, chip list công cụ/kỹ năng/models, nhóm toggle và text inputs, banner dirty cảnh báo cần khởi động lại engine kèm nút restart và reset.
+  - `src/components/Modals/SettingsModal.tsx`: Nhúng `LaunchOptionsSection` vào tab Engine.
+  - `shared/i18n/vi.ts` & `shared/i18n/en.ts`: Bổ sung đồng bộ 38 khóa i18n cho Launch Options.
+  - `scripts/verify-launch-args.mjs`: Test suite 45 assertions kiểm tra `expandHomeDir`, `sanitizeLaunchOptions`, ma trận `buildLaunchArgs`, `SettingsStore` persistence và `OmpBridge` spawn args ordering.
+  - `package.json`: Thêm script `test:launch-args` vào `test` chain.
+  - Verification: `test:launch-args` (45/45 passed), `test:settings` (48/48 passed), `test:bridge` (55/55 passed), `test:engine-control` (49/49 passed), `test:i18n` (247/247 passed), `npm test` toàn bộ test suites (~45 suites) pass 100%, cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) 0 lỗi.
+- **In-flight:** Không có. Sẵn sàng cho Phase 5: Markdown / Code Block / Thinking.
+- **Next:**
+  1. Triển khai Phase 5: Markdown / Code Block / Thinking (`plans/260902-2057-omp-parity-gap-i18n/phase-05-markdown-code-block-thinking.md`).
+- **Refs:**
+  - `plans/260902-2057-omp-parity-gap-i18n/plan.md`
+  - `plans/260902-2057-omp-parity-gap-i18n/phase-04-launch-options.md`
+  - `scripts/verify-launch-args.mjs`
+
+---
 ## 2026-09-02 — Phase 3: Engine Config Editor UI
 
 - **State:** Đã hoàn thành toàn bộ Phase 3 của roadmap OMP Parity Gap:

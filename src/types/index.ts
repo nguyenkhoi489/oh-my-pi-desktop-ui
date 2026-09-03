@@ -546,7 +546,34 @@ export interface OmpPluginInfo {
   enabled?: boolean;
   scope?: 'user' | 'project' | string;
   path?: string;
+  features?: string[];
+  config?: Record<string, unknown>;
   [key: string]: unknown;
+}
+
+export interface OmpPluginDoctorItem {
+  name: string;
+  status: 'ok' | 'warning' | 'error' | string;
+  message: string;
+}
+
+export interface OmpPluginFeatureItem {
+  name: string;
+  enabled?: boolean;
+  description?: string;
+}
+
+export interface OmpMarketplaceItem {
+  name: string;
+  source: string;
+}
+
+export interface OmpDiscoverPluginItem {
+  name: string;
+  version?: string;
+  description?: string;
+  marketplace?: string;
+  source?: string;
 }
 
 export interface OmpAgentItem {
@@ -584,6 +611,33 @@ export interface OmpEngineState {
   profile?: string;
 }
 
+export interface OmpLaunchOptions {
+  addDirs?: string[];
+  tools?: string[];
+  noTools?: boolean;
+  noLsp?: boolean;
+  noPty?: boolean;
+  skills?: string[];
+  noSkills?: boolean;
+  noRules?: boolean;
+  noExtensions?: boolean;
+  extensions?: string[];
+  hooks?: string[];
+  advisor?: boolean;
+  prewalk?: boolean;
+  prewalkInto?: string;
+  planYolo?: boolean;
+  planYoloInto?: string;
+  maxTime?: string;
+  serviceTier?: string;
+  systemPrompt?: string;
+  appendSystemPrompt?: string;
+  configOverlays?: string[];
+  models?: string[];
+  hideThinking?: boolean;
+  noTitle?: boolean;
+}
+
 export interface AppSettings {
   theme?: 'light' | 'dark';
   language?: 'vi' | 'en';
@@ -600,6 +654,7 @@ export interface AppSettings {
   interruptMode?: string;
   profile?: string;
   hostToolsEnabled?: boolean;
+  launchOptions?: OmpLaunchOptions;
 }
 
 export interface CustomModelCost {
@@ -837,11 +892,20 @@ export interface ElectronAPI {
   getProcessLogs?: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) => Promise<{ success: boolean; logs?: string; error?: string }>;
   listWorktrees?: () => Promise<{ success: boolean; worktrees?: OmpWorktreeInfo[]; error?: string }>;
   clearWorktrees?: (options?: { all?: boolean; dryRun?: boolean }) => Promise<{ success: boolean; rawOutput?: string; error?: string }>;
-  // Plugin & Agents Managers (Phase 14 & 15)
-  listPlugins?: () => Promise<{ success: boolean; plugins?: OmpPluginInfo[]; error?: string }>;
-  installPlugin?: (target: string, options?: { scope?: 'user' | 'project'; force?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
-  uninstallPlugin?: (target: string, options?: { scope?: 'user' | 'project' }) => Promise<{ success: boolean; message?: string; error?: string }>;
+  // Plugin & Agents Managers (Phase 14, 15 & Expansion)
+  listPlugins?: (options?: { local?: boolean }) => Promise<{ success: boolean; plugins?: OmpPluginInfo[]; error?: string }>;
+  installPlugin?: (target: string, options?: { scope?: 'user' | 'project'; force?: boolean; local?: boolean; dryRun?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
+  uninstallPlugin?: (target: string, options?: { scope?: 'user' | 'project'; local?: boolean; dryRun?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
   linkPlugin?: (localPath: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  pluginDoctor?: (options?: { fix?: boolean; local?: boolean }) => Promise<{ success: boolean; items?: OmpPluginDoctorItem[]; message?: string; error?: string }>;
+  pluginFeatures?: (pluginName: string, options?: { local?: boolean }) => Promise<{ success: boolean; features?: OmpPluginFeatureItem[]; rawOutput?: string; error?: string }>;
+  pluginToggleFeature?: (pluginName: string, feature: string, enabled: boolean, options?: { local?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
+  pluginSetConfig?: (pluginName: string, pairs: Array<{ key: string; value: string }>, options?: { local?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
+  pluginGetConfig?: (pluginName: string, options?: { local?: boolean }) => Promise<{ success: boolean; config?: Record<string, unknown>; rawOutput?: string; error?: string }>;
+  pluginToggle?: (pluginName: string, enabled: boolean, options?: { local?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
+  pluginUpgrade?: (options?: { name?: string; dryRun?: boolean; local?: boolean }) => Promise<{ success: boolean; message?: string; rawOutput?: string; error?: string }>;
+  pluginDiscover?: (options?: { local?: boolean }) => Promise<{ success: boolean; plugins?: OmpDiscoverPluginItem[]; rawOutput?: string; error?: string }>;
+  pluginMarketplace?: (action: 'list' | 'add' | 'remove', source?: string, options?: { local?: boolean }) => Promise<{ success: boolean; marketplaces?: OmpMarketplaceItem[]; message?: string; rawOutput?: string; error?: string }>;
   listAgents?: () => Promise<{ success: boolean; agents?: OmpAgentItem[]; error?: string }>;
   unpackAgents?: (options?: { scope?: 'user' | 'project'; force?: boolean; dir?: string }) => Promise<{ success: boolean; rawOutput?: string; error?: string }>;
   // Profile Management (Phase 16)
@@ -857,6 +921,7 @@ export interface ElectronAPI {
   getTodos?: () => Promise<{ success: boolean; phases?: OmpTodoPhase[]; todos?: OmpTodoItem[]; error?: string }>;
   setTodos?: (phases: OmpTodoPhase[]) => Promise<{ success: boolean; phases?: OmpTodoPhase[]; error?: string }>;
   selectFolder: () => Promise<string | null>;
+  selectFile?: (options?: { title?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
   readDirectory: (dirPath: string) => Promise<WorkspaceFile[]>;
   readFile: (filePath: string) => Promise<string>;
   saveFile: (filePath: string, content: string) => Promise<any>;

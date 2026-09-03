@@ -34,6 +34,7 @@ import type {
 import type { SettingsStore } from './settings-store.ts';
 import { NdjsonFramer } from './ndjson-framer.ts';
 import { RpcFrameLogger } from './rpc-frame-logger.ts';
+import { buildLaunchArgs } from './launch-args.ts';
 import { HostToolRegistry, HostUriRouter } from './host-tools.ts';
 import type {
   OmpFrame,
@@ -833,6 +834,9 @@ export class OmpBridge {
     }
     if (effectiveProfile && effectiveProfile !== 'default') {
       args.push('--profile', effectiveProfile);
+    }
+    if (settings?.launchOptions) {
+      args.push(...buildLaunchArgs(settings.launchOptions));
     }
     if (options?.extraArgs && Array.isArray(options.extraArgs)) {
       args.push(...options.extraArgs);

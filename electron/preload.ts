@@ -221,19 +221,45 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearWorktrees: (options?: { all?: boolean; dryRun?: boolean }) =>
     ipcRenderer.invoke('omp:worktree-clear', options),
 
-  // Plugin & Agents Managers (Phase 14 & 15)
-  listPlugins: () =>
-    ipcRenderer.invoke('omp:plugin-list'),
+  // Plugin & Agents Managers (Phase 14, 15 & Expansion)
+  listPlugins: (options?: { local?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-list', options),
 
-  installPlugin: (target: string, options?: { scope?: 'user' | 'project'; force?: boolean }) =>
+  installPlugin: (target: string, options?: { scope?: 'user' | 'project'; force?: boolean; local?: boolean; dryRun?: boolean }) =>
     ipcRenderer.invoke('omp:plugin-install', target, options),
 
-  uninstallPlugin: (target: string, options?: { scope?: 'user' | 'project' }) =>
+  uninstallPlugin: (target: string, options?: { scope?: 'user' | 'project'; local?: boolean; dryRun?: boolean }) =>
     ipcRenderer.invoke('omp:plugin-uninstall', target, options),
 
   linkPlugin: (localPath: string) =>
     ipcRenderer.invoke('omp:plugin-link', localPath),
 
+  pluginDoctor: (options?: { fix?: boolean; local?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-doctor', options),
+
+  pluginFeatures: (pluginName: string, options?: { local?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-features', pluginName, options),
+
+  pluginToggleFeature: (pluginName: string, feature: string, enabled: boolean, options?: { local?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-feature-toggle', pluginName, feature, enabled, options),
+
+  pluginSetConfig: (pluginName: string, pairs: Array<{ key: string; value: string }>, options?: { local?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-config-set', pluginName, pairs, options),
+
+  pluginGetConfig: (pluginName: string, options?: { local?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-config-get', pluginName, options),
+
+  pluginToggle: (pluginName: string, enabled: boolean, options?: { local?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-toggle', pluginName, enabled, options),
+
+  pluginUpgrade: (options?: { name?: string; dryRun?: boolean; local?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-upgrade', options),
+
+  pluginDiscover: (options?: { local?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-discover', options),
+
+  pluginMarketplace: (action: 'list' | 'add' | 'remove', source?: string, options?: { local?: boolean }) =>
+    ipcRenderer.invoke('omp:plugin-marketplace', action, source, options),
   listAgents: () =>
     ipcRenderer.invoke('omp:agents-list'),
 
@@ -276,6 +302,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () =>
     ipcRenderer.invoke('fs:select-folder'),
 
+  selectFile: (options?: { title?: string; filters?: { name: string; extensions: string[] }[] }) =>
+    ipcRenderer.invoke('fs:select-file', options),
   readDirectory: (dirPath: string) =>
     ipcRenderer.invoke('fs:read-dir', dirPath),
 

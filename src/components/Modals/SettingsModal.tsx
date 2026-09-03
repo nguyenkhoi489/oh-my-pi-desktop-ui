@@ -59,6 +59,7 @@ import {
   EngineConfigPathResult,
 } from '../../types';
 import { EngineConfigEditor } from './settings/EngineConfigEditor';
+import { LaunchOptionsSection } from './settings/LaunchOptionsSection';
 import {
   ModelRoleSpec,
   ROLE_THINKING_LEVELS,
@@ -1657,6 +1658,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Launch Options Section (Phase 4) */}
+              <LaunchOptionsSection
+                launchOptions={settings.launchOptions}
+                onChange={(launchOptions) => savePartial({ launchOptions })}
+                onRestartEngine={onRestartEngine}
+              />
             </div>
           )}
 

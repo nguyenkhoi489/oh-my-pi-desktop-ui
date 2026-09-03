@@ -582,18 +582,18 @@ ipcMain.handle('omp:worktree-clear', async (_, options?: { all?: boolean; dryRun
   return opsManager.clearWorktrees(binary, options);
 });
 
-// IPC Handlers: Plugin & Agents Managers (Phase 14 & 15)
-ipcMain.handle('omp:plugin-list', async () => {
+// IPC Handlers: Plugin & Agents Managers (Phase 14, 15 & Expansion)
+ipcMain.handle('omp:plugin-list', async (_, options?: { local?: boolean }) => {
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
-  return extensionManager.listPlugins(binary);
+  return extensionManager.listPlugins(binary, options);
 });
 
-ipcMain.handle('omp:plugin-install', async (_, target: string, options?: { scope?: 'user' | 'project'; force?: boolean }) => {
+ipcMain.handle('omp:plugin-install', async (_, target: string, options?: { scope?: 'user' | 'project'; force?: boolean; local?: boolean; dryRun?: boolean }) => {
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
   return extensionManager.installPlugin(binary, target, options);
 });
 
-ipcMain.handle('omp:plugin-uninstall', async (_, target: string, options?: { scope?: 'user' | 'project' }) => {
+ipcMain.handle('omp:plugin-uninstall', async (_, target: string, options?: { scope?: 'user' | 'project'; local?: boolean; dryRun?: boolean }) => {
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
   return extensionManager.uninstallPlugin(binary, target, options);
 });
@@ -603,6 +603,50 @@ ipcMain.handle('omp:plugin-link', async (_, localPath: string) => {
   return extensionManager.linkPlugin(binary, localPath);
 });
 
+ipcMain.handle('omp:plugin-doctor', async (_, options?: { fix?: boolean; local?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.doctor(binary, options);
+});
+
+ipcMain.handle('omp:plugin-features', async (_, pluginName: string, options?: { local?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.features(binary, pluginName, options);
+});
+
+ipcMain.handle('omp:plugin-feature-toggle', async (_, pluginName: string, feature: string, enabled: boolean, options?: { local?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.toggleFeature(binary, pluginName, feature, enabled, options);
+});
+
+ipcMain.handle('omp:plugin-config-set', async (_, pluginName: string, pairs: Array<{ key: string; value: string }>, options?: { local?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.setPluginConfig(binary, pluginName, pairs, options);
+});
+
+ipcMain.handle('omp:plugin-config-get', async (_, pluginName: string, options?: { local?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.getPluginConfig(binary, pluginName, options);
+});
+
+ipcMain.handle('omp:plugin-toggle', async (_, name: string, enabled: boolean, options?: { local?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.togglePlugin(binary, name, enabled, options);
+});
+
+ipcMain.handle('omp:plugin-upgrade', async (_, options?: { name?: string; dryRun?: boolean; local?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.upgrade(binary, options);
+});
+
+ipcMain.handle('omp:plugin-discover', async (_, options?: { local?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.discover(binary, options);
+});
+
+ipcMain.handle('omp:plugin-marketplace', async (_, action: 'list' | 'add' | 'remove', source?: string, options?: { local?: boolean }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return extensionManager.marketplace(binary, action, source, options);
+});
 ipcMain.handle('omp:agents-list', async () => {
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
   const state = ompBridge ? await ompBridge.getState().catch(() => null) : null;
@@ -672,6 +716,20 @@ ipcMain.handle('fs:select-folder', async () => {
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 });
+
+ipcMain.handle(
+  'fs:select-file',
+  async (_, options?: { title?: string; filters?: { name: string; extensions: string[] }[] }) => {
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      title: options?.title || 'Chọn file',
+      filters: options?.filters,
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  }
+);
 
 const IGNORED_NAMES = new Set([
   '.git',
