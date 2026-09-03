@@ -14,6 +14,36 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-03 — Fix SSH Hosts Light Mode Inverted Text Colors
+
+- **State:** Đã sửa lỗi hiển thị chữ trắng/mờ tịt trong Light Mode ở tab SSH Hosts (`SshTab.tsx`):
+  - `src/components/Modals/ops/SshTab.tsx`:
+    - Thay thế toàn bộ các class CSS không hợp lệ (`text-text`, `text-text-muted`, `bg-panel-hover`, `border-panel-border`) bằng hệ thống màu chuẩn thống nhất của dự án (`text-slate-900 dark:text-zinc-100`, `text-slate-500 dark:text-zinc-400`, `bg-surface`, `bg-surface-highlight`, `border-border`).
+    - Khắc phục triệt để tình trạng chữ tiêu đề, mô tả, nút làm mới, tab filter inactive, ô tìm kiếm, empty state và form Add/Delete bị trắng xoá/mờ tịt trên nền sáng khi người dùng ở Light Mode.
+  - `scripts/verify-ssh-hosts.mjs`: Thêm test assertion kiểm tra ngăn chặn tái diễn các class lỗi thời (`!text-text-muted`, `!text-text`, `dark:text-zinc-100`).
+  - Verification: Cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) và `test:ssh-hosts` pass 100%.
+- **In-flight:** Không có.
+- **Next:**
+  - Bàn giao cho người dùng.
+- **Refs:**
+  - `src/components/Modals/ops/SshTab.tsx`
+  - `scripts/verify-ssh-hosts.mjs`
+
+## 2026-09-03 — Move Storage GC Action Buttons to Dedicated Row
+
+- **State:** Cải thiện UI tab Storage & GC trong OpsModal:
+  - `src/components/Modals/ops/StorageTab.tsx`:
+    - Tách dòng text thông báo/hướng dẫn (`ops.storage.gc.requirePreview`, `ops.storage.gc.optionsChanged`, `ops.storage.gc.previewBadge`) và 2 action buttons (`Xem trước (Dry-run)`, `Áp dụng dọn dẹp`) thành 2 hàng riêng biệt.
+    - Dòng thông báo hiển thị full-width ở trên kèm `shrink-0` cho icon, không còn bị chèn ép co cụm thành nhiều dòng.
+    - Hai nút thao tác nằm ở hàng dưới căn phải (`justify-end`), thoáng đãng, dễ thao tác và chuẩn UI form layout.
+    - Cải tiến Image Backends Section Header với layout `flex flex-col sm:flex-row sm:items-center justify-between gap-3`, chia phần thông tin mô tả và nút bấm cân đối. Bổ sung `shrink-0 whitespace-nowrap` cho nút "Kiểm tra trạng thái" và các nút Doctor, Probe, Purge, ngăn chặn hoàn toàn hiện tượng rớt chữ "thái" xuống dòng thứ hai.
+  - Verification: Cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`), `test:image-backends`, `test:ops-manager`, `test:i18n` pass 100%.
+- **In-flight:** Không có.
+- **Next:**
+  - Bàn giao cho người dùng.
+- **Refs:**
+  - `src/components/Modals/ops/StorageTab.tsx`
+
 ## 2026-09-03 — Fix UI Layout Overflow in OpsCenter Plugins & Tools Tab
 
 - **State:** Đã sửa lỗi vỡ layout form cài đặt/liên kết plugin và co bẹp icon trong OpsModal tab Plugins & Tools:

@@ -303,6 +303,9 @@ try {
 
     // SshTab component
     assert.ok(sshTabContent.includes('export const SshTab: React.FC<SshTabProps>'), 'SshTab must export SshTab');
+    assert.ok(!sshTabContent.includes('text-text-muted'), 'SshTab must not use invalid text-text-muted class');
+    assert.ok(!sshTabContent.includes('text-text '), 'SshTab must not use invalid text-text class');
+    assert.ok(sshTabContent.includes('dark:text-zinc-100'), 'SshTab must support standard dual-theme text classes');
   });
 
   // Test 9: i18n parity check for SSH keys

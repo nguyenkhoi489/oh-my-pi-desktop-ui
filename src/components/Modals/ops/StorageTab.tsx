@@ -525,28 +525,28 @@ export const StorageTab: React.FC<StorageTabProps> = ({
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center justify-between pt-3 border-t border-border/40">
+        {/* Action buttons & notices */}
+        <div className="pt-3 border-t border-border/40 space-y-2.5">
           <div className="text-[11px] text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
             {isOptionsChangedSincePreview ? (
-              <span className="text-amber-500 dark:text-amber-400 flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                {t('ops.storage.gc.optionsChanged')}
+              <span className="text-amber-500 dark:text-amber-400 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span>{t('ops.storage.gc.optionsChanged')}</span>
               </span>
             ) : hasPreview ? (
-              <span className="text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                {t('ops.storage.gc.previewBadge')}
+              <span className="text-emerald-500 dark:text-emerald-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>{t('ops.storage.gc.previewBadge')}</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1">
-                <Info className="w-3.5 h-3.5 text-slate-400" />
-                {t('ops.storage.gc.requirePreview')}
+              <span className="flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>{t('ops.storage.gc.requirePreview')}</span>
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <button
               onClick={handlePreview}
               disabled={isLoading || (!blobs && !archive && !wal)}
@@ -801,10 +801,10 @@ export const StorageTab: React.FC<StorageTabProps> = ({
       {/* Section Image Backends & Images Cache (Phase 11) */}
       <div className="pt-6 border-t border-border/80 space-y-6">
         {/* Image Backends Section Header */}
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
-              <ImageIcon className="w-4 h-4 text-indigo-500" />
+              <ImageIcon className="w-4 h-4 text-indigo-500 shrink-0" />
               <span>{t('ops.storage.images.title')}</span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
@@ -815,13 +815,12 @@ export const StorageTab: React.FC<StorageTabProps> = ({
             type="button"
             onClick={handleFetchStatus}
             disabled={imagesLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-300 bg-surface hover:bg-surface-highlight border border-border rounded-lg transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-300 bg-surface hover:bg-surface-highlight border border-border rounded-lg transition-colors cursor-pointer shrink-0 whitespace-nowrap self-start sm:self-center"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${imagesLoading && imagesAction === 'status' ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${imagesLoading && imagesAction === 'status' ? 'animate-spin' : ''}`} />
             <span>{t('ops.storage.images.btn.checkStatus')}</span>
           </button>
         </div>
-
         {/* Error if any */}
         {imagesError && (
           <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-2.5 text-rose-600 dark:text-rose-400 text-xs">
@@ -981,7 +980,7 @@ export const StorageTab: React.FC<StorageTabProps> = ({
                 type="button"
                 onClick={handleRunDoctor}
                 disabled={imagesLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-200 bg-surface-highlight hover:bg-surface border border-border rounded-lg transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-200 bg-surface-highlight hover:bg-surface border border-border rounded-lg transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               >
                 {imagesLoading && imagesAction === 'doctor' ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -994,7 +993,7 @@ export const StorageTab: React.FC<StorageTabProps> = ({
                 type="button"
                 onClick={handleRunProbe}
                 disabled={imagesLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-200 bg-surface-highlight hover:bg-surface border border-border rounded-lg transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-200 bg-surface-highlight hover:bg-surface border border-border rounded-lg transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               >
                 {imagesLoading && imagesAction === 'probe' ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -1095,12 +1094,12 @@ export const StorageTab: React.FC<StorageTabProps> = ({
                 <span>{t('ops.storage.images.purgeTitle')}</span>
               </h4>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={handlePurgeDryRun}
                 disabled={imagesLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-200 bg-surface-highlight hover:bg-surface border border-border rounded-lg transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-200 bg-surface-highlight hover:bg-surface border border-border rounded-lg transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               >
                 {imagesLoading && imagesAction === 'purge' ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -1113,7 +1112,7 @@ export const StorageTab: React.FC<StorageTabProps> = ({
                 type="button"
                 onClick={() => setShowPurgeConfirmModal(true)}
                 disabled={imagesLoading || !hasPurgePreview || isPurgeOptionsChanged || isStreaming}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-lg transition-colors shadow-sm cursor-pointer shrink-0 whitespace-nowrap"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{t('ops.storage.images.btn.purgeApply')}</span>
