@@ -21,7 +21,6 @@ import {
   Settings,
   SlidersHorizontal,
   Terminal,
-  GitCommit,
   Volume2,
   Square,
 } from 'lucide-react';
@@ -88,8 +87,6 @@ interface HeaderBarProps {
   onSetAutoCompaction?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onOpenSettingsModal?: () => void;
   onOpenOpsModal?: () => void;
-  onOpenCommitModal?: () => void;
-  isCommitDisabled?: boolean;
   onCopyLastAssistantText?: () => Promise<string | null>;
   isSpeaking?: boolean;
   onSpeakLastAssistantText?: () => void;
@@ -160,8 +157,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onCompact,
   onSetAutoCompaction,
   onOpenOpsModal,
-  onOpenCommitModal,
-  isCommitDisabled,
   onOpenSettingsModal,
   onToggleTerminal,
   isTerminalActive,
@@ -224,47 +219,62 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const getStatusBadge = () => {
     if (isCompacting) {
       return (
-        <span className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-xs font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 animate-pulse">
-          <RotateCw className="w-3.5 h-3.5 animate-spin text-purple-500" />
-          {t('header.compactingContext')}
+        <span
+          className="flex items-center gap-1.5 whitespace-nowrap px-2.5 lg:px-3 py-1 rounded-md text-xs font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 animate-pulse shrink-0"
+          title={t('header.compactingContext')}
+        >
+          <RotateCw className="w-3.5 h-3.5 animate-spin text-purple-500 shrink-0" />
+          <span className="hidden sm:inline">{t('header.compactingContext')}</span>
+          <span className="sm:hidden">Compacting...</span>
         </span>
       );
     }
     switch (status) {
       case 'thinking':
         return (
-          <span className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-xs font-medium bg-codex-500/10 text-codex-500 dark:text-codex-400 border border-codex-500/20">
-            <span className="w-2 h-2 rounded-full bg-codex-500 animate-pulse"></span>
-            Thinking (AST / LSP)...
+          <span
+            className="flex items-center gap-1.5 whitespace-nowrap px-2.5 lg:px-3 py-1 rounded-md text-xs font-medium bg-codex-500/10 text-codex-500 dark:text-codex-400 border border-codex-500/20 shrink-0"
+            title="Thinking (AST / LSP)..."
+          >
+            <span className="w-2 h-2 rounded-full bg-codex-500 animate-pulse shrink-0"></span>
+            <span className="hidden 2xl:inline">Thinking (AST / LSP)...</span>
+            <span className="2xl:hidden">Thinking...</span>
           </span>
         );
       case 'executing_tool':
         return (
-          <span className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-            <RotateCw className="w-3.5 h-3.5 animate-spin text-blue-500" />
-            Executing Tool
+          <span
+            className="flex items-center gap-1.5 whitespace-nowrap px-2.5 lg:px-3 py-1 rounded-md text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0"
+            title="Executing Tool"
+          >
+            <RotateCw className="w-3.5 h-3.5 animate-spin text-blue-500 shrink-0" />
+            <span className="hidden sm:inline">Executing Tool</span>
+            <span className="sm:hidden">Running...</span>
           </span>
         );
       case 'streaming':
         return (
-          <span className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-            <Zap className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
-            Generating Response
+          <span
+            className="flex items-center gap-1.5 whitespace-nowrap px-2.5 lg:px-3 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0"
+            title="Generating Response"
+          >
+            <Zap className="w-3.5 h-3.5 text-emerald-500 animate-pulse shrink-0" />
+            <span className="hidden sm:inline">Generating Response</span>
+            <span className="sm:hidden">Generating...</span>
           </span>
         );
       case 'waiting_permission':
         return (
-          <span className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
-            Requires Approval
+          <span
+            className="flex items-center gap-1.5 whitespace-nowrap px-2.5 lg:px-3 py-1 rounded-md text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse shrink-0"
+            title="Requires Approval"
+          >
+            <span className="hidden sm:inline">Requires Approval</span>
+            <span className="sm:hidden">Approval</span>
           </span>
         );
       default:
-        return (
-          <span className="flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-md text-xs font-medium bg-surface text-slate-500 dark:text-zinc-400 border border-border">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-zinc-500"></span>
-            Idle
-          </span>
-        );
+        return null;
     }
   };
 
@@ -303,13 +313,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   };
 
   return (
-    <header className="h-12 bg-panel border-b border-border flex items-center justify-between px-3 pl-20 app-drag-region select-none">
+    <header className="h-12 bg-panel border-b border-border flex items-center justify-between px-3 pl-20 app-drag-region select-none min-w-0 overflow-hidden">
       {/* Left: Project Folder Picker, Sidebar Toggle & OMP Status */}
-      <div className="flex items-center gap-2.5 app-no-drag">
+      <div className="flex items-center gap-2 lg:gap-2.5 app-no-drag shrink-0 min-w-0">
         {/* Toggle Left Sidebar Button */}
         <button
           onClick={onToggleLeftSidebar}
-          className={`p-1.5 rounded-lg text-xs border transition-colors cursor-pointer ${
+          className={`p-1.5 rounded-lg text-xs border transition-colors cursor-pointer shrink-0 ${
             isLeftSidebarOpen
               ? 'bg-surface-highlight text-codex-accent border-border'
               : 'bg-surface text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
@@ -325,38 +335,38 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
         <button
           onClick={onOpenFolder}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 border border-border transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 lg:gap-2 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs font-medium bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 border border-border transition-colors cursor-pointer shrink-0"
           title={t('header.openProjectFolder')}
         >
           <FolderOpen className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400 shrink-0" />
-          <span className="max-w-[150px] truncate font-medium">{workspaceName}</span>
+          <span className="max-w-[100px] sm:max-w-[130px] lg:max-w-[150px] truncate font-medium">{workspaceName}</span>
           <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500 shrink-0" />
         </button>
 
-        <div className="h-4 w-[1px] bg-border" />
+        <div className="h-4 w-[1px] bg-border shrink-0" />
 
         {/* Antigravity / OMP Branding Badge */}
-        <div className="flex items-center gap-2 text-xs">
-          <div className="flex items-center gap-1.5 font-bold tracking-tight text-slate-900 dark:text-zinc-100">
-            <Sparkles className="w-3.5 h-3.5 text-codex-accent" />
+        <div className="flex items-center gap-1.5 lg:gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-1.5 font-bold tracking-tight text-slate-900 dark:text-zinc-100 shrink-0">
+            <Sparkles className="w-3.5 h-3.5 text-codex-accent shrink-0" />
             <span>OMP</span>
           </div>
 
           {installStatus?.installed ? (
             <span
-              className="text-[11px] font-medium px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-md border border-emerald-500/20 flex items-center gap-1.5"
+              className="text-[11px] font-medium px-1.5 sm:px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-md border border-emerald-500/20 flex items-center gap-1.5 shrink-0"
               title={`OMP Binary: ${installStatus.binaryPath}`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              {installStatus.version || 'Connected'}
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+              <span className="hidden sm:inline">{installStatus.version || 'Connected'}</span>
             </span>
           ) : (
             <button
               onClick={onOpenInstallModal}
-              className="text-[11px] font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-md border border-amber-500/30 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="text-[11px] font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-md border border-amber-500/30 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
               title={t('header.setupOmpTooltip')}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping shrink-0"></span>
               Setup OMP
             </button>
           )}
@@ -364,8 +374,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
 
       {/* Center: Model Selector & Agent Status */}
-      <div className="flex items-center gap-2.5 app-no-drag">
-        <div className="relative" ref={dropdownRef}>
+      <div className="flex-1 flex items-center justify-center gap-1.5 lg:gap-2 app-no-drag min-w-0 overflow-hidden mx-1 sm:mx-2">
+        <div className="relative shrink-0 min-w-0" ref={dropdownRef}>
           <button
             onClick={() => {
               if (!isBusy && hasWorkspace) {
@@ -373,7 +383,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               }
             }}
             disabled={isBusy || !hasWorkspace}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border border-border transition-colors font-medium ${
+            className={`flex items-center gap-1.5 lg:gap-2 px-2.5 lg:px-3 py-1.5 rounded-lg text-xs border border-border transition-colors font-medium shrink-0 ${
               isBusy || !hasWorkspace
                 ? 'bg-surface opacity-70 cursor-not-allowed text-slate-500 dark:text-zinc-400'
                 : 'bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 cursor-pointer'
@@ -387,9 +397,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             }
           >
             <Cpu className="w-3.5 h-3.5 text-codex-accent shrink-0" />
-            <span className="font-mono text-[12px] max-w-[180px] truncate">{activeModelName}</span>
+            <span className="font-mono text-[12px] max-w-[90px] sm:max-w-[130px] lg:max-w-[160px] truncate">{activeModelName}</span>
             {thinkingLevel !== 'off' && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-codex-accent/15 text-codex-accent font-semibold uppercase">
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-codex-accent/15 text-codex-accent font-semibold uppercase shrink-0">
                 {thinkingLevel}
               </span>
             )}
@@ -486,16 +496,16 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         </div>
 
         {/* Approval Mode Selector */}
-        <div className="relative" ref={approvalDropdownRef}>
+        <div className="relative shrink-0 min-w-0" ref={approvalDropdownRef}>
           <button
             onClick={() => {
               setIsApprovalDropdownOpen(!isApprovalDropdownOpen);
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border border-border bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 transition-colors font-medium cursor-pointer"
+            className="flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-xs border border-border bg-surface hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 transition-colors font-medium cursor-pointer shrink-0"
             title={t('header.approvalModeTooltip')}
           >
             <Shield className="w-3.5 h-3.5 text-codex-accent shrink-0" />
-            <span className="text-[12px] truncate max-w-[130px]">
+            <span className="text-[12px] truncate max-w-[70px] sm:max-w-[90px] lg:max-w-[120px]">
               {approvalMode === 'always-ask'
                 ? t('header.approval.alwaysAsk')
                 : approvalMode === 'yolo'
@@ -547,34 +557,42 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
         {status === 'streaming' && tokensPerSecond != null && tokensPerSecond > 0 && (
           <span
-            className="flex items-center gap-1 whitespace-nowrap px-2 py-1 rounded-md text-[11px] font-mono font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 animate-pulse"
+            className="flex items-center gap-1 whitespace-nowrap px-2 py-1 rounded-md text-[11px] font-mono font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 animate-pulse shrink-0"
             title={t('header.tokensPerSecondTooltip')}
           >
-            <Zap className="w-3 h-3 text-emerald-500" />
-            {tokensPerSecond >= 10 ? Math.round(tokensPerSecond) : tokensPerSecond.toFixed(1)} tok/s
+            <Zap className="w-3 h-3 text-emerald-500 shrink-0" />
+            <span>{tokensPerSecond >= 10 ? Math.round(tokensPerSecond) : tokensPerSecond.toFixed(1)}</span>
+            <span className="hidden sm:inline"> tok/s</span>
+            <span className="sm:hidden">/s</span>
           </span>
         )}
 
         {hasContextUsage && percent != null && (
           <button
             onClick={() => setIsStatsPanelOpen(true)}
-            className={`flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1.5 rounded-lg text-xs border transition-colors cursor-pointer ${getMeterColorClass(percent)}`}
+            className={`flex items-center gap-1.5 whitespace-nowrap px-2 lg:px-2.5 py-1.5 rounded-lg text-xs border transition-colors cursor-pointer shrink-0 ${getMeterColorClass(percent)}`}
             title={contextTooltip}
           >
             <Database className="w-3.5 h-3.5 shrink-0 text-codex-accent" />
-            <span className="font-mono text-[11.5px]">
+            <span className="font-mono text-[11.5px] hidden xl:inline">
               {formattedTokens && formattedWindow ? `${formattedTokens}/${formattedWindow} (${percent}%)` : formattedTokens ? `${formattedTokens} (${percent}%)` : `${percent}%`}
+            </span>
+            <span className="font-mono text-[11.5px] hidden sm:inline xl:hidden">
+              {formattedTokens ? `${formattedTokens} (${percent}%)` : `${percent}%`}
+            </span>
+            <span className="font-mono text-[11.5px] sm:hidden">
+              {percent}%
             </span>
           </button>
         )}
       </div>
 
       {/* Right: Right Sidebar Toggle, Theme Toggle & Quick Action ⌘K */}
-      <div className="flex items-center gap-2 app-no-drag">
+      <div className="flex items-center gap-1 sm:gap-1.5 app-no-drag shrink-0">
         {/* Toggle Right Agent Panel Button */}
         <button
           onClick={onToggleRightSidebar}
-          className={`flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1.5 rounded-lg text-xs border transition-colors cursor-pointer ${
+          className={`p-1.5 rounded-lg text-xs border transition-colors cursor-pointer shrink-0 ${
             isRightSidebarOpen
               ? 'bg-surface-highlight text-codex-accent border-border font-semibold shadow-xs'
               : 'bg-surface text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
@@ -582,35 +600,33 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           title={isRightSidebarOpen ? t('header.collapseAgent') : t('header.expandAgent')}
         >
           {isRightSidebarOpen ? (
-            <PanelRightClose className="w-3.5 h-3.5 text-codex-accent" />
+            <PanelRightClose className="w-3.5 h-3.5 text-codex-accent shrink-0" />
           ) : (
-            <PanelRight className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400" />
+            <PanelRight className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400 shrink-0" />
           )}
-          <span className="font-medium text-[11.5px]">Copilot</span>
         </button>
-
         <button
           onClick={onToggleTheme}
-          className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
+          className="p-1.5 lg:p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer shrink-0"
           title={t('header.switchTheme', { theme: theme === 'light' ? 'Dark' : 'Light' })}
         >
           {theme === 'light' ? (
-            <Moon className="w-3.5 h-3.5 text-slate-700" />
+            <Moon className="w-3.5 h-3.5 text-slate-700 shrink-0" />
           ) : (
-            <Sun className="w-3.5 h-3.5 text-amber-400" />
+            <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
           )}
         </button>
         {onCopyLastAssistantText && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={handleCopyLastAssistantText}
-              className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
+              className="p-1.5 lg:p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer shrink-0"
               title={copiedLastText ? t('header.copiedLastResponse') : t('header.copyLastResponseAction')}
             >
               {copiedLastText ? (
-                <Check className="w-3.5 h-3.5 text-emerald-500" />
+                <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
               ) : (
-                <Copy className="w-3.5 h-3.5" />
+                <Copy className="w-3.5 h-3.5 shrink-0" />
               )}
             </button>
 
@@ -623,7 +639,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     onSpeakLastAssistantText();
                   }
                 }}
-                className={`p-2 rounded-lg text-xs border transition-colors cursor-pointer ${
+                className={`p-1.5 lg:p-2 rounded-lg text-xs border transition-colors cursor-pointer shrink-0 ${
                   isSpeaking
                     ? 'bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400 animate-pulse'
                     : 'bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
@@ -631,9 +647,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 title={isSpeaking ? t('tts.stop') : t('tts.speakLast')}
               >
                 {isSpeaking ? (
-                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <Square className="w-3.5 h-3.5 fill-current shrink-0" />
                 ) : (
-                  <Volume2 className="w-3.5 h-3.5" />
+                  <Volume2 className="w-3.5 h-3.5 shrink-0" />
                 )}
               </button>
             )}
@@ -642,57 +658,44 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         {onToggleTerminal && (
           <button
             onClick={onToggleTerminal}
-            className={`p-2 rounded-lg text-xs border transition-colors cursor-pointer ${
+            className={`p-1.5 lg:p-2 rounded-lg text-xs border transition-colors cursor-pointer shrink-0 ${
               isTerminalActive
                 ? 'bg-emerald-950/60 border-emerald-800/60 text-emerald-400'
                 : 'bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border-border'
             }`}
             title={t('header.toggleTerminal')}
           >
-            <Terminal className="w-3.5 h-3.5" />
+            <Terminal className="w-3.5 h-3.5 shrink-0" />
           </button>
         )}
-
 
         {onOpenOpsModal && (
           <button
             onClick={onOpenOpsModal}
-            className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
+            className="p-1.5 lg:p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer shrink-0"
             title={t('header.opsCenterTooltip')}
           >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
           </button>
         )}
 
-        {onOpenCommitModal && (
-          <button
-            onClick={onOpenCommitModal}
-            disabled={isCommitDisabled}
-            className={`p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer ${
-              isCommitDisabled ? 'opacity-40 cursor-not-allowed' : ''
-            }`}
-            title={t('header.commitAssistantTooltip')}
-          >
-            <GitCommit className="w-3.5 h-3.5" />
-          </button>
-        )}
 
         {onOpenSettingsModal && (
           <button
             onClick={onOpenSettingsModal}
-            className="p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
+            className="p-1.5 lg:p-2 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer shrink-0"
             title={t('header.settingsTooltip')}
           >
-            <Settings className="w-3.5 h-3.5" />
+            <Settings className="w-3.5 h-3.5 shrink-0" />
           </button>
         )}
 
         <button
           onClick={onOpenOmnibar}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-lg text-xs bg-surface hover:bg-surface-highlight text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 border border-border transition-colors cursor-pointer shrink-0"
           title={t('header.omnibarTooltip')}
         >
-          <Command className="w-3.5 h-3.5" />
+          <Command className="w-3.5 h-3.5 shrink-0" />
           <span className="font-semibold text-[11px]">K</span>
         </button>
       </div>

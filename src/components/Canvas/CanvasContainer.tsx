@@ -4,13 +4,15 @@ import {
   Code2,
   BookOpen,
   Terminal as TermIcon,
+  GitCommit,
 } from 'lucide-react';
-import { ActiveCanvasTab, FileDiffItem, WorkspaceFile, ThemeMode, ArtifactDocument } from '../../types';
+import { useI18n } from '../../i18n/I18nProvider';
+import { ActiveCanvasTab, FileDiffItem, WorkspaceFile, ThemeMode, ArtifactDocument, OmpModelInfo } from '../../types';
 import { DiffViewer } from './DiffViewer';
 import { CodeEditor } from './CodeEditor';
 import { ArtifactViewer } from './ArtifactViewer';
 import { TerminalView } from './TerminalView';
-
+import { CommitView } from './CommitView';
 interface CanvasContainerProps {
   activeTab: ActiveCanvasTab;
   onSelectTab: (tab: ActiveCanvasTab) => void;
@@ -24,6 +26,12 @@ interface CanvasContainerProps {
   selectedArtifactId?: string;
   onSelectArtifact?: (id: string) => void;
   onReloadArtifact?: (id?: string) => void;
+  workspacePath?: string;
+  availableModels?: OmpModelInfo[];
+  selectedModel?: OmpModelInfo | string | null;
+  onCommitSuccess?: () => void;
+  onOpenCommitModal?: () => void;
+  isCommitDisabled?: boolean;
 }
 
 export const CanvasContainer: React.FC<CanvasContainerProps> = ({
@@ -39,7 +47,13 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
   selectedArtifactId,
   onSelectArtifact,
   onReloadArtifact,
+  workspacePath,
+  availableModels = [],
+  selectedModel,
+  onCommitSuccess,
+  isCommitDisabled,
 }) => {
+  const { t } = useI18n();
   return (
     <div className="flex-1 flex flex-col h-full bg-background border-r border-border overflow-hidden">
       {/* Codex Canvas Tab Bar */}
@@ -99,6 +113,22 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
           <TermIcon className={`w-3.5 h-3.5 ${activeTab === 'terminal' ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-500 dark:text-zinc-400'}`} />
           <span>Terminal Logs</span>
         </button>
+
+        <button
+          onClick={() => onSelectTab('commit')}
+          disabled={isCommitDisabled}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            isCommitDisabled
+              ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600'
+              : activeTab === 'commit'
+              ? 'bg-surface text-slate-900 dark:text-zinc-100 font-semibold border border-border shadow-xs'
+              : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 hover:bg-surface/60'
+          }`}
+          title={t('header.commitAssistantTooltip')}
+        >
+          <GitCommit className={`w-3.5 h-3.5 ${activeTab === 'commit' ? 'text-codex-accent' : 'text-slate-500 dark:text-zinc-400'}`} />
+          <span>Commit Assistant</span>
+        </button>
       </div>
 
       {/* Main Canvas View */}
@@ -132,6 +162,15 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
 
         {activeTab === 'terminal' && (
           <TerminalView theme={theme} />
+        )}
+
+        {activeTab === 'commit' && (
+          <CommitView
+            workspacePath={workspacePath}
+            availableModels={availableModels}
+            selectedModel={selectedModel}
+            onCommitSuccess={onCommitSuccess}
+          />
         )}
       </div>
     </div>

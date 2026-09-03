@@ -454,6 +454,62 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
     }
   };
 
+  // Group history entries by (provider + limitId) for sparklines
+  const groupedSparklines = useMemo(() => {
+    if (!usageHistory?.entries || usageHistory.entries.length < 5) return [];
+
+    const groups = new Map<string, { provider: string; limitLabel: string; entries: OmpUsageHistoryEntry[] }>();
+
+    for (const entry of usageHistory.entries) {
+      const key = `${entry.provider}::${entry.limitId || entry.label || 'default'}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          provider: entry.provider,
+          limitLabel: entry.label || entry.windowLabel || entry.limitId || 'Limit',
+          entries: [],
+        });
+      }
+      groups.get(key)!.entries.push(entry);
+    }
+
+    const result: Array<{
+      key: string;
+      provider: string;
+      limitLabel: string;
+      pointsStr: string;
+      latestFrac: number;
+    }> = [];
+
+    const width = 460;
+    const height = 36;
+    const padding = 4;
+
+    for (const [key, group] of groups.entries()) {
+      if (group.entries.length < 3) continue;
+      const sorted = [...group.entries].sort((a, b) => a.recordedAt - b.recordedAt);
+      const minTime = sorted[0].recordedAt;
+      const maxTime = sorted[sorted.length - 1].recordedAt;
+      const timeSpan = maxTime - minTime || 1;
+
+      const points = sorted.map((entry) => {
+        const x = padding + ((entry.recordedAt - minTime) / timeSpan) * (width - padding * 2);
+        const frac = Math.max(0, Math.min(1, entry.usedFraction || 0));
+        const y = height - padding - frac * (height - padding * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      });
+
+      result.push({
+        key,
+        provider: group.provider,
+        limitLabel: group.limitLabel,
+        pointsStr: points.join(' '),
+        latestFrac: sorted[sorted.length - 1].usedFraction || 0,
+      });
+    }
+
+    return result;
+  }, [usageHistory]);
+
   if (!isOpen) return null;
 
   const effectiveContext = sessionStats?.contextUsage || contextUsage;
@@ -526,61 +582,6 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
     ])
   );
 
-  // Group history entries by (provider + limitId) for sparklines
-  const groupedSparklines = useMemo(() => {
-    if (!usageHistory?.entries || usageHistory.entries.length < 5) return [];
-
-    const groups = new Map<string, { provider: string; limitLabel: string; entries: OmpUsageHistoryEntry[] }>();
-
-    for (const entry of usageHistory.entries) {
-      const key = `${entry.provider}::${entry.limitId || entry.label || 'default'}`;
-      if (!groups.has(key)) {
-        groups.set(key, {
-          provider: entry.provider,
-          limitLabel: entry.label || entry.windowLabel || entry.limitId || 'Limit',
-          entries: [],
-        });
-      }
-      groups.get(key)!.entries.push(entry);
-    }
-
-    const result: Array<{
-      key: string;
-      provider: string;
-      limitLabel: string;
-      pointsStr: string;
-      latestFrac: number;
-    }> = [];
-
-    const width = 460;
-    const height = 36;
-    const padding = 4;
-
-    for (const [key, group] of groups.entries()) {
-      if (group.entries.length < 3) continue;
-      const sorted = [...group.entries].sort((a, b) => a.recordedAt - b.recordedAt);
-      const minTime = sorted[0].recordedAt;
-      const maxTime = sorted[sorted.length - 1].recordedAt;
-      const timeSpan = maxTime - minTime || 1;
-
-      const points = sorted.map((entry) => {
-        const x = padding + ((entry.recordedAt - minTime) / timeSpan) * (width - padding * 2);
-        const frac = Math.max(0, Math.min(1, entry.usedFraction || 0));
-        const y = height - padding - frac * (height - padding * 2);
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      });
-
-      result.push({
-        key,
-        provider: group.provider,
-        limitLabel: group.limitLabel,
-        pointsStr: points.join(' '),
-        latestFrac: sorted[sorted.length - 1].usedFraction || 0,
-      });
-    }
-
-    return result;
-  }, [usageHistory]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-14 bg-black/20 backdrop-blur-xs animate-fade-in">

@@ -471,8 +471,6 @@ export function App() {
         onSetAutoCompaction={setAutoCompaction}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenOpsModal={() => setIsOpsModalOpen(true)}
-        onOpenCommitModal={() => setIsCommitModalOpen(true)}
-        isCommitDisabled={!workspacePath}
         onToggleTerminal={() => setActiveTab((prev) => (prev === 'terminal' ? 'diff' : 'terminal'))}
         isTerminalActive={activeTab === 'terminal'}
         onCopyLastAssistantText={getLastAssistantText}
@@ -527,6 +525,14 @@ export function App() {
           selectedArtifactId={selectedArtifactId}
           onSelectArtifact={selectArtifact}
           onReloadArtifact={reloadArtifact}
+          workspacePath={workspacePath}
+          availableModels={availableModels}
+          selectedModel={selectedModel}
+          onCommitSuccess={async () => {
+            await refreshFiles();
+          }}
+          onOpenCommitModal={() => setIsCommitModalOpen(true)}
+          isCommitDisabled={!workspacePath}
         />
 
         {/* Right Copilot Panel: Reasoning Stepper, Tool Cards & Chat */}
@@ -629,7 +635,7 @@ export function App() {
         status={status}
         onOpenCommitModal={() => {
           setIsOpsModalOpen(false);
-          setIsCommitModalOpen(true);
+          setActiveTab('commit');
         }}
         listSshHosts={listSshHosts}
         addSshHost={addSshHost}

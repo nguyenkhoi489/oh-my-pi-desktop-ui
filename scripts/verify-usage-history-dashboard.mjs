@@ -343,6 +343,12 @@ console.log('\n[Test 5] Contract & Preload Inspection');
   assert(sessionStatsPanelTs.includes("usageSubTab === 'clients'"), 'SessionStatsPanel contains clients view');
   assert(sessionStatsPanelTs.includes('handleOpenDashboard'), 'SessionStatsPanel contains dashboard opening action');
   assert(sessionStatsPanelTs.includes('handleTraceSession'), 'SessionStatsPanel contains trace session action');
+
+  // Rules of hooks verification: no hooks called after if (!isOpen) return null
+  const earlyReturnIdx = sessionStatsPanelTs.indexOf('if (!isOpen) return null;');
+  assert(earlyReturnIdx > 0, 'SessionStatsPanel contains early return guard');
+  const afterEarlyReturn = sessionStatsPanelTs.slice(earlyReturnIdx);
+  assert(!/\buse(Memo|Callback|State|Effect|Ref|Context)\b/.test(afterEarlyReturn), 'SessionStatsPanel respects Rules of Hooks: no hooks after early return');
 }
 
 // ----------------------------------------------------

@@ -99,7 +99,7 @@ export interface OmpRetryState {
   success?: boolean;
 }
 
-export type ActiveCanvasTab = 'diff' | 'editor' | 'artifact' | 'terminal';
+export type ActiveCanvasTab = 'diff' | 'editor' | 'artifact' | 'terminal' | 'commit';
 
 export type ArtifactType = 'html' | 'react' | 'svg' | 'markdown' | 'plan' | 'walkthrough';
 

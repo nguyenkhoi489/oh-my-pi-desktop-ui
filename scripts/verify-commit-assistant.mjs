@@ -315,15 +315,18 @@ feat: exported the app constant
   });
 
   // Test 11: UI Components Integration
-  test('UI components integration (HeaderBar, App, CommitModal)', () => {
-    const headerBarSource = fs.readFileSync(path.resolve('src/components/HeaderBar.tsx'), 'utf-8');
+  test('UI components integration (CanvasContainer, CommitView, App, CommitModal)', () => {
+    const canvasContainerSource = fs.readFileSync(path.resolve('src/components/Canvas/CanvasContainer.tsx'), 'utf-8');
+    const commitViewSource = fs.readFileSync(path.resolve('src/components/Canvas/CommitView.tsx'), 'utf-8');
     const appSource = fs.readFileSync(path.resolve('src/App.tsx'), 'utf-8');
     const commitModalSource = fs.readFileSync(path.resolve('src/components/Modals/CommitModal.tsx'), 'utf-8');
 
-    assert(headerBarSource.includes('onOpenCommitModal'), 'HeaderBar accepts onOpenCommitModal');
-    assert(headerBarSource.includes('GitCommit'), 'HeaderBar renders GitCommit icon');
+    assert(canvasContainerSource.includes("onSelectTab('commit')"), 'CanvasContainer has commit tab selection');
+    assert(canvasContainerSource.includes('GitCommit'), 'CanvasContainer renders GitCommit icon in tab bar');
+    assert(canvasContainerSource.includes('<CommitView'), 'CanvasContainer renders CommitView inside main canvas view');
+    assert(commitViewSource.includes('parseCommitMessage'), 'CommitView uses parseCommitMessage');
+    assert(commitViewSource.includes('availableModels'), 'CommitView accepts availableModels');
     assert(appSource.includes('CommitModal'), 'App.tsx imports and renders CommitModal');
-    assert(appSource.includes('isCommitModalOpen'), 'App.tsx manages isCommitModalOpen state');
     assert(commitModalSource.includes('parseCommitMessage'), 'CommitModal uses parseCommitMessage');
     assert(commitModalSource.includes('availableModels'), 'CommitModal accepts availableModels');
   });

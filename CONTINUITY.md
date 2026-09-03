@@ -14,6 +14,75 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-03 — Transform Commit Assistant into First-Class Inline Canvas Tab
+
+- **State:** Đã chuyển đổi Commit Assistant từ dạng Popup Modal thành một **First-Class Canvas Tab** hiển thị trực tiếp trong khu vực Canvas (tương tự như tab Terminal Logs):
+  - `src/types/index.ts`: Mở rộng `ActiveCanvasTab` hỗ trợ `'commit'`.
+  - `src/components/Canvas/CommitView.tsx`: Xây dựng component giao diện Commit Assistant chuyên dụng cho Canvas, loại bỏ hoàn toàn modal backdrop và fixed portal. Tích hợp thanh trạng thái branch/dirty files, form cấu hình context & model, AI message generation, preview/chỉnh sửa commit message, và streaming process logs.
+  - `src/components/Canvas/CanvasContainer.tsx`: Bổ sung tab `Commit Assistant` ngay cạnh `Terminal Logs` trong Tab Bar, chuyển tab trực tiếp sang `'commit'` khi người dùng click, và render `CommitView` trong main canvas area.
+  - `src/App.tsx`: Kết nối `workspacePath`, `availableModels`, `selectedModel`, và callback `refreshFiles` khi commit thành công vào `CanvasContainer`.
+  - `scripts/verify-commit-assistant.mjs`: Cập nhật Test 11 kiểm tra `CanvasContainer` tích hợp tab `commit` và render `CommitView`.
+  - Verification: `npm run test:commit-assistant` (12/12 passed), `npm run test:headerbar-layout` (21/21 passed), `npm run test:i18n` (3200/3200 passed), `npm run test:modal-ux` (44/44 passed), `npm run test:usage-history-dashboard` (77/77 passed), `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Tiếp tục triển khai Phase 18 hoặc các tính năng tiếp theo theo roadmap.
+- **Refs:**
+  - `src/components/Canvas/CommitView.tsx`
+  - `src/components/Canvas/CanvasContainer.tsx`
+  - `src/types/index.ts`
+  - `src/App.tsx`
+  - `scripts/verify-commit-assistant.mjs`
+## 2026-09-03 — Eliminate HeaderBar Overlapping & Optimize Navbar Layout
+
+- **State:** Đã khắc phục triệt để hiện tượng các phần tử trên HeaderBar bị chồng chéo (overlapping) lên nhau và tối ưu giao diện:
+  - `src/components/HeaderBar.tsx`:
+    - Bỏ hoàn toàn badge `Idle` gây nhiễu và chiếm diện tích (`default: return null;`), chỉ hiển thị status badge khi agent thực sự hoạt động (`thinking`, `streaming`, `executing_tool`, `compacting`, `waiting_permission`).
+    - Bỏ chữ "Copilot" ở nút chuyển đổi Agent Panel, chuyển thành icon button `PanelRight`/`PanelRightClose` (`p-1.5`) đồng bộ gọn gàng với hàng nút điều khiển bên phải.
+    - Khắc phục lỗi Flexbox `justify-center` gây tràn 2 bên: chuyển khối Center sang `flex-1 flex items-center justify-center min-w-0 overflow-hidden` để không bao giờ có thể tràn sang đè lên Left hay Right.
+    - Tinh chỉnh khoảng cách `gap-1 sm:gap-1.5` cho khối Right, co gọn max-width cho model name và approval mode. Tổng chiều rộng thanh Navbar giảm hơn 250px, loại bỏ hoàn toàn hiện tượng chật chội và đè chồng element.
+  - `scripts/verify-headerbar-layout.mjs`: Cập nhật 21 checks xác minh icon-only Copilot, loại bỏ Idle badge, và cấu trúc flex chống overlapping.
+  - Verification: `npm run test:headerbar-layout` (21/21 passed), `npm run test:i18n` (3200/3200 passed), `npm run test:usage-history-dashboard` (77/77 passed), `npm run test:ansi-tts` (21/21 passed), `npm run test:commit-assistant` (12/12 passed), `npm run test:modal-ux` (44/44 passed), `npx tsc` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Tiếp tục triển khai Phase 18 hoặc các tính năng tiếp theo theo roadmap.
+- **Refs:**
+  - `plans/reports/fix-260903-2010-headerbar-overlapping-optimization.md`
+  - `scripts/verify-headerbar-layout.mjs`
+  - `src/components/HeaderBar.tsx`
+
+## 2026-09-03 — Fix SessionStatsPanel React Rules of Hooks Violation
+
+- **State:** Đã khắc phục triệt để lỗi vi phạm Rules of Hooks (`Rendered more hooks than during the previous render`) khi click xem context window:
+  - `src/components/HeaderBar/SessionStatsPanel.tsx`: Di chuyển hook `useMemo` tính toán `groupedSparklines` từ dòng 530 (nằm sau early return `if (!isOpen) return null;`) lên dòng 457 (trước early return). Đảm bảo toàn bộ 35 hooks của component được gọi đồng nhất và theo thứ tự cố định ở 100% các lần render.
+  - `scripts/verify-usage-history-dashboard.mjs`: Bổ sung kiểm tra tĩnh khẳng định không có hook nào nằm sau câu lệnh early return trong `SessionStatsPanel.tsx`.
+  - Verification: `npm run test:usage-history-dashboard` (77/77 passed), `npm run test:usage-stats` (45/45 passed), `npm run test:headerbar-layout` (18/18 passed), `npm run test:i18n` (3200/3200 passed), `npm run test:settings` (48/48 passed), `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Tiếp tục triển khai Phase 18 hoặc các tính năng tiếp theo theo roadmap.
+- **Refs:**
+  - `plans/reports/fix-260903-1950-session-stats-panel-rules-of-hooks.md`
+  - `src/components/HeaderBar/SessionStatsPanel.tsx`
+
+## 2026-09-03 — Fix HeaderBar Layout Overflow Protection During Task Execution
+
+- **State:** Đã khắc phục triệt để lỗi HeaderBar bị tràn chiều ngang làm biến mất các nút điều khiển bên phải khi task đang chạy:
+  - `src/components/HeaderBar.tsx`:
+    - Thêm `min-w-0 overflow-hidden` vào thẻ `<header>` chống vỡ khung chứa.
+    - Bảo vệ khối Right với `shrink-0` trên container và từng button con, đảm bảo các controls (Copilot, Theme, TTS, Terminal, Ops, Git, Settings, ⌘K) luôn luôn hiển thị và không bao giờ bị flex-shrink ép dẹp hay bị đẩy ra khỏi viewport.
+    - Khối Center nhận `min-w-0 flex-shrink justify-center` cùng responsive truncation cho model name và approval mode.
+    - Status badge (`thinking`, `executing_tool`, `streaming`, `compacting`, `waiting_permission`), tokens/s và context meter được tối ưu responsive (thu gọn nhãn text phụ khi màn hình hẹp, hiển thị đầy đủ trên màn hình lớn), tránh phình to đột biến làm tràn thanh tiêu đề.
+    - Khối Left nhận `shrink-0 min-w-0` cùng responsive truncation cho tên workspace.
+  - `scripts/verify-headerbar-layout.mjs`: Test suite mới gồm 18 checks kiểm tra cơ chế chống tràn và bảo vệ các controls của HeaderBar.
+  - `package.json`: Bổ sung script `"test:headerbar-layout"` và đưa vào chuỗi `"test"`.
+  - Verification: `npm run test:headerbar-layout` (18/18 passed), `npm run test:i18n` (3200/3200 passed), `npm run test:ansi-tts` (21/21 passed), `npm run test:commit-assistant` (12/12 passed), `npm run test:modal-ux` (44/44 passed), cả 2 lệnh `npx tsc` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Tiếp tục triển khai các phase tiếp theo trong roadmap OMP Desktop Parity (Phase 18).
+- **Refs:**
+  - `plans/reports/fix-260903-1930-headerbar-overflow-protection.md`
+  - `scripts/verify-headerbar-layout.mjs`
+  - `src/components/HeaderBar.tsx`
+
 ## 2026-09-03 — Fix SettingsModal React Rules of Hooks Violation
 
 - **State:** Đã sửa lỗi crash `Rendered more hooks than during the previous render` trong `SettingsModal.tsx`:
