@@ -423,6 +423,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   revealInFinder: (filePath: string) =>
     ipcRenderer.invoke('fs:reveal-in-finder', filePath),
 
+  getFileHistory: (filePath: string) =>
+    ipcRenderer.invoke('git:file-history', filePath),
+
+  getFileAtCommit: (commitHash: string, filePath: string) =>
+    ipcRenderer.invoke('git:file-at-commit', commitHash, filePath),
+
   saveImageAttachment: (buffer: Uint8Array | ArrayBuffer, extension: string, originalName?: string) =>
     ipcRenderer.invoke('fs:save-image-attachment', buffer, extension, originalName),
 

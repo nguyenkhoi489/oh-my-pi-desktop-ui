@@ -68,6 +68,13 @@ export interface FileDiffItem {
   op?: 'update' | 'create' | 'delete';
 }
 
+export interface GitCommitSummary {
+  hash: string;
+  shortHash: string;
+  author: string;
+  date: string;
+  message: string;
+}
 export interface WorkspaceFolder {
   path: string;
   name: string;

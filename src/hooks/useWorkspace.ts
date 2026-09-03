@@ -192,6 +192,29 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
     }
   }, [workspacePath, syncArtifactsFromFiles]);
 
+  const saveFileContent = useCallback(async (filePath: string, content: string): Promise<boolean> => {
+    if (!filePath) return false;
+    if (window.electronAPI) {
+      try {
+        const success = await window.electronAPI.saveFile(filePath, content);
+        if (success) {
+          setFileContent(content);
+          invalidateArtifactByPath(filePath);
+          return true;
+        }
+        return false;
+      } catch (err) {
+        console.error('[useWorkspace] Failed to save file:', filePath, err);
+        return false;
+      }
+    } else {
+      // Mock save in browser mode
+      setFileContent(content);
+      invalidateArtifactByPath(filePath);
+      return true;
+    }
+  }, [invalidateArtifactByPath]);
+
   return {
     workspacePath,
     workspaceName,
@@ -208,5 +231,6 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
     openFolderDialog,
     selectFile,
     refreshFiles,
+    saveFileContent,
   };
 }

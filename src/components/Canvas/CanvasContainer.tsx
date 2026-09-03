@@ -22,6 +22,9 @@ interface CanvasContainerProps {
   selectedFile: WorkspaceFile | null;
   fileContent: string;
   theme?: ThemeMode;
+  onSaveFile?: (filePath: string, content: string) => Promise<boolean>;
+  onDirtyChange?: (dirty: boolean) => void;
+  onDraftChange?: (draft: string) => void;
   artifacts?: ArtifactDocument[];
   selectedArtifactId?: string;
   onSelectArtifact?: (id: string) => void;
@@ -44,6 +47,9 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
   fileContent,
   theme = 'light',
   artifacts,
+  onSaveFile,
+  onDirtyChange,
+  onDraftChange,
   selectedArtifactId,
   onSelectArtifact,
   onReloadArtifact,
@@ -147,6 +153,9 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
             file={selectedFile}
             content={fileContent}
             theme={theme}
+            onSaveFile={onSaveFile}
+            onDirtyChange={onDirtyChange}
+            onDraftChange={onDraftChange}
           />
         )}
 

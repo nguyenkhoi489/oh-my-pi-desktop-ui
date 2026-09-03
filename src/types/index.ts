@@ -61,6 +61,13 @@ export interface WorkspaceFile {
   children?: WorkspaceFile[];
   gitStatus?: 'modified' | 'added' | 'deleted' | 'untracked';
 }
+export interface GitCommitSummary {
+  hash: string;
+  shortHash: string;
+  author: string;
+  date: string;
+  message: string;
+}
 
 export interface PermissionRequest {
   id: string;
@@ -1466,6 +1473,8 @@ export interface ElectronAPI {
   saveFile: (filePath: string, content: string) => Promise<any>;
   deleteFile: (filePath: string) => Promise<boolean>;
   revealInFinder: (filePath: string) => Promise<boolean>;
+  getFileHistory: (filePath: string) => Promise<{ success: boolean; commits?: GitCommitSummary[]; error?: string }>;
+  getFileAtCommit: (commitHash: string, filePath: string) => Promise<{ success: boolean; content?: string | null; error?: string }>;
   saveImageAttachment: (
     buffer: Uint8Array | ArrayBuffer,
     extension: string,

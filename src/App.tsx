@@ -16,6 +16,7 @@ import { ThemeMode, FileDiffItem, WorkspaceFile } from './types';
 import { OpsModal } from './components/Modals/OpsModal';
 import { CommitModal } from './components/Modals/CommitModal';
 import { useI18n } from './i18n/I18nProvider';
+import { UnsavedChangesModal } from './components/Canvas/UnsavedChangesModal';
 
 export function App() {
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -40,6 +41,10 @@ export function App() {
   const [isOpsModalOpen, setIsOpsModalOpen] = useState(false);
   const [opsModalInitialTab, setOpsModalInitialTab] = useState<'engine' | 'processes' | 'worktrees' | 'extensions' | 'agents' | 'storage' | 'ssh' | 'grievances'>('engine');
   const [isCommitModalOpen, setIsCommitModalOpen] = useState(false);
+  const [isEditorDirty, setIsEditorDirty] = useState<boolean>(false);
+  const [editorDraftContent, setEditorDraftContent] = useState<string | null>(null);
+  const [pendingFileToSelect, setPendingFileToSelect] = useState<WorkspaceFile | null>(null);
+  const [isUnsavedModalOpen, setIsUnsavedModalOpen] = useState<boolean>(false);
   // Load initial theme from settings
   useEffect(() => {
     const initSettings = async () => {
@@ -252,9 +257,51 @@ export function App() {
     openFolderDialog,
     selectFile,
     refreshFiles,
+    saveFileContent,
   } = useWorkspace({
     onProcessStarted: handleProcessStarted,
   });
+
+  const handleSelectFileWithGuard = useCallback((file: WorkspaceFile) => {
+    if (file.isDirectory) return;
+    if (selectedFile?.path === file.path) return;
+
+    if (isEditorDirty) {
+      setPendingFileToSelect(file);
+      setIsUnsavedModalOpen(true);
+    } else {
+      selectFile(file);
+    }
+  }, [isEditorDirty, selectedFile, selectFile]);
+
+  const handleSaveAndContinue = useCallback(async () => {
+    if (selectedFile) {
+      const contentToSave = editorDraftContent !== null ? editorDraftContent : fileContent;
+      await saveFileContent(selectedFile.path, contentToSave);
+    }
+    setIsEditorDirty(false);
+    setEditorDraftContent(null);
+    setIsUnsavedModalOpen(false);
+    if (pendingFileToSelect) {
+      selectFile(pendingFileToSelect);
+      setPendingFileToSelect(null);
+    }
+  }, [selectedFile, editorDraftContent, fileContent, saveFileContent, pendingFileToSelect, selectFile]);
+
+  const handleDiscardAndContinue = useCallback(() => {
+    setIsEditorDirty(false);
+    setEditorDraftContent(null);
+    setIsUnsavedModalOpen(false);
+    if (pendingFileToSelect) {
+      selectFile(pendingFileToSelect);
+      setPendingFileToSelect(null);
+    }
+  }, [pendingFileToSelect, selectFile]);
+
+  const handleCancelSwitchFile = useCallback(() => {
+    setPendingFileToSelect(null);
+    setIsUnsavedModalOpen(false);
+  }, []);
 
   // Auto-switch Visual Diff tab when a new pending diff arrives
   const prevDiffIdRef = useRef<string | null>(activeDiff?.id ?? null);
@@ -490,7 +537,7 @@ export function App() {
             <ProjectTree
               files={files}
               selectedFile={selectedFile}
-              onSelectFile={selectFile}
+              onSelectFile={handleSelectFileWithGuard}
               onCollapseSidebar={collapseLeftSidebar}
               onAddToChat={handleAddToChat}
               onDeleteFile={handleDeleteFile}
@@ -520,6 +567,9 @@ export function App() {
           onRejectDiff={rejectDiff}
           selectedFile={selectedFile}
           fileContent={fileContent}
+          onSaveFile={saveFileContent}
+          onDirtyChange={setIsEditorDirty}
+          onDraftChange={setEditorDraftContent}
           theme={theme}
           artifacts={artifacts}
           selectedArtifactId={selectedArtifactId}
@@ -651,6 +701,14 @@ export function App() {
         workspacePath={workspacePath || undefined}
         availableModels={availableModels}
         selectedModel={selectedModel}
+      />
+      {/* Unsaved Changes Guard Modal (Phase 3) */}
+      <UnsavedChangesModal
+        isOpen={isUnsavedModalOpen}
+        fileName={selectedFile?.name || ''}
+        onSave={handleSaveAndContinue}
+        onDiscard={handleDiscardAndContinue}
+        onCancel={handleCancelSwitchFile}
       />
       {/* 4. Notification Toast Stack */}
       <ToastStack

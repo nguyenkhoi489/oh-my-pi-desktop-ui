@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import { OmpBridge } from './omp-bridge.ts';
 import type {
   WorkspaceFile,
+  GitCommitSummary,
   OmpThinkingLevel,
   OmpApprovalMode,
   OmpTodoPhase,
@@ -1278,6 +1279,86 @@ ipcMain.handle('fs:read-image-base64', async (_, filePath: string) => {
     return { success: true, dataUrl: `data:${mime};base64,${data.toString('base64')}` };
   } catch (err: any) {
     return { success: false, error: err?.message || tm('electron.main.readImageFailed') };
+  }
+});
+
+// Git File History: List commits affecting a specific file
+ipcMain.handle('git:file-history', async (_, filePath: string) => {
+  try {
+    if (!filePath) {
+      return { success: false, commits: [], error: 'Missing file path' };
+    }
+    const wsPath = ompBridge?.getWorkspacePath();
+    const absPath = path.isAbsolute(filePath) ? filePath : wsPath ? path.join(wsPath, filePath) : path.resolve(filePath);
+    const cwd = wsPath ? path.resolve(wsPath) : path.dirname(absPath);
+    const relPath = path.relative(cwd, absPath).split(path.sep).join('/');
+
+    const { stdout } = await execFileAsync(
+      'git',
+      ['log', '-n', '50', '--follow', '--format=%H%x1f%h%x1f%an%x1f%ad%x1f%s', '--date=relative', '--', relPath],
+      {
+        cwd,
+        env: { ...process.env, PATH: buildExtendedPath() },
+        encoding: 'utf-8',
+        timeout: 15000,
+        maxBuffer: 10 * 1024 * 1024,
+      }
+    );
+
+    const lines = stdout.trim().split('\n').filter(Boolean);
+    const commits: GitCommitSummary[] = [];
+
+    for (const line of lines) {
+      const parts = line.split('\x1f');
+      if (parts.length >= 5) {
+        commits.push({
+          hash: parts[0],
+          shortHash: parts[1],
+          author: parts[2],
+          date: parts[3],
+          message: parts.slice(4).join('\x1f'),
+        });
+      }
+    }
+
+    return { success: true, commits };
+  } catch (err: any) {
+    // If not a git repo or file has no commits, return empty list gracefully
+    return { success: true, commits: [], error: err?.message };
+  }
+});
+
+// Git File at Commit: Get content of a file at a specific commit hash
+ipcMain.handle('git:file-at-commit', async (_, commitHash: string, filePath: string) => {
+  try {
+    if (!commitHash || typeof commitHash !== 'string' || !/^[a-fA-F0-9]{4,40}$/.test(commitHash.trim())) {
+      return { success: false, content: null, error: 'Invalid commit hash' };
+    }
+    if (!filePath) {
+      return { success: false, content: null, error: 'Missing file path' };
+    }
+
+    const cleanHash = commitHash.trim();
+    const wsPath = ompBridge?.getWorkspacePath();
+    const absPath = path.isAbsolute(filePath) ? filePath : wsPath ? path.join(wsPath, filePath) : path.resolve(filePath);
+    const cwd = wsPath ? path.resolve(wsPath) : path.dirname(absPath);
+    const relPath = path.relative(cwd, absPath).split(path.sep).join('/');
+
+    const { stdout } = await execFileAsync(
+      'git',
+      ['show', `${cleanHash}:${relPath}`],
+      {
+        cwd,
+        env: { ...process.env, PATH: buildExtendedPath() },
+        encoding: 'utf-8',
+        timeout: 15000,
+        maxBuffer: 10 * 1024 * 1024,
+      }
+    );
+
+    return { success: true, content: stdout };
+  } catch (err: any) {
+    return { success: false, content: null, error: err?.message };
   }
 });
 
