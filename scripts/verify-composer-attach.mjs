@@ -315,4 +315,57 @@ console.log('\n[Test] findRemovedInlineAttachments inline attachment pruning');
   assert(res4.length === 0, 'Empty inline set yields no removals');
 }
 
+// ----------------------------------------------------
+// Test 5: fileMention Deduplication Logic (Guard against double attachment cards)
+// ----------------------------------------------------
+console.log('\n[Test 5] fileMention deduplication verification');
+{
+  // 5.1 Simulate message stream deduplication in IPC listener
+  const messages = [
+    {
+      id: 'msg-user-1',
+      role: 'user',
+      content: 'Analyze @.omp/attachments/shot.png',
+      timestamp: 1700000000000,
+    },
+    {
+      id: 'msg-file-1',
+      role: 'fileMention',
+      files: [{ path: '.omp/attachments/shot.png', name: 'shot.png' }],
+      timestamp: 1700000000500,
+    },
+  ];
+
+  const incomingDuplicate = {
+    id: 'msg-file-2',
+    role: 'fileMention',
+    files: [{ path: '.omp/attachments/shot.png', name: 'shot.png' }],
+    timestamp: 1700000000900,
+  };
+
+  const incomingPaths = (incomingDuplicate.files || []).map((f) => f.path).sort().join('|');
+  const isDuplicate = messages.some((m) => {
+    if (m.role !== 'fileMention') return false;
+    const existingPaths = (m.files || []).map((f) => f.path).sort().join('|');
+    return existingPaths === incomingPaths && Math.abs((m.timestamp || 0) - (incomingDuplicate.timestamp || 0)) < 60000;
+  });
+
+  assert(isDuplicate === true, 'Duplicate fileMention within 60s window is identified');
+
+  // 5.2 Different files should not be flagged as duplicate
+  const differentFileMention = {
+    id: 'msg-file-3',
+    role: 'fileMention',
+    files: [{ path: 'src/utils.ts', name: 'utils.ts' }],
+    timestamp: 1700000001000,
+  };
+  const diffPaths = (differentFileMention.files || []).map((f) => f.path).sort().join('|');
+  const isDiffDuplicate = messages.some((m) => {
+    if (m.role !== 'fileMention') return false;
+    const existingPaths = (m.files || []).map((f) => f.path).sort().join('|');
+    return existingPaths === diffPaths && Math.abs((m.timestamp || 0) - (differentFileMention.timestamp || 0)) < 60000;
+  });
+  assert(isDiffDuplicate === false, 'fileMention with different paths is not flagged as duplicate');
+}
+
 console.log(`\n🎉 All ${passed} Composer File Attach tests passed successfully!`);

@@ -732,6 +732,18 @@ export function useOmpRpc() {
               : undefined,
       };
       setMessages((prev) => {
+        // Guard against duplicate fileMention if same files already exist
+        if (finalMsg.role === 'fileMention') {
+          const incomingPaths = (finalMsg.files || []).map((f) => f.path).sort().join('|');
+          const isDuplicate = prev.some((m) => {
+            if (m.role !== 'fileMention') return false;
+            const existingPaths = (m.files || []).map((f) => f.path).sort().join('|');
+            return existingPaths === incomingPaths && Math.abs((m.timestamp || 0) - (finalMsg.timestamp || 0)) < 60000;
+          });
+          if (isDuplicate) {
+            return prev;
+          }
+        }
         const next = [...prev, finalMsg];
         correlateBranchEntries(next)
           .then((annotated) => {
@@ -894,9 +906,9 @@ export function useOmpRpc() {
         timestamp: Date.now(),
       };
 
-      // Show attachment card (with image thumbnail) immediately before user message
+      // Simulate attached context card in browser preview when engine is absent
       const newMessages: ChatMessage[] = [];
-      if (contextFiles && contextFiles.length > 0) {
+      if (!window.electronAPI && contextFiles && contextFiles.length > 0) {
         newMessages.push({
           id: 'files-' + Date.now(),
           role: 'fileMention',
@@ -995,8 +1007,9 @@ export function useOmpRpc() {
         steering: true,
       };
 
+      // Simulate attached context card in browser preview when engine is absent
       const newMessages: ChatMessage[] = [];
-      if (contextFiles && contextFiles.length > 0) {
+      if (!window.electronAPI && contextFiles && contextFiles.length > 0) {
         newMessages.push({
           id: 'files-' + Date.now(),
           role: 'fileMention',
@@ -1040,8 +1053,9 @@ export function useOmpRpc() {
         timestamp: Date.now(),
       };
 
+      // Simulate attached context card in browser preview when engine is absent
       const newMessages: ChatMessage[] = [];
-      if (contextFiles && contextFiles.length > 0) {
+      if (!window.electronAPI && contextFiles && contextFiles.length > 0) {
         newMessages.push({
           id: 'files-' + Date.now(),
           role: 'fileMention',
@@ -1097,8 +1111,9 @@ export function useOmpRpc() {
         queued: true,
       };
 
+      // Simulate attached context card in browser preview when engine is absent
       const newMessages: ChatMessage[] = [];
-      if (contextFiles && contextFiles.length > 0) {
+      if (!window.electronAPI && contextFiles && contextFiles.length > 0) {
         newMessages.push({
           id: 'files-' + Date.now(),
           role: 'fileMention',

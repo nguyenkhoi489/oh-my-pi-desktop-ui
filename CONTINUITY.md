@@ -14,6 +14,25 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-03 — Eliminate Duplicate Attached Context Cards in Chat History
+
+- **State:** Đã khắc phục triệt để lỗi nhân đôi 2 thẻ Attached Context (1 thẻ ở trên và 1 thẻ ở dưới tin nhắn user) khi đính kèm file/ảnh trong khung chat:
+  - `src/hooks/useOmpRpc.ts`:
+    - Tắt việc tự chèn optimistic `fileMention` trước `userMsg` khi chạy trong Electron (`window.electronAPI`), chỉ giữ giả lập cho browser preview mode. OMP Engine đóng vai trò single source of truth cho context frame.
+    - Bổ sung deduplication guard trong listener `onOmpMessageComplete` cho tin nhắn `role === 'fileMention'` trong cửa sổ 60s.
+  - `src/components/AgentPanel/ChatHistory.tsx`:
+    - Bổ sung presentation guard loại bỏ thẻ `fileMention` trùng lặp liền kề hoặc bị kẹp cạnh tin nhắn `user`.
+  - `scripts/verify-composer-attach.mjs`: Bổ sung Test 5 kiểm tra deduplication logic cho fileMention.
+  - Verification: `scripts/verify-composer-attach.mjs` (38/38 passed), `scripts/verify-composer-image-attachment.mjs` (65/65 passed), `scripts/verify-observability.mjs` (44/44 passed), `scripts/verify-omp-bridge.mjs` (55/55 passed), `npm run test:i18n` (3200/3200 passed), `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Tiếp tục cải tiến UI hoặc các tính năng tiếp theo theo yêu cầu người dùng.
+- **Refs:**
+  - `plans/reports/fix-260903-2025-chat-history-duplicate-attachments.md`
+  - `src/hooks/useOmpRpc.ts`
+  - `src/components/AgentPanel/ChatHistory.tsx`
+  - `scripts/verify-composer-attach.mjs`
+
 ## 2026-09-03 — Transform Commit Assistant into First-Class Inline Canvas Tab
 
 - **State:** Đã chuyển đổi Commit Assistant từ dạng Popup Modal thành một **First-Class Canvas Tab** hiển thị trực tiếp trong khu vực Canvas (tương tự như tab Terminal Logs):

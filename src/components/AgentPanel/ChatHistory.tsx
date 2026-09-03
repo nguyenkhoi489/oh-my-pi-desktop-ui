@@ -152,8 +152,26 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
 
   return (
     <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-5">
-      {messages.map((msg) => {
+      {messages.map((msg, index) => {
         if (msg.role === 'fileMention') {
+          // Skip duplicate fileMention card adjacent to user message or previous card
+          const nextMsg = messages[index + 1];
+          const afterNextMsg = messages[index + 2];
+          if (nextMsg && nextMsg.role === 'user' && afterNextMsg && afterNextMsg.role === 'fileMention') {
+            const curPaths = (msg.files || []).map((f) => f.path).sort().join('|');
+            const targetPaths = (afterNextMsg.files || []).map((f) => f.path).sort().join('|');
+            if (curPaths === targetPaths) {
+              return null;
+            }
+          }
+          const prevMsg = messages[index - 1];
+          if (prevMsg && prevMsg.role === 'fileMention') {
+            const curPaths = (msg.files || []).map((f) => f.path).sort().join('|');
+            const prevPaths = (prevMsg.files || []).map((f) => f.path).sort().join('|');
+            if (curPaths === prevPaths) {
+              return null;
+            }
+          }
           const files = msg.files || [];
           return (
             <div key={msg.id} className="flex flex-col items-end gap-1.5 self-end max-w-[85%] ml-auto animate-fade-in">
