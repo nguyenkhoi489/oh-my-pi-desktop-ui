@@ -14,6 +14,23 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-03 — Fix UI Layout Overflow in OpsCenter Plugins & Tools Tab
+
+- **State:** Đã sửa lỗi vỡ layout form cài đặt/liên kết plugin và co bẹp icon trong OpsModal tab Plugins & Tools:
+  - `src/components/Modals/ops/ExtensionsTab.tsx`:
+    - Tách layout form "Cài đặt plugin từ npm / registry" thành 2 hàng rõ ràng: Hàng 1 input full width `w-full min-w-0` giúp nhập tên package dài/scoped thoải mái; Hàng 2 căn lề hai bên với dropdown chọn scope bên trái và nút `+ Cài đặt` bên phải; Hàng 3 chứa 2 checkbox `--force` và `--dry-run`.
+    - Khắc phục triệt để lỗi nút `+ Cài đặt` bị tràn ra ngoài card bên trái đè lên card bên phải khi modal ở kích thước `max-w-3xl` trên màn hình `lg:`.
+    - Thêm `min-w-0` cho input và nút ở form "Liên kết plugin phát triển cục bộ", form thêm marketplace source.
+    - Thêm `shrink-0` cho các icons (`Store`, `Download`, `Wrench`, `Package`, `Link`) và `truncate`/`min-w-0` cho card headers để tránh hiện tượng co bẹp icon.
+  - `scripts/verify-extension-manager-expansion.mjs`: Bổ sung regression check đảm bảo `ExtensionsTab.tsx` luôn giữ các thuộc tính chống tràn (`w-full min-w-0` và `truncate`).
+  - Verification: Cả 2 typechecks (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`), `test:extension-manager`, `test:extension-manager-expansion`, `test:i18n`, `test:ops-manager` pass 100%.
+- **In-flight:** Không có.
+- **Next:**
+  - Sẵn sàng bàn giao cho người dùng.
+- **Refs:**
+  - `src/components/Modals/ops/ExtensionsTab.tsx`
+  - `scripts/verify-extension-manager-expansion.mjs`
+
 ## 2026-09-03 — Hardening, Process Lifecycle & i18n Polish
 
 - **State:** Củng cố độ ổn định, bảo mật và dọn dẹp i18n trên toàn bộ dự án:

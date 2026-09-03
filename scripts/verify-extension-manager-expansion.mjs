@@ -143,6 +143,10 @@ await test('Types and UI component ExtensionsTab exist and are integrated in Ops
   assert(srcTypes.includes('OmpDiscoverPluginItem'), 'src/types/index.ts must declare OmpDiscoverPluginItem');
 
   assert(opsModalSource.includes('ExtensionsTab'), 'OpsModal.tsx must import and use ExtensionsTab');
+
+  const extensionsTabContent = fs.readFileSync(extensionsTabPath, 'utf-8');
+  assert(extensionsTabContent.includes('w-full min-w-0'), 'ExtensionsTab inputs must use min-w-0 to prevent flex/grid overflow');
+  assert(extensionsTabContent.includes('truncate'), 'ExtensionsTab card headers must use truncate to prevent icon squeeze');
 });
 
 console.log(`\nAll ${passCount} tests passed successfully!`);

@@ -494,12 +494,11 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
 
       {/* 1. DOCTOR PANEL */}
       <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-            <Wrench className="w-3.5 h-3.5 text-amber-500" />
-            <span>{t('ops.extensions.doctor.title')}</span>
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5 min-w-0">
+            <Wrench className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="truncate">{t('ops.extensions.doctor.title')}</span>
           </h4>
-
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -553,25 +552,25 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
       {/* 2. INSTALL & LINK FORMS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Install from registry */}
-        <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3">
-          <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-            <Package className="w-3.5 h-3.5 text-blue-500" />
-            <span>{t('ops.extensions.install.title')}</span>
+        <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3 min-w-0">
+          <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5 min-w-0">
+            <Package className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+            <span className="truncate">{t('ops.extensions.install.title')}</span>
           </h4>
           <form onSubmit={handleInstallPlugin} className="space-y-2.5">
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                value={installTarget}
-                onChange={(e) => setInstallTarget(e.target.value)}
-                placeholder={t('ops.extensions.install.placeholder')}
-                disabled={isInstallingPlugin}
-                className="flex-1 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none"
-              />
+            <input
+              type="text"
+              value={installTarget}
+              onChange={(e) => setInstallTarget(e.target.value)}
+              placeholder={t('ops.extensions.install.placeholder')}
+              disabled={isInstallingPlugin}
+              className="w-full min-w-0 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none"
+            />
+            <div className="flex items-center justify-between gap-2">
               <select
                 value={installScope}
                 onChange={(e) => setInstallScope(e.target.value as 'user' | 'project')}
-                className="px-2 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-700 dark:text-zinc-300 outline-none"
+                className="px-2.5 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-700 dark:text-zinc-300 outline-none cursor-pointer"
               >
                 <option value="user">User (~/.omp)</option>
                 <option value="project">Project (./.omp)</option>
@@ -586,7 +585,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
               </button>
             </div>
 
-            <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-4 flex-wrap pt-0.5">
               <label className="flex items-center gap-1.5 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -614,29 +613,33 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         </div>
 
         {/* Local Link form */}
-        <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3">
-          <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-            <Link className="w-3.5 h-3.5 text-emerald-500" />
-            <span>{t('ops.extensions.link.title')}</span>
-          </h4>
-          <form onSubmit={handleLinkPlugin} className="flex gap-2">
-            <input
-              type="text"
-              value={linkPath}
-              onChange={(e) => setLinkPath(e.target.value)}
-              placeholder={t('ops.extensions.link.placeholder')}
-              disabled={isLinkingPlugin}
-              className="flex-1 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none"
-            />
-            <button
-              type="submit"
-              disabled={!linkPath.trim() || isLinkingPlugin}
-              className="flex items-center gap-1 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs shadow-sm transition-colors cursor-pointer disabled:opacity-50 shrink-0"
-            >
-              <Link className="w-3.5 h-3.5" />
-              <span>{isLinkingPlugin ? '...' : t('ops.extensions.link.btn')}</span>
-            </button>
-          </form>
+        <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3 min-w-0 flex flex-col justify-between">
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5 min-w-0">
+              <Link className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span className="truncate">{t('ops.extensions.link.title')}</span>
+            </h4>
+            <form onSubmit={handleLinkPlugin} className="space-y-2.5">
+              <input
+                type="text"
+                value={linkPath}
+                onChange={(e) => setLinkPath(e.target.value)}
+                placeholder={t('ops.extensions.link.placeholder')}
+                disabled={isLinkingPlugin}
+                className="w-full min-w-0 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none"
+              />
+              <div className="flex items-center justify-end">
+                <button
+                  type="submit"
+                  disabled={!linkPath.trim() || isLinkingPlugin}
+                  className="flex items-center gap-1 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs shadow-sm transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <Link className="w-3.5 h-3.5" />
+                  <span>{isLinkingPlugin ? '...' : t('ops.extensions.link.btn')}</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
 
@@ -780,17 +783,17 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
       {/* 4. MARKETPLACE & DISCOVER SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2 border-t border-border">
         {/* Marketplace sources */}
-        <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-              <Store className="w-3.5 h-3.5 text-purple-500" />
-              <span>{t('ops.extensions.marketplace.title')}</span>
+        <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5 min-w-0">
+              <Store className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+              <span className="truncate">{t('ops.extensions.marketplace.title')}</span>
             </h4>
             <button
               type="button"
               onClick={fetchMarketplaces}
               disabled={isLoadingMarketplaces}
-              className="p-1 rounded text-slate-400 hover:text-slate-200"
+              className="p-1 rounded text-slate-400 hover:text-slate-200 shrink-0 cursor-pointer"
             >
               <RefreshCw className={`w-3 h-3 ${isLoadingMarketplaces ? 'animate-spin' : ''}`} />
             </button>
@@ -803,7 +806,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
               onChange={(e) => setMarketplaceSource(e.target.value)}
               placeholder={t('ops.extensions.marketplace.placeholder')}
               disabled={isAddingMarketplace}
-              className="flex-1 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none"
+              className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-900 dark:text-zinc-100 font-mono outline-none"
             />
             <button
               type="submit"
@@ -843,13 +846,13 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
         </div>
 
         {/* Discover Plugins */}
-        <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3">
+        <div className="p-4 rounded-xl border border-border bg-surface/30 space-y-3 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-              <Download className="w-3.5 h-3.5 text-emerald-500" />
-              <span>{t('ops.extensions.discover.title')}</span>
+            <h4 className="text-xs font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5 min-w-0">
+              <Download className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span className="truncate">{t('ops.extensions.discover.title')}</span>
             </h4>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               <div className="relative">
                 <Search className="w-3 h-3 absolute left-2 top-2 text-zinc-400" />
                 <input
@@ -857,20 +860,19 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
                   value={discoverFilter}
                   onChange={(e) => setDiscoverFilter(e.target.value)}
                   placeholder={t('ops.extensions.filterPlaceholder')}
-                  className="pl-6 pr-2 py-1 rounded bg-surface border border-border text-[11px] text-slate-800 dark:text-zinc-200 outline-none w-28 sm:w-36"
+                  className="pl-6 pr-2 py-1 rounded bg-surface border border-border text-[11px] text-slate-800 dark:text-zinc-200 outline-none w-24 sm:w-32"
                 />
               </div>
               <button
                 type="button"
                 onClick={fetchDiscover}
                 disabled={isLoadingDiscover}
-                className="p-1 rounded text-slate-400 hover:text-slate-200"
+                className="p-1 rounded text-slate-400 hover:text-slate-200 shrink-0 cursor-pointer"
               >
                 <RefreshCw className={`w-3 h-3 ${isLoadingDiscover ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
-
           <div className="space-y-2 max-h-52 overflow-y-auto">
             {filteredDiscover.length === 0 && !isLoadingDiscover ? (
               <p className="text-[11px] text-slate-400 dark:text-zinc-500 italic py-2">
