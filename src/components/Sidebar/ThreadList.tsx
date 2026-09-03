@@ -115,7 +115,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                 ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600'
                 : 'hover:bg-surface-highlight text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 cursor-pointer'
             }`}
-            title="Tham gia Collab session (/join)"
+            title={t('thread.joinCollabTitle')}
           >
             <Users className="w-3.5 h-3.5" />
           </button>

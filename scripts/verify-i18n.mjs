@@ -248,6 +248,19 @@ try {
     setCurrentLocale(DEFAULT_LOCALE);
   }
 
+  // ----------------------------------------------------
+  // Test 9: Renderer keeps module-level locale in sync for tm() callers
+  // ----------------------------------------------------
+  console.log('\n[Test 9] Renderer syncs module-level locale');
+  {
+    const providerSrc = fs.readFileSync(path.resolve('src/i18n/I18nProvider.tsx'), 'utf8');
+    assert(providerSrc.includes('setCurrentLocale(locale)'), 'I18nProvider syncs setCurrentLocale on locale change');
+    assert(providerSrc.includes('setCurrentLocale(newLocale)'), 'I18nProvider syncs setCurrentLocale in setLocale');
+    const commandMenuSrc = fs.readFileSync(path.resolve('src/utils/commandMenu.ts'), 'utf8');
+    assert(!/export const DEMO_COMMANDS/.test(commandMenuSrc), 'commandMenu no longer freezes tm() output at module scope');
+    assert(commandMenuSrc.includes('export const getDemoCommands'), 'commandMenu exposes getDemoCommands()');
+  }
+
   console.log(`\n====================================================`);
   console.log(`i18n Foundation Verification: ${passed} passed, ${failed} failed.`);
   console.log(`====================================================\n`);

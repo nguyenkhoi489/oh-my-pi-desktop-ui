@@ -1,13 +1,13 @@
 import React, { useMemo, useEffect, useRef } from 'react';
 import { Terminal, Sparkles, ChevronRight, Hash, X } from 'lucide-react';
 import {
-  DEMO_COMMANDS,
+  getDemoCommands,
   CommandMenuItem,
   filterAndGroupCommands,
 } from '../../utils/commandMenu';
 import { useI18n } from '../../i18n/I18nProvider';
 
-export { DEMO_COMMANDS, filterAndGroupCommands };
+export { getDemoCommands, filterAndGroupCommands };
 export type { CommandMenuItem };
 
 export interface CommandMenuProps {

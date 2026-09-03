@@ -591,10 +591,11 @@ export async function findModels(
     };
   }
 
-  const args = ['models', 'find', trimmedPattern, '--json'];
+  const args: string[] = [];
   if (options?.profile && options.profile.trim()) {
     args.push('--profile', options.profile.trim());
   }
+  args.push('models', 'find', trimmedPattern, '--json');
 
   try {
     const { stdout } = await execFileAsync(binaryPath, args, {

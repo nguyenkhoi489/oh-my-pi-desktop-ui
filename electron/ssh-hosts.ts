@@ -14,8 +14,8 @@ import type {
 
 const execFileAsync = promisify(execFile);
 
-// Regex to validate SSH host name (letters, numbers, hyphen, underscore, dot)
-const SSH_HOST_NAME_REGEX = /^[\w.-]+$/;
+// Host name must not start with '-' or '.' so the CLI never reads it as a flag
+const SSH_HOST_NAME_REGEX = /^[A-Za-z0-9_][\w.-]*$/;
 
 // Validate SSH host name
 export function validateHostName(name: string): boolean {

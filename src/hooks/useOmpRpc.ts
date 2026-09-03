@@ -1527,7 +1527,7 @@ export function useOmpRpc() {
       const msg = err instanceof Error ? err.message : String(err);
       return {
         success: false,
-        error: msg || 'Failed to list SSH hosts',
+        error: msg || tm('ops.ssh.listFailed'),
       };
     }
   }, []);
@@ -1545,7 +1545,7 @@ export function useOmpRpc() {
         const msg = err instanceof Error ? err.message : String(err);
         return {
           success: false,
-          error: msg || 'Failed to add SSH host',
+          error: msg || tm('ops.ssh.addFailed'),
         };
       }
     },
@@ -1565,7 +1565,7 @@ export function useOmpRpc() {
         const msg = err instanceof Error ? err.message : String(err);
         return {
           success: false,
-          error: msg || 'Failed to remove SSH host',
+          error: msg || tm('ops.ssh.removeFailed'),
         };
       }
     },

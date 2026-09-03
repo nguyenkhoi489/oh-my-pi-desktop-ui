@@ -322,8 +322,12 @@ await test('Main window close disposes maintenance CLI processes', () => {
   assert(closedStart !== -1, "main.ts has a 'closed' handler");
   const closedEnd = mainSource.indexOf('});', closedStart);
   const handler = mainSource.slice(closedStart, closedEnd);
-  assert(handler.includes('engineMaintenanceManager.dispose()'), "'closed' handler disposes engineMaintenanceManager");
-  assert(handler.includes('authLoginManager.dispose()'), "'closed' handler still disposes authLoginManager");
+  assert(handler.includes('disposeAll()'), "'closed' handler delegates to disposeAll()");
+  const disposeStart = mainSource.indexOf('function disposeAll()');
+  assert(disposeStart !== -1, 'main.ts defines disposeAll()');
+  const disposeBody = mainSource.slice(disposeStart, mainSource.indexOf('\n}\n', disposeStart));
+  assert(disposeBody.includes('engineMaintenanceManager.dispose()'), 'disposeAll disposes engineMaintenanceManager');
+  assert(disposeBody.includes('authLoginManager.dispose()'), 'disposeAll still disposes authLoginManager');
 });
 
 console.log(`\nAll ${passCount} tests passed successfully!`);

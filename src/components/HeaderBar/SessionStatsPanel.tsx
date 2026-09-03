@@ -49,6 +49,8 @@ import {
 } from '../../types';
 import { useI18n } from '../../i18n/I18nProvider.tsx';
 
+const MAX_HISTORY_ROWS = 500;
+
 type StatsTab = 'session' | 'usage' | 'stats';
 type UsageSubTab = 'live' | 'history' | 'clients';
 
@@ -121,6 +123,12 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
+  const traceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchSeqRef = useRef(0);
+
+  useEffect(() => () => {
+    if (traceTimerRef.current) clearTimeout(traceTimerRef.current);
+  }, []);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -141,7 +149,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg || t('stats.sessionStatsException'));
     }
-  }, [onRefresh]);
+  }, [onRefresh, t]);
 
   const fetchUsageData = useCallback(
     async (force = false) => {
@@ -170,7 +178,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
         setError(msg || t('stats.usageFetchError'));
       }
     },
-    [onGetGlobalUsage, selectedProvider, redactEnabled]
+    [onGetGlobalUsage, selectedProvider, redactEnabled, t]
   );
 
   const fetchHistoryData = useCallback(
@@ -196,7 +204,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
         setError(msg || t('stats.usageHistoryFetchError'));
       }
     },
-    [onGetUsageHistory, selectedDays, selectedProvider]
+    [onGetUsageHistory, selectedDays, selectedProvider, t]
   );
 
   const fetchClientsData = useCallback(
@@ -221,7 +229,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
         setError(msg || t('stats.usageClientsFetchError'));
       }
     },
-    [onGetUsageClients, selectedDays]
+    [onGetUsageClients, selectedDays, t]
   );
 
   const fetchGlobalStatsData = useCallback(
@@ -247,7 +255,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
         setError(msg || t('stats.statsFetchError'));
       }
     },
-    [onGetGlobalStats]
+    [onGetGlobalStats, t]
   );
 
   const checkDashboardStatus = useCallback(async () => {
@@ -264,6 +272,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
 
   const fetchActiveTabData = useCallback(
     async (force = false) => {
+      const seq = ++fetchSeqRef.current;
       setIsLoading(true);
       setError(null);
       try {
@@ -281,7 +290,8 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
           await Promise.all([fetchGlobalStatsData(force), checkDashboardStatus()]);
         }
       } finally {
-        setIsLoading(false);
+        // Only the latest fetch may clear the loading flag
+        if (seq === fetchSeqRef.current) setIsLoading(false);
       }
     },
     [
@@ -426,7 +436,9 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
       }
 
       // 4. Timeout 2.5s fallback to open dashboard URL
-      setTimeout(async () => {
+      if (traceTimerRef.current) clearTimeout(traceTimerRef.current);
+      traceTimerRef.current = setTimeout(async () => {
+        traceTimerRef.current = null;
         unsubscribe?.();
         if (!urlOpened && opener) {
           const fallbackUrl = dashboardUrl || 'http://127.0.0.1:3457';
@@ -615,7 +627,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
             }`}
           >
             <Activity className="w-3.5 h-3.5 text-blue-500" />
-            <span>Session</span>
+            <span>{t('stats.tab.session')}</span>
           </button>
 
           <button
@@ -639,7 +651,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Global Stats</span>
+            <span>{t('stats.tab.global')}</span>
           </button>
         </div>
 
@@ -737,19 +749,19 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="p-2.5 rounded-lg bg-surface border border-border flex flex-col">
-                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">User</span>
+                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.session.user')}</span>
                     <span className="text-sm font-semibold font-mono text-slate-900 dark:text-zinc-100">
                       {formatNumber(sessionStats?.userMessages)}
                     </span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-surface border border-border flex flex-col">
-                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Assistant</span>
+                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.session.assistant')}</span>
                     <span className="text-sm font-semibold font-mono text-slate-900 dark:text-zinc-100">
                       {formatNumber(sessionStats?.assistantMessages)}
                     </span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-surface border border-border flex flex-col">
-                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Total</span>
+                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.session.total')}</span>
                     <span className="text-sm font-semibold font-mono text-slate-900 dark:text-zinc-100">
                       {formatNumber(sessionStats?.totalMessages)}
                     </span>
@@ -784,20 +796,20 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="p-2.5 rounded-lg bg-surface border border-border flex flex-col">
-                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Input</span>
+                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.session.input')}</span>
                     <span className="text-xs font-semibold font-mono text-slate-900 dark:text-zinc-100">
                       {formatNumber(sessionStats?.tokens?.input)}
                     </span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-surface border border-border flex flex-col">
-                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Output</span>
+                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.session.output')}</span>
                     <span className="text-xs font-semibold font-mono text-slate-900 dark:text-zinc-100">
                       {formatNumber(sessionStats?.tokens?.output)}
                     </span>
                   </div>
                   {sessionStats?.tokens?.reasoning != null && sessionStats.tokens.reasoning > 0 && (
                     <div className="p-2.5 rounded-lg bg-surface border border-border flex flex-col">
-                      <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Reasoning</span>
+                      <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.session.reasoning')}</span>
                       <span className="text-xs font-semibold font-mono text-amber-500">
                         {formatNumber(sessionStats.tokens.reasoning)}
                       </span>
@@ -808,7 +820,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
                       !sessionStats?.tokens?.reasoning || sessionStats.tokens.reasoning <= 0 ? 'col-span-2' : ''
                     }`}
                   >
-                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Total Tokens</span>
+                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.session.totalTokens')}</span>
                     <span className="text-xs font-semibold font-mono text-codex-accent">
                       {formatNumber(sessionStats?.tokens?.total)}
                     </span>
@@ -818,13 +830,13 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
                 {(sessionStats?.tokens?.cacheRead != null || sessionStats?.tokens?.cacheWrite != null) && (
                   <div className="grid grid-cols-2 gap-2 mt-1">
                     <div className="p-2 rounded-lg bg-surface border border-border flex items-center justify-between">
-                      <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Cache Read</span>
+                      <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.session.cacheRead')}</span>
                       <span className="text-xs font-mono text-slate-700 dark:text-zinc-300">
                         {formatNumber(sessionStats?.tokens?.cacheRead)}
                       </span>
                     </div>
                     <div className="p-2 rounded-lg bg-surface border border-border flex items-center justify-between">
-                      <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Cache Write</span>
+                      <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.session.cacheWrite')}</span>
                       <span className="text-xs font-mono text-slate-700 dark:text-zinc-300">
                         {formatNumber(sessionStats?.tokens?.cacheWrite)}
                       </span>
@@ -847,7 +859,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
 
                 {sessionStats?.premiumRequests != null && (
                   <div className="text-right">
-                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400 block">Premium Requests</span>
+                    <span className="text-[10.5px] text-slate-500 dark:text-zinc-400 block">{t('stats.session.premiumRequests')}</span>
                     <span className="text-xs font-semibold font-mono text-slate-900 dark:text-zinc-100">
                       {formatNumber(sessionStats.premiumRequests)}
                     </span>
@@ -1120,7 +1132,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border/60 font-mono text-[11px]">
-                            {usageHistory.entries.map((entry, idx) => {
+                            {usageHistory.entries.slice(0, MAX_HISTORY_ROWS).map((entry, idx) => {
                               const usedPct = Math.round((entry.usedFraction || 0) * 100);
                               const dateStr = entry.recordedAt
                                 ? new Date(entry.recordedAt).toLocaleString(undefined, {
@@ -1163,6 +1175,11 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
                             })}
                           </tbody>
                         </table>
+                        {usageHistory.entries.length > MAX_HISTORY_ROWS && (
+                          <div className="px-3 py-1.5 text-[10px] text-slate-400 border-t border-border/60">
+                            {t('usage.history.truncated', { shown: MAX_HISTORY_ROWS, total: usageHistory.entries.length })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -1293,7 +1310,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
                   {/* Overall Summary Cards */}
                   <div className="grid grid-cols-3 gap-2">
                     <div className="p-2.5 rounded-lg bg-surface border border-border flex flex-col">
-                      <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Total Requests</span>
+                      <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.totalRequests')}</span>
                       <span className="text-sm font-semibold font-mono text-slate-900 dark:text-zinc-100">
                         {formatNumber(globalStats.overall.totalRequests)}
                       </span>
@@ -1303,7 +1320,7 @@ export const SessionStatsPanel: React.FC<SessionStatsPanelProps> = ({
                     </div>
 
                     <div className="p-2.5 rounded-lg bg-surface border border-border flex flex-col">
-                      <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">Total Tokens</span>
+                      <span className="text-[10.5px] text-slate-500 dark:text-zinc-400">{t('stats.session.totalTokens')}</span>
                       <span className="text-sm font-semibold font-mono text-codex-accent">
                         {formatNumber(
                           (globalStats.overall.totalInputTokens || 0) + (globalStats.overall.totalOutputTokens || 0)

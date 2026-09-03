@@ -14,6 +14,23 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-03 — Hardening, Process Lifecycle & i18n Polish
+
+- **State:** Củng cố độ ổn định, bảo mật và dọn dẹp i18n trên toàn bộ dự án:
+  - Trích xuất `validateExternalUrl` vào `electron/external-url.ts` tái sử dụng, kiểm tra whitelist protocol và định dạng URL an toàn.
+  - Validate chặt chẽ port (1-65535) và hostname cho `omp:usage-invalidate`, ngăn chặn cờ CLI độc hại trong `electron/ssh-hosts.ts` (`/^[A-Za-z0-9_][\w.-]*$/`).
+  - Sửa logic kiểm tra tiến trình con còn sống trong `electron/ops-manager.ts` (`exitCode === null && signalCode === null`).
+  - Xử lý debounce/dedup thông báo hủy tác vụ trong `StreamingTaskRunner`, kiểm tra `isRunning` trong `CommitAssistantManager` và kiểm tra `isCancelled` cho RPC auth login.
+  - Bổ sung giới hạn dòng buffer log (`MAX_LOG_BUFFER_LINES`) và lịch sử usage (`MAX_HISTORY_ROWS`), hủy timer trace chống rò rỉ bộ nhớ.
+  - Thay thế các chuỗi giao diện còn sót sang key `t()` và đồng bộ locale module-level trong `src/i18n/I18nProvider.tsx` cho các hàm gọi `tm()`.
+  - Cập nhật test suites trong `scripts/verify-*.mjs`, đảm bảo 100% tests và cả 2 typechecks Node/Renderer đều pass sạch.
+- **In-flight:** Không có.
+- **Next:**
+  - Tiếp tục phát triển các tính năng mới theo yêu cầu.
+- **Refs:**
+  - `electron/external-url.ts`
+  - `scripts/verify-i18n.mjs`
+
 
 ## 2026-09-03 — Phase 19: i18n Migrate Electron & Verify
 

@@ -431,7 +431,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                               {model.name || model.id}
                             </span>
                             {model.reasoning && (
-                              <span title="Reasoning model">
+                              <span title={t('header.reasoningModel')}>
                                 <Brain className="w-3 h-3 text-amber-500 shrink-0" />
                               </span>
                             )}

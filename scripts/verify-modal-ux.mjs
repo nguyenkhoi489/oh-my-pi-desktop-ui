@@ -26,7 +26,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { handleSelectKeyNav } from '../src/utils/permissionNav.ts';
-import { filterAndGroupCommands, DEMO_COMMANDS } from '../src/utils/commandMenu.ts';
+import { filterAndGroupCommands, getDemoCommands } from '../src/utils/commandMenu.ts';
 import { DEMO_TOOL_APPROVAL_REQUEST, DEMO_GENERIC_SELECT_REQUEST } from '../src/mock/demoData.ts';
 
 let passed = 0;
@@ -198,7 +198,7 @@ console.log('\n[Test 4] Truthful Timeout Logic');
     'utf-8'
   );
   assert(
-    cardSource.includes('Engine tự xử lý sau'),
+    cardSource.includes("t('toolApproval.timeout'"),
     'ToolApprovalCard displays truthful engine timeout label'
   );
 }

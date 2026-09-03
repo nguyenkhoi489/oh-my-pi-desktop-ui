@@ -93,7 +93,7 @@ export class CommitAssistantManager {
     opts: CommitRunOptions,
     window: BrowserWindow
   ): Promise<{ success: boolean; error?: string }> {
-    if (this.runner.isRunning) {
+    if (this.isRunning) {
       return { success: false, error: tm('electron.commit.alreadyRunning') };
     }
 

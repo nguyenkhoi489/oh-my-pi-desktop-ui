@@ -21,7 +21,7 @@ export const ToastStack: React.FC<ToastStackProps> = ({
     <div
       className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none select-none"
       role="region"
-      aria-label="Notifications"
+      aria-label={t('toast.aria.notifications')}
     >
       {notifications.map((notif) => {
         const type = notif.notifyType?.toLowerCase();
@@ -83,7 +83,7 @@ export const ToastStack: React.FC<ToastStackProps> = ({
               onClick={() => onDismiss(notif.id)}
               className="shrink-0 p-1 rounded-md hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
               title={t('toast.close')}
-              aria-label="Close"
+              aria-label={t('common.close')}
             >
               <X className="w-3.5 h-3.5" />
             </button>

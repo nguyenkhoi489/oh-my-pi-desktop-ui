@@ -6,6 +6,11 @@ import { buildExtendedPath } from './models-config.ts';
 
 const execFileAsync = promisify(execFile);
 
+// child.killed flips as soon as kill() is called, so check exit state instead
+function isChildAlive(child: ChildProcess): boolean {
+  return child.exitCode === null && child.signalCode === null;
+}
+
 export interface OmpDaemonInfo {
   name: string;
   id?: string;
@@ -81,7 +86,7 @@ export class ProcessLogFollower {
   }
 
   public isRunning(): boolean {
-    return this.child !== null && !this.child.killed;
+    return this.child !== null && isChildAlive(this.child);
   }
 
   public start(
@@ -178,11 +183,11 @@ export class ProcessLogFollower {
       const childToKill = this.child;
       this.child = null;
       try {
-        if (!childToKill.killed) {
+        if (isChildAlive(childToKill)) {
           childToKill.kill('SIGTERM');
           setTimeout(() => {
             try {
-              if (!childToKill.killed) {
+              if (isChildAlive(childToKill)) {
                 childToKill.kill('SIGKILL');
               }
             } catch {}

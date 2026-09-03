@@ -60,6 +60,10 @@ try {
     assert.strictEqual(validateHostName('host name'), false);
     assert.strictEqual(validateHostName('host!'), false);
     assert.strictEqual(validateHostName('user@host'), false);
+    assert.strictEqual(validateHostName('--help'), false);
+    assert.strictEqual(validateHostName('-h'), false);
+    assert.strictEqual(validateHostName('..'), false);
+    assert.strictEqual(validateHostName('.hidden'), false);
     assert.strictEqual(validateHostName(null), false);
     assert.strictEqual(validateHostName(undefined), false);
   });

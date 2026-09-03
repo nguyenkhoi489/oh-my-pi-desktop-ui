@@ -412,7 +412,7 @@ async function runSteeringVerification() {
     const composerSource = fs.readFileSync(path.resolve(__dirname, '../src/components/AgentPanel/PromptComposer.tsx'), 'utf-8');
     assert(composerSource.includes('onFollowUpMessage'), 'PromptComposer accepts onFollowUpMessage');
     assert(composerSource.includes('followUpQueue'), 'PromptComposer accepts followUpQueue');
-    assert(composerSource.includes('Queue follow-up'), 'PromptComposer has Queue follow-up action');
+    assert(composerSource.includes("t('composer.queueFollowUp')"), 'PromptComposer has Queue follow-up action');
 
     const hookSource = fs.readFileSync(path.resolve(__dirname, '../src/hooks/useOmpRpc.ts'), 'utf-8');
     assert(hookSource.includes('followUpQueue'), 'useOmpRpc exports followUpQueue');

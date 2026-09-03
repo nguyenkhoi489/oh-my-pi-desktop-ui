@@ -328,7 +328,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
               className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 text-[13px] transition-colors cursor-pointer"
             >
               <Copy className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>Copy path</span>
+              <span>{t('sidebar.projectTree.copyPath')}</span>
             </button>
 
             <button
@@ -340,7 +340,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
               className="w-full text-left px-3 py-1.5 rounded-lg flex items-center gap-2.5 hover:bg-surface-highlight text-slate-800 dark:text-zinc-200 text-[13px] transition-colors cursor-pointer"
             >
               <Copy className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>Copy relative path</span>
+              <span>{t('sidebar.projectTree.copyRelativePath')}</span>
             </button>
 
             <button

@@ -212,7 +212,7 @@ export const ModelsCatalogSection: React.FC<ModelsCatalogSectionProps> = React.m
                             {m.reasoning && (
                               <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1">
                                 <Brain className="w-2.5 h-2.5" />
-                                <span>Reasoning</span>
+                                <span>{t('settings.modelsCatalog.reasoning')}</span>
                               </span>
                             )}
                           </div>

@@ -12,7 +12,7 @@
  */
 
 import { OmpBridge } from '../electron/omp-bridge.ts';
-import { filterAndGroupCommands, DEMO_COMMANDS } from '../src/utils/commandMenu.ts';
+import { filterAndGroupCommands, getDemoCommands } from '../src/utils/commandMenu.ts';
 let passed = 0;
 let failed = 0;
 
@@ -247,7 +247,7 @@ console.log('\n[Test 3] Fuzzy Filter & Grouping (Commands vs Skills)');
   );
 
   // 3. Fallback to DEMO_COMMANDS test
-  const demoRes = filterAndGroupCommands(DEMO_COMMANDS, 'cook');
+  const demoRes = filterAndGroupCommands(getDemoCommands(), 'cook');
   assert(demoRes.items.length >= 1, 'DEMO_COMMANDS fuzzy search matches "cook"');
 }
 

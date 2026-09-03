@@ -351,7 +351,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
         });
       }
     },
-    [resetEngineConfigValue, currentProfile, loadConfig, markKeySaved],
+    [resetEngineConfigValue, currentProfile, loadConfig, markKeySaved, t],
   );
 
   // Handle draft value change for a key

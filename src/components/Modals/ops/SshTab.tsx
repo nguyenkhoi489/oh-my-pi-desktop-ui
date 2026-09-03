@@ -93,7 +93,7 @@ export const SshTab: React.FC<SshTabProps> = React.memo(({
       if (res.success && res.data) {
         setHostsData(res.data);
       } else {
-        setFetchError(res.error || 'Failed to list SSH hosts');
+        setFetchError(res.error || t('ops.ssh.listFailed'));
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -195,8 +195,8 @@ export const SshTab: React.FC<SshTabProps> = React.memo(({
       const selected = await window.electronAPI.selectFile({
         title: t('ops.ssh.addModal.key'),
         filters: [
-          { name: 'All files', extensions: ['*'] },
-          { name: 'Key files', extensions: ['pem', 'key', 'pub', 'id_rsa', 'id_ed25519'] },
+          { name: t('ops.ssh.filter.allFiles'), extensions: ['*'] },
+          { name: t('ops.ssh.filter.keyFiles'), extensions: ['pem', 'key', 'pub', 'id_rsa', 'id_ed25519'] },
         ],
       });
       if (selected) {
@@ -274,7 +274,7 @@ export const SshTab: React.FC<SshTabProps> = React.memo(({
         });
         await loadHosts();
       } else {
-        setAddError(res.error || 'Failed to add SSH host');
+        setAddError(res.error || t('ops.ssh.addFailed'));
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -300,7 +300,7 @@ export const SshTab: React.FC<SshTabProps> = React.memo(({
       } else {
         setFeedbackMessage({
           type: 'error',
-          text: res.error || 'Failed to remove SSH host',
+          text: res.error || t('ops.ssh.removeFailed'),
         });
       }
     } catch (err: unknown) {

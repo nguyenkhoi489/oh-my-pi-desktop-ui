@@ -286,24 +286,13 @@ exec "${stubNodeBinary}" "${stubServerScript}" "$@"
 // Test 4: URL Security Validation for shell:open-external
 // ----------------------------------------------------
 console.log('\n[Test 4] URL Security Validation');
-function validateExternalUrl(url) {
-  if (typeof url !== 'string' || !url.trim()) {
-    return { valid: false, error: 'URL không hợp lệ' };
-  }
-  try {
-    const parsed = new URL(url.trim());
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return { valid: false, error: `Giao thức không được hỗ trợ: ${parsed.protocol}` };
-    }
-    return { valid: true };
-  } catch (err) {
-    return { valid: false, error: 'URL không hợp lệ' };
-  }
-}
+const { validateExternalUrl } = await import('../electron/external-url.ts');
 
 {
   assert(validateExternalUrl('http://127.0.0.1:3457').valid === true, 'accepts http localhost');
   assert(validateExternalUrl('https://omp.dev/stats').valid === true, 'accepts https url');
+  assert(validateExternalUrl('chrome://extensions').valid === true, 'accepts chrome://extensions for relay guide');
+  assert(validateExternalUrl('  http://127.0.0.1:3457  ').url === 'http://127.0.0.1:3457', 'returns trimmed url');
   assert(validateExternalUrl('file:///etc/passwd').valid === false, 'rejects file:// protocol');
   assert(validateExternalUrl('javascript:alert(1)').valid === false, 'rejects javascript: protocol');
   assert(validateExternalUrl('data:text/html,<h1>hi</h1>').valid === false, 'rejects data: protocol');

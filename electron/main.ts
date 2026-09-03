@@ -60,6 +60,7 @@ import {
   getEngineConfigPath,
 } from './engine-config.ts';
 import { runGc } from './storage-gc.ts';
+import { validateExternalUrl } from './external-url.ts';
 import { runImages } from './image-backends.ts';
 import { listSshHosts, addSshHost, removeSshHost } from './ssh-hosts.ts';
 import type { SshHostAddInput } from './types.ts';
@@ -154,12 +155,6 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
-    authLoginManager.dispose();
-    engineMaintenanceManager.dispose();
-    commitAssistantManager.dispose();
-    cleanseRunnerManager.dispose();
-    browserRelayManager.dispose();
-    sayManager.dispose();
     disposeAll();
   });
 }
@@ -370,10 +365,8 @@ ipcMain.handle('omp:auth-login-start', async (_, providerId: string) => {
     return ompBridge.startAuthLogin(providerId);
   }
 
-  return {
-    success: false,
-    error: tm('electron.main.engineNotRunningForRpcLogin'),
-  };
+  // Engine offline: fall back to auth-broker login through the CLI
+  return authLoginManager.start(binaryPath, providerId, mainWindow);
 });
 
 ipcMain.handle('omp:auth-status', async () => {
@@ -483,7 +476,14 @@ ipcMain.handle('omp:usage-invalidate', async (_, options?: InvalidateUsageOption
 ipcMain.handle('omp:stats-dashboard-start', async (_, options?: StartStatsDashboardOptions) => {
   const binaryPath = await resolveOmpBinaryPath();
   const defaultPort = getSettingsStore().get().statsDashboardPort;
-  const port = options?.port || defaultPort;
+  const requestedPort = options?.port;
+  const hasPort = requestedPort !== undefined && requestedPort !== null;
+  const portValid = !hasPort || (Number.isInteger(requestedPort) && requestedPort >= 1 && requestedPort <= 65535);
+  const hostValid = options?.host === undefined || /^[A-Za-z0-9.\-]+$/.test(options.host);
+  if (!portValid || !hostValid) {
+    return { success: false, error: tm('electron.main.invalidDashboardOptions') };
+  }
+  const port = hasPort ? requestedPort : defaultPort;
   return statsDashboardManager.start(binaryPath, { ...options, port });
 });
 
@@ -496,15 +496,12 @@ ipcMain.handle('omp:stats-dashboard-status', async () => {
 });
 
 ipcMain.handle('shell:open-external', async (_, url: string) => {
-  if (typeof url !== 'string' || !url.trim()) {
-    return { success: false, error: tm('electron.main.invalidUrl') };
+  const validated = validateExternalUrl(url);
+  if (!validated.valid) {
+    return { success: false, error: validated.error };
   }
   try {
-    const parsed = new URL(url.trim());
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:' && parsed.protocol !== 'chrome:') {
-      return { success: false, error: tm('electron.main.unsupportedProtocol', { protocol: parsed.protocol }) };
-    }
-    await shell.openExternal(url.trim());
+    await shell.openExternal(validated.url);
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || tm('electron.main.cannotOpenUrlExternal') };
@@ -744,11 +741,7 @@ ipcMain.handle('omp:commit-cancel', async () => {
 });
 
 ipcMain.handle('omp:commit-status', async (_, cwd?: string) => {
-  let targetCwd = cwd;
-  if (!targetCwd && ompBridge) {
-    const state = await ompBridge.getState().catch(() => null);
-    targetCwd = state?.state?.cwd as string | undefined;
-  }
+  const targetCwd = cwd || (ompBridge ? ompBridge.getWorkspacePath() : null) || undefined;
   return isGitDirty(targetCwd);
 });
 
@@ -757,11 +750,8 @@ ipcMain.handle('omp:cleanse-run', async (_, opts: CleanseRunOptions) => {
   const win = mainWindow || BrowserWindow.getFocusedWindow();
   if (!win) return { success: false, error: tm('electron.main.appWindowNotFound') };
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
-  let targetCwd = opts?.cwd;
-  if (!targetCwd && ompBridge) {
-    const state = await ompBridge.getState().catch(() => null);
-    targetCwd = state?.state?.cwd as string | undefined;
-  }
+  const targetCwd = opts?.cwd || (ompBridge ? ompBridge.getWorkspacePath() : null) || undefined;
+  if (!targetCwd) return { success: false, error: tm('electron.commit.noWorkspace') };
   return cleanseRunnerManager.runCleanse(binary, { ...opts, cwd: targetCwd }, win);
 });
 

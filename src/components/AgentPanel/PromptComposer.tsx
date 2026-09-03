@@ -1058,7 +1058,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                     <div className="flex items-center gap-2.5">
                       <Clock className="w-4 h-4 text-blue-500 shrink-0" />
                       <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">Queue follow-up</span>
+                        <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{t('composer.queueFollowUp')}</span>
                         <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.followUpOptionDesc')}</span>
                       </div>
                     </div>

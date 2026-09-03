@@ -513,8 +513,8 @@ export const OpsModal: React.FC<OpsModalProps> = ({
                     onChange={(e) => setUnpackScope(e.target.value as any)}
                     className="px-3 py-1.5 rounded-lg bg-surface border border-border text-xs text-slate-700 dark:text-zinc-300 outline-none"
                   >
-                    <option value="user">User config (~/.omp/agent/agents)</option>
-                    <option value="project">Project config (./.omp/agents)</option>
+                    <option value="user">{t('ops.agents.scopeUser')}</option>
+                    <option value="project">{t('ops.agents.scopeProject')}</option>
                   </select>
 
                   <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-600 dark:text-zinc-400">

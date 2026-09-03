@@ -11,11 +11,9 @@ export interface CommitRunOptions {
   cwd?: string;
 }
 
-// Strip ANSI escape codes from string
-export function stripAnsi(text: string): string {
-  if (!text) return '';
-  return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
-}
+import { stripAnsi } from '../../shared/text/strip-ansi.ts';
+
+export { stripAnsi };
 
 // Build argv parameter list for `omp commit`
 export function buildCommitArgs(opts: CommitRunOptions, dryRun: boolean): string[] {
@@ -66,7 +64,7 @@ export function parseCommitMessage(output: string): string {
 
     for (const line of lines) {
       const trimmed = line.trim();
-      if (trimmed.startsWith('●') || trimmed.startsWith('')) {
+      if (trimmed.startsWith('●') || trimmed.startsWith('\uF00C')) {
         if (capturing) break;
         continue;
       }

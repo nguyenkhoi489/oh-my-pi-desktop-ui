@@ -75,15 +75,15 @@ export const ProcessesTab: React.FC = React.memo(() => {
     try {
       const res = await window.electronAPI.getBrowserRelayStatus();
       setRelayStatus(res);
-      if (res.port && !relayPort) {
-        setRelayPort(String(res.port));
+      if (res.port) {
+        setRelayPort((prev) => prev || String(res.port));
       }
     } catch {
       // ignore
     } finally {
       setIsLoadingRelay(false);
     }
-  }, [relayPort]);
+  }, []);
 
   // Fetch processes list
   const fetchProcesses = useCallback(async () => {
@@ -103,7 +103,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
     } finally {
       setIsLoadingPs(false);
     }
-  }, []);
+  }, [fetchRelayStatus, t]);
 
   useEffect(() => {
     fetchProcesses();
@@ -160,6 +160,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
       }
     } catch (err: any) {
       setRelayError(err?.message || t('ops.processes.relay.startFailed'));
+    } finally {
       setRelayActionBusy(false);
       await fetchRelayStatus();
       await fetchProcesses();
@@ -304,7 +305,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
             global: service,
           });
           if (!res.success) {
-            setDaemonLogsLines([`[Follow logs error: ${res.error || 'Cannot start stream'}]`]);
+            setDaemonLogsLines([t('ops.processes.logs.followError', { detail: res.error || t('ops.processes.logs.cannotStartStream') })]);
           }
         } catch (err: any) {
           setDaemonLogsLines([`[IPC startProcessLogFollow error: ${err?.message}]`]);
@@ -327,7 +328,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
             const rawLines = res.logs ? res.logs.split('\n') : [];
             setDaemonLogsLines(rawLines.slice(-MAX_LOG_BUFFER_LINES));
           } else {
-            setDaemonLogsLines([`[Fetch logs error: ${res.error || 'No logs'}]`]);
+            setDaemonLogsLines([t('ops.processes.logs.fetchError', { detail: res.error || t('ops.processes.logs.noLogs') })]);
           }
         } catch (err: any) {
           setDaemonLogsLines([`[IPC getProcessLogs error: ${err?.message}]`]);
@@ -336,7 +337,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
         }
       }
     },
-    []
+    [t]
   );
 
   // Subscribe to realtime log lines

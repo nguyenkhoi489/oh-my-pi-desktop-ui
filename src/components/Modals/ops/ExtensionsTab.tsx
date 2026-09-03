@@ -105,7 +105,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
     } finally {
       setIsLoadingPlugins(false);
     }
-  }, [localOnly]);
+  }, [localOnly, t]);
 
   // 2. Fetch Doctor
   const handleRunDoctor = useCallback(async (fix = false) => {
@@ -133,7 +133,7 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
       setIsRunningDoctor(false);
       setIsFixingDoctor(false);
     }
-  }, [localOnly, setNeedRestart]);
+  }, [localOnly, setNeedRestart, t]);
 
   // 3. Fetch Marketplaces & Discover
   const fetchMarketplaces = useCallback(async () => {
@@ -1008,18 +1008,18 @@ export const ExtensionsTab: React.FC<ExtensionsTabProps> = React.memo(({ setNeed
 
             <form onSubmit={handleSaveConfig} className="space-y-3">
               <div>
-                <label className="text-[11px] text-slate-500 dark:text-zinc-400 block mb-1">Key</label>
+                <label className="text-[11px] text-slate-500 dark:text-zinc-400 block mb-1">{t('ops.extensions.config.keyLabel')}</label>
                 <input
                   type="text"
                   value={configKey}
                   onChange={(e) => setConfigKey(e.target.value)}
-                  placeholder="e.g. apiKey, defaultModel..."
+                  placeholder={t('ops.extensions.config.keyPlaceholder')}
                   className="w-full px-3 py-1.5 rounded-lg bg-surface border border-border text-xs font-mono outline-none"
                   required
                 />
               </div>
               <div>
-                <label className="text-[11px] text-slate-500 dark:text-zinc-400 block mb-1">Value</label>
+                <label className="text-[11px] text-slate-500 dark:text-zinc-400 block mb-1">{t('ops.extensions.config.valueLabel')}</label>
                 <input
                   type="text"
                   value={configValue}

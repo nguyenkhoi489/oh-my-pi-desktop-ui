@@ -684,6 +684,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         await onRestartEngine();
         setHasEngineChanged(false);
         setModelsSaveSuccess(false);
+        if (window.electronAPI?.isEngineRunning) {
+          setIsEngineOnline(Boolean(await window.electronAPI.isEngineRunning().catch(() => false)));
+        }
       } finally {
         setIsRestarting(false);
       }
@@ -2031,7 +2034,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 type="number"
                                 value={m.contextWindow || ''}
                                 onChange={(e) => handleUpdateModelRow(idx, 'contextWindow', e.target.value ? Number(e.target.value) : undefined)}
-                                placeholder="Context (vd: 300000)"
+                                placeholder={t('settings.providers.contextPlaceholder')}
                                 className="w-24 px-2 py-1 bg-surface border border-border rounded text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:border-codex-accent"
                               />
                               <input
@@ -2061,7 +2064,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   }
                                   className="rounded text-codex-accent focus:ring-codex-accent"
                                 />
-                                <span>Image input</span>
+                                <span>{t('settings.providers.imageInput')}</span>
                               </label>
 
                               <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title={t('settings.providers.reasoningTitle')}>
@@ -2073,7 +2076,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   }
                                   className="rounded text-codex-accent focus:ring-codex-accent"
                                 />
-                                <span>Reasoning</span>
+                                <span>{t('settings.modelsCatalog.reasoning')}</span>
                               </label>
 
                               <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-300 cursor-pointer" title={t('settings.providers.toolsTitle')}>
@@ -2085,7 +2088,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   }
                                   className="rounded text-codex-accent focus:ring-codex-accent"
                                 />
-                                <span>Tool calling</span>
+                                <span>{t('settings.providers.toolCalling')}</span>
                               </label>
 
                               <div className="flex items-center gap-1.5 ml-auto" title={t('settings.providers.costTitle')}>
@@ -2541,7 +2544,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     const isAuthed = authedProviders.includes(lp.id) || Boolean(lp.authenticated);
                     const isLoggingIn = authLogin?.providerId === lp.id && isAuthLoginPending;
                     const isLoggingOut = loggingOutProviderId === lp.id;
-                    const isLoginDisabled = isAuthLoginPending || !effectiveEngineRunning;
+                    const isLoginDisabled = isAuthLoginPending;
 
                     return (
                       <div

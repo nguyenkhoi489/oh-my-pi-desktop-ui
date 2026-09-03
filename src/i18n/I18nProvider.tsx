@@ -3,6 +3,7 @@ import {
   DEFAULT_LOCALE,
   isLocale,
   translate,
+  setCurrentLocale,
   type Locale,
   type I18nKey,
 } from '../../shared/i18n/index.ts';
@@ -21,6 +22,11 @@ const I18nContext = createContext<I18nContextValue>({
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
+
+  // Keep the module-level locale in sync so tm() outside React follows the switch
+  useEffect(() => {
+    setCurrentLocale(locale);
+  }, [locale]);
 
   useEffect(() => {
     const initLocale = async () => {
@@ -48,6 +54,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setLocale = useCallback((newLocale: Locale) => {
     if (!isLocale(newLocale)) return;
+    setCurrentLocale(newLocale);
     setLocaleState(newLocale);
 
     if (window.electronAPI?.setSettings) {

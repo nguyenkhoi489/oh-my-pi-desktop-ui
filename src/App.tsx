@@ -316,7 +316,7 @@ export function App() {
         pushNotification(t('app.deleteFileError', { fileName: file.name }), 'error');
       }
     },
-    [refreshFiles, pushNotification]
+    [refreshFiles, pushNotification, t]
   );
 
   const handleOpenFileByPath = useCallback(
@@ -472,6 +472,7 @@ export function App() {
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenOpsModal={() => setIsOpsModalOpen(true)}
         onOpenCommitModal={() => setIsCommitModalOpen(true)}
+        isCommitDisabled={!workspacePath}
         onToggleTerminal={() => setActiveTab((prev) => (prev === 'terminal' ? 'diff' : 'terminal'))}
         isTerminalActive={activeTab === 'terminal'}
         onCopyLastAssistantText={getLastAssistantText}

@@ -1,7 +1,8 @@
 import type { OmpCommandInfo } from '../types/index.ts';
 import { tm } from '../../shared/i18n/index.ts';
 
-export const DEMO_COMMANDS: OmpCommandInfo[] = [
+// Built per call so command descriptions follow the current locale
+export const getDemoCommands = (): OmpCommandInfo[] => [
   { name: 'model', description: tm('command.model.desc'), inputHint: '<provider/model>' },
   { name: 'thinking', description: tm('command.thinking.desc'), inputHint: '<level>' },
   { name: 'compact', description: tm('command.compact.desc'), inputHint: '[instructions]' },

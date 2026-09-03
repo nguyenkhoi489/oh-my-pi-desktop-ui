@@ -205,7 +205,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
           <button
             onClick={handleReload}
             className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-zinc-200 hover:bg-surface-highlight transition-colors cursor-pointer"
-            title="Reload from disk"
+            title={t('artifact.reloadFromDisk')}
           >
             <RotateCw className="w-3.5 h-3.5" />
           </button>
@@ -213,7 +213,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
           <button
             onClick={handleCopy}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-zinc-300 hover:text-slate-900 hover:bg-surface-highlight border border-border transition-colors cursor-pointer"
-            title="Copy code"
+            title={t('artifact.copyCode')}
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? 'Copied' : 'Copy'}</span>

@@ -28,6 +28,8 @@ import type {
 import { stripAnsi } from '../../../utils/cleanseArgs.ts';
 import { useI18n } from '../../../i18n/I18nProvider.tsx';
 
+const MAX_LOG_BUFFER_LINES = 2000;
+
 export interface EngineTabProps {
   onRestartEngine?: () => void;
   isEngineRunning?: boolean;
@@ -129,7 +131,7 @@ export const EngineTab: React.FC<EngineTabProps> = React.memo(({ onRestartEngine
     } finally {
       setIsCheckingUpdate(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchStatus();
@@ -144,7 +146,7 @@ export const EngineTab: React.FC<EngineTabProps> = React.memo(({ onRestartEngine
     const unsubscribe = window.electronAPI.onMaintenanceOutput((event: MaintenanceEvent) => {
       if (event.type === 'stdout' || event.type === 'stderr') {
         if (event.text) {
-          setLogs((prev) => [...prev, event.text!]);
+          setLogs((prev) => [...prev.slice(-MAX_LOG_BUFFER_LINES), event.text!]);
         }
       } else if (event.type === 'status') {
         if (event.status) {
@@ -176,7 +178,7 @@ export const EngineTab: React.FC<EngineTabProps> = React.memo(({ onRestartEngine
       if (event.type === 'stdout' || event.type === 'stderr') {
         if (event.text) {
           const stripped = stripAnsi(event.text);
-          setCleanseLogs((prev) => [...prev, stripped]);
+          setCleanseLogs((prev) => [...prev.slice(-MAX_LOG_BUFFER_LINES), stripped]);
         }
       } else if (event.type === 'status') {
         if (event.status) {
@@ -227,7 +229,7 @@ export const EngineTab: React.FC<EngineTabProps> = React.memo(({ onRestartEngine
       setCleanseLogs((prev) => [...prev, `[Exception] ${msg}`]);
       setIsCleanseRunning(false);
     }
-  }, [cleanseRequest, cleanseAgents, cleanseModel, cleanseTests, cleanseAll, isCleanseRunning]);
+  }, [cleanseRequest, cleanseAgents, cleanseModel, cleanseTests, cleanseAll, isCleanseRunning, t]);
 
   // Cancel Cleanse task
   const handleCancelCleanse = useCallback(async () => {
@@ -236,7 +238,7 @@ export const EngineTab: React.FC<EngineTabProps> = React.memo(({ onRestartEngine
     setIsCleanseRunning(false);
     setCleanseStatus('idle');
     setCleanseLogs((prev) => [...prev, t('ops.engine.cleanseCancelled')]);
-  }, []);
+  }, [t]);
 
   // Run maintenance task
   const runTask = useCallback(async (taskId: string, args: string[]) => {
@@ -261,7 +263,7 @@ export const EngineTab: React.FC<EngineTabProps> = React.memo(({ onRestartEngine
       setLogs((prev) => [...prev, `[Exception] ${msg}`]);
       setActiveTaskId(null);
     }
-  }, [activeTaskId]);
+  }, [activeTaskId, t]);
 
   // Cancel active maintenance task
   const cancelCurrentTask = useCallback(async () => {
@@ -281,17 +283,14 @@ export const EngineTab: React.FC<EngineTabProps> = React.memo(({ onRestartEngine
 
     // Check if engine is running
     let isRunning = Boolean(isEngineRunning);
-    if (!isRunning && window.electronAPI?.getEngineState) {
+    if (!isRunning && window.electronAPI?.isEngineRunning) {
       try {
-        const stateRes = await window.electronAPI.getEngineState();
-        if (stateRes.success && stateRes.state?.status && stateRes.state.status !== 'idle') {
-          isRunning = true;
-        }
+        isRunning = Boolean(await window.electronAPI.isEngineRunning());
       } catch {}
     }
 
     if (isRunning && window.electronAPI?.stopOmpProcess) {
-      setLogs((prev) => [...prev, '[Notice] Stopping OMP engine before update...']);
+      setLogs((prev) => [...prev, t('ops.engine.update.stoppingEngine')]);
       await window.electronAPI.stopOmpProcess().catch(() => {});
     }
 
@@ -303,7 +302,7 @@ export const EngineTab: React.FC<EngineTabProps> = React.memo(({ onRestartEngine
     } else if (action.type === 'update-plugins') {
       await runTask('update-plugins', ['update', '--plugins']);
     }
-  }, [isEngineRunning, runTask]);
+  }, [isEngineRunning, runTask, t]);
 
   const handleRequestChannelSwitch = (targetChannel: 'stable' | 'canary') => {
     setPendingAction({
@@ -764,7 +763,7 @@ export const EngineTab: React.FC<EngineTabProps> = React.memo(({ onRestartEngine
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-semibold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
                 <Terminal className="w-4 h-4 text-emerald-500" />
-                <span>Cleanse Log</span>
+                <span>{t('ops.engine.cleanseLog')}</span>
                 {cleanseStatus === 'running' && (
                   <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/10 text-amber-500 border border-amber-500/20 font-normal">
                     {t('ops.engine.running')}

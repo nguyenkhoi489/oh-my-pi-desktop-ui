@@ -27,7 +27,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { SettingsStore } from '../electron/settings-store.ts';
 import { OmpBridge } from '../electron/omp-bridge.ts';
-import { DEMO_COMMANDS } from '../src/utils/commandMenu.ts';
+import { getDemoCommands } from '../src/utils/commandMenu.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -304,7 +304,7 @@ async function runVerification() {
       assert(mainSrc.includes("'omp:get-last-assistant-text'"), 'main.ts handles omp:get-last-assistant-text');
       assert(mainSrc.includes("'omp:handoff'"), 'main.ts handles omp:handoff');
 
-      const handoffCmd = DEMO_COMMANDS.find((c) => c.name === 'handoff');
+      const handoffCmd = getDemoCommands().find((c) => c.name === 'handoff');
       assert(Boolean(handoffCmd), 'DEMO_COMMANDS includes handoff command');
     }
 

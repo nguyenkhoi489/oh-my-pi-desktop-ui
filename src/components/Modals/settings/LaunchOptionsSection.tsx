@@ -109,7 +109,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
         configOverlays: [...(prev.configOverlays || []), selected],
       }));
     }
-  }, [updateOptions]);
+  }, [updateOptions, t]);
 
   const handleBrowseFileForExtension = useCallback(async () => {
     if (!window.electronAPI?.selectFile) return;
@@ -123,7 +123,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
         extensions: [...(prev.extensions || []), selected],
       }));
     }
-  }, [updateOptions]);
+  }, [updateOptions, t]);
 
   const handleBrowseFileForHook = useCallback(async () => {
     if (!window.electronAPI?.selectFile) return;
@@ -137,7 +137,7 @@ export const LaunchOptionsSection: React.FC<LaunchOptionsSectionProps> = ({
         hooks: [...(prev.hooks || []), selected],
       }));
     }
-  }, [updateOptions]);
+  }, [updateOptions, t]);
 
   // Add list item helpers
   const addAddDir = useCallback(() => {

@@ -1270,7 +1270,7 @@ export class OmpBridge {
   }
 
   public hasActiveAuthLogin(): boolean {
-    return this.activeAuthLogin !== null;
+    return this.activeAuthLogin !== null && !this.activeAuthLogin.isCancelled;
   }
 
   public getActiveAuthLoginProviderId(): string | null {
@@ -1378,7 +1378,7 @@ export class OmpBridge {
   }
 
   public cancelAuthLogin(): { success: boolean } {
-    if (!this.activeAuthLogin) {
+    if (!this.activeAuthLogin || this.activeAuthLogin.isCancelled) {
       return { success: true };
     }
     const { providerId, pendingInputReqId } = this.activeAuthLogin;

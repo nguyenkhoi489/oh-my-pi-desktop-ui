@@ -2,9 +2,10 @@ import { useMemo } from 'react';
 import type { OmpCommandInfo } from '../types';
 import type { CommandMenuItem } from '../utils/commandMenu';
 import {
-  DEMO_COMMANDS,
+  getDemoCommands,
   filterAndGroupCommands,
 } from '../utils/commandMenu';
+import { useI18n } from '../i18n/I18nProvider';
 export interface UseCommandCatalogOptions {
   availableCommands?: OmpCommandInfo[];
   query?: string;
@@ -21,11 +22,12 @@ export function useCommandCatalog({
   availableCommands,
   query = '',
 }: UseCommandCatalogOptions = {}): UseCommandCatalogResult {
+  const { locale } = useI18n();
   const rawCommands = useMemo(() => {
     return availableCommands && availableCommands.length > 0
       ? availableCommands
-      : DEMO_COMMANDS;
-  }, [availableCommands]);
+      : getDemoCommands();
+  }, [availableCommands, locale]);
 
   const { items, groups } = useMemo(() => {
     return filterAndGroupCommands(rawCommands, query);

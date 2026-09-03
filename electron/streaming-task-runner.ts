@@ -27,6 +27,7 @@ export class StreamingTaskRunner {
   private window: BrowserWindow | null = null;
   private channel: string;
   private killTimeoutTimer: NodeJS.Timeout | null = null;
+  private cancelNotified = false;
 
   constructor(channel: string) {
     this.channel = channel;
@@ -116,18 +117,22 @@ export class StreamingTaskRunner {
           this.killTimeoutTimer = null;
         }
         const isSuccess = code === 0;
-        this.emit(
-          {
-            taskId,
-            type: 'status',
-            status: isSuccess ? 'done' : 'error',
-            exitCode: code ?? undefined,
-            text: isSuccess
-              ? tm('electron.taskRunner.completedSuccess')
-              : tm('electron.taskRunner.completedError', { code: String(code) }),
-          },
-          options?.onOutput
-        );
+        // cancelTask() already emitted the terminal status for this task
+        if (!this.cancelNotified) {
+          this.emit(
+            {
+              taskId,
+              type: 'status',
+              status: isSuccess ? 'done' : 'error',
+              exitCode: code ?? undefined,
+              text: isSuccess
+                ? tm('electron.taskRunner.completedSuccess')
+                : tm('electron.taskRunner.completedError', { code: String(code) }),
+            },
+            options?.onOutput
+          );
+        }
+        this.cancelNotified = false;
         this.activeProcess = null;
         this.activeTaskId = null;
       });
@@ -187,6 +192,7 @@ export class StreamingTaskRunner {
         }
       }, 3000);
 
+      this.cancelNotified = true;
       this.emit({
         taskId,
         type: 'status',

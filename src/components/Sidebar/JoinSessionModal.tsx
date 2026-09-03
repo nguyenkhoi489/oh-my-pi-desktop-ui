@@ -74,7 +74,7 @@ export const JoinSessionModal: React.FC<JoinSessionModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-100">
-                Tham gia Collab Session
+                {t('join.heading')}
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400">
                 {t('join.subtitle')}

@@ -101,14 +101,18 @@ export const GrievancesTab: React.FC<GrievancesTabProps> = React.memo(({
     fetchGrievances();
   }, [fetchGrievances]);
 
-  // Unique tool names from grievance data
-  const availableTools = useMemo(() => {
-    const toolsSet = new Set<string>();
-    grievances.forEach((item) => {
-      if (item.tool) toolsSet.add(item.tool);
+  // Accumulate tools across fetches so the dropdown does not shrink after filtering
+  const [knownTools, setKnownTools] = useState<string[]>([]);
+  useEffect(() => {
+    setKnownTools((prev) => {
+      const merged = new Set(prev);
+      grievances.forEach((item) => {
+        if (item.tool) merged.add(item.tool);
+      });
+      return merged.size === prev.length ? prev : Array.from(merged).sort();
     });
-    return Array.from(toolsSet).sort();
   }, [grievances]);
+  const availableTools = knownTools;
 
   // Filter list by search query
   const filteredGrievances = useMemo(() => {
