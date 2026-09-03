@@ -326,9 +326,11 @@ feat: exported the app constant
     assert(canvasContainerSource.includes('<CommitView'), 'CanvasContainer renders CommitView inside main canvas view');
     assert(commitViewSource.includes('parseCommitMessage'), 'CommitView uses parseCommitMessage');
     assert(commitViewSource.includes('availableModels'), 'CommitView accepts availableModels');
+    assert(commitViewSource.includes('editedMessage: messageToCommit || undefined'), 'CommitView reuses generated/edited message to avoid redundant re-scan');
     assert(appSource.includes('CommitModal'), 'App.tsx imports and renders CommitModal');
     assert(commitModalSource.includes('parseCommitMessage'), 'CommitModal uses parseCommitMessage');
     assert(commitModalSource.includes('availableModels'), 'CommitModal accepts availableModels');
+    assert(commitModalSource.includes('editedMessage: messageToCommit || undefined'), 'CommitModal reuses generated/edited message to avoid redundant re-scan');
   });
 
   // Test 12: i18n keys parity

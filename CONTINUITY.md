@@ -14,6 +14,17 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-03 — Fix: hdiutil DMG creation "Operation not permitted" on macOS Sequoia
+- **State:**
+  - Chẩn đoán nguyên nhân gốc rễ lỗi `hdiutil create failed - Operation not permitted` khi đóng gói DMG release:
+    1. Trùng volume name (`-volname "OMP Agent 1.0.0"`): macOS Sandbox / System Policy (`copy-helper` deny `file-write-create`) chặn ghi đè bundle `/Volumes/OMP Agent 1.0.0/OMP Agent.app` do xung đột định danh với `/Applications/OMP Agent.app` đã cài đặt trên hệ thống.
+    2. Extended attribute `com.apple.provenance` gắn sau quá trình notarize/staple gây lỗi EPERM khi helper cố sao chép vào volume mới.
+  - Cập nhật `scripts/release/build-dmg.sh`: đổi `-volname "$NAME $VER"` thành `-volname "$NAME"` theo chuẩn chung macOS và xóa đệ quy `com.apple.provenance` trên thư mục stage tạm trước khi `hdiutil create`.
+  - Kiểm chứng: Build DMG thành công (`release/OMP Agent-1.0.0-arm64.dmg`), codesign DMG hợp lệ, mount và verify Gatekeeper `accepted source=Notarized Developer ID` trơn tru.
+- **In-flight:** Không có.
+- **Next:** Tiếp tục hoàn thiện các script release / CI nếu cần.
+- **Refs:** `plans/reports/fix-260903-2325-hdiutil-dmg-eperm-operation-not-permitted.md`
+
 ## 2026-09-03 — Fix & Feature: Rich Markdown Preview (KaTeX Math, Prism Highlighting, DOMPurify) & Ops Process Removal
 - **State:**
   - **Rich Markdown Preview:**
@@ -194,6 +205,37 @@ Entry template:
   - `src/hooks/useOmpRpc.ts`
   - `src/components/AgentPanel/ChatHistory.tsx`
   - `scripts/verify-composer-attach.mjs`
+
+## 2026-09-03 — Fix HeaderBar Model Selector & Approval Mode Dropdown Visibility
+
+- **State:** Đã khắc phục triệt để lỗi không mở được menu dropdown Model Selector và Approval Mode trên HeaderBar:
+  - `src/components/HeaderBar.tsx`: Gỡ bỏ `overflow-hidden` trên `<header>` và container Center (vốn vô tình cắt bỏ toàn bộ phần popup `top-full` bên dưới header 48px), thêm `relative z-30` cho `<header>` để dropdown menu nổi lên trên khu vực Canvas bên dưới.
+  - `scripts/verify-headerbar-layout.mjs`: Cập nhật kiểm tra Test 1 và Test 3 xác minh bố cục co giãn và elevation của dropdown.
+  - Verification: `npm run test:headerbar-layout` (21/21 passed), `npm run test:i18n` (3264/3264 passed), `npm run test:commit-assistant` (12/12 passed), `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Sẵn sàng cho các yêu cầu tiếp theo.
+- **Refs:**
+  - `plans/reports/fix-260903-2345-headerbar-model-dropdown-overflow-hidden.md`
+  - `src/components/HeaderBar.tsx`
+  - `scripts/verify-headerbar-layout.mjs`
+
+## 2026-09-03 — Optimize Commit Assistant: Eliminate Redundant Rescan On Commit
+
+- **State:** Đã khắc phục triệt để hiện tượng quét AI lặp lại lần 2 khi nhấn Commit sau khi đã tạo thông điệp:
+  - `src/components/Canvas/CommitView.tsx` & `src/components/Modals/CommitModal.tsx`: Khi đã có nội dung thông điệp trong `proposedMessage` (dù do AI sinh ra qua dry-run hay do người dùng tự nhập/chỉnh sửa), luôn truyền `editedMessage: proposedMessage.trim()` sang main process.
+  - `electron/commit-assistant.ts`: Nhận `editedMessage` và thực hiện trực tiếp qua `git commit -m` (kèm auto-stage và git push nếu được chọn) mà không chạy lại CLI `omp commit` để quét AI lần 2.
+  - `scripts/verify-commit-assistant.mjs`: Bổ sung kiểm tra hợp đồng tái sử dụng message đã sinh trong Test 11.
+  - Verification: `npm run test:commit-assistant` (12/12 passed), `npm run test:i18n` (3264/3264 passed), `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Sẵn sàng cho các yêu cầu tiếp theo.
+- **Refs:**
+  - `plans/reports/fix-260903-2335-commit-assistant-redundant-rescan.md`
+  - `src/components/Canvas/CommitView.tsx`
+  - `src/components/Modals/CommitModal.tsx`
+  - `electron/commit-assistant.ts`
+  - `scripts/verify-commit-assistant.mjs`
 
 ## 2026-09-03 — Transform Commit Assistant into First-Class Inline Canvas Tab
 

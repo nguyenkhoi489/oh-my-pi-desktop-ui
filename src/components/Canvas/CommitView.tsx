@@ -207,7 +207,8 @@ export const CommitView: React.FC<CommitViewProps> = ({
     setLogs([]);
     fullStdoutRef.current = '';
 
-    const isCustomMessage = isEdited || (!initialAiMessage && Boolean(proposedMessage.trim()));
+    // Use generated or user-provided message to commit directly, avoiding duplicate AI scan
+    const messageToCommit = proposedMessage.trim();
 
     try {
       const res = await window.electronAPI.runCommit({
@@ -217,7 +218,7 @@ export const CommitView: React.FC<CommitViewProps> = ({
         model: model || undefined,
         noChangelog,
         legacy,
-        editedMessage: isCustomMessage ? proposedMessage.trim() : undefined,
+        editedMessage: messageToCommit || undefined,
         cwd: workspacePath,
       });
 

@@ -30,14 +30,13 @@ assert(fs.existsSync(headerBarPath), 'src/components/HeaderBar.tsx exists');
 const headerCode = fs.readFileSync(headerBarPath, 'utf8');
 
 // ----------------------------------------------------
-// Test 1: Header Container Overflow Protection
+// Test 1: Header Container Layout & Dropdown Elevation
 // ----------------------------------------------------
-console.log('[Test 1] Header container has min-w-0 and overflow-hidden');
+console.log('[Test 1] Header container has min-w-0 and relative z-30 for dropdown elevation');
 {
   assert(
-    /<header[^>]*min-w-0[^>]*overflow-hidden/.test(headerCode) ||
-    /<header[^>]*overflow-hidden[^>]*min-w-0/.test(headerCode),
-    'Header element contains min-w-0 and overflow-hidden to prevent container blowout'
+    /<header[^>]*min-w-0/.test(headerCode) && /<header[^>]*z-30/.test(headerCode),
+    'Header element contains min-w-0 and z-30 to prevent container blowout while allowing dropdown popups'
   );
 }
 
@@ -69,12 +68,12 @@ console.log('[Test 2] Right section controls have shrink-0 protection and icon-o
 // ----------------------------------------------------
 // Test 3: Center Section Flexible Shrink & Truncation
 // ----------------------------------------------------
-console.log('[Test 3] Center section has min-w-0, flex-1, overflow-hidden, and bounded items');
+console.log('[Test 3] Center section has min-w-0, flex-1, and bounded items');
 {
   assert(
     headerCode.includes('flex-1 flex items-center justify-center') &&
-    headerCode.includes('min-w-0 overflow-hidden'),
-    'Center section flex container is configured with flex-1, min-w-0, and overflow-hidden to prevent overlapping'
+    headerCode.includes('min-w-0'),
+    'Center section flex container is configured with flex-1 and min-w-0 to prevent overlapping'
   );
   assert(
     headerCode.includes('max-w-[90px] sm:max-w-[130px] lg:max-w-[160px] truncate'),

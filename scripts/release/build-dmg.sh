@@ -14,9 +14,11 @@ mkdir -p "$STAGE"
 echo "=== stage nội dung DMG ==="
 /usr/bin/ditto "$APP" "$STAGE/$(basename "$APP")"
 ln -s /Applications "$STAGE/Applications"
+# Xóa com.apple.provenance để tránh hdiutil copy-helper bị EPERM trên macOS Sequoia
+xattr -rd com.apple.provenance "$STAGE" 2>/dev/null || true
 
 echo "=== hdiutil create → $OUT ==="
 rm -f "$OUT"
-hdiutil create -volname "$NAME $VER" -srcfolder "$STAGE" -ov -format UDZO "$OUT"
+hdiutil create -volname "$NAME" -srcfolder "$STAGE" -ov -format UDZO "$OUT"
 rm -rf "$(dirname "$STAGE")"
 echo "DMG: $OUT"

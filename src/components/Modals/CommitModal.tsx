@@ -227,8 +227,8 @@ export const CommitModal: React.FC<CommitModalProps> = ({
     setLogs([]);
     fullStdoutRef.current = '';
 
-    // Only pass editedMessage if user modified the message or typed custom message
-    const isCustomMessage = isEdited || (!initialAiMessage && Boolean(proposedMessage.trim()));
+    // Use generated or user-provided message to commit directly, avoiding duplicate AI scan
+    const messageToCommit = proposedMessage.trim();
 
     try {
       const res = await window.electronAPI.runCommit({
@@ -238,7 +238,7 @@ export const CommitModal: React.FC<CommitModalProps> = ({
         model: model || undefined,
         noChangelog,
         legacy,
-        editedMessage: isCustomMessage ? proposedMessage.trim() : undefined,
+        editedMessage: messageToCommit || undefined,
         cwd: workspacePath,
       });
 

@@ -313,7 +313,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   };
 
   return (
-    <header className="h-12 bg-panel border-b border-border flex items-center justify-between px-3 pl-20 app-drag-region select-none min-w-0 overflow-hidden">
+    <header className="h-12 bg-panel border-b border-border flex items-center justify-between px-3 pl-20 app-drag-region select-none min-w-0 relative z-30">
       {/* Left: Project Folder Picker, Sidebar Toggle & OMP Status */}
       <div className="flex items-center gap-2 lg:gap-2.5 app-no-drag shrink-0 min-w-0">
         {/* Toggle Left Sidebar Button */}
@@ -374,7 +374,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
 
       {/* Center: Model Selector & Agent Status */}
-      <div className="flex-1 flex items-center justify-center gap-1.5 lg:gap-2 app-no-drag min-w-0 overflow-hidden mx-1 sm:mx-2">
+      <div className="flex-1 flex items-center justify-center gap-1.5 lg:gap-2 app-no-drag min-w-0 mx-1 sm:mx-2">
         <div className="relative shrink-0 min-w-0" ref={dropdownRef}>
           <button
             onClick={() => {
