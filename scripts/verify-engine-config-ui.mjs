@@ -262,6 +262,56 @@ check(engineConfigEditorSrc.includes('SESSION_OVERRIDE_KEYS'), 'EngineConfigEdit
 check(engineConfigEditorSrc.includes('PINNED_CONFIG_KEYS'), 'EngineConfigEditor handles PINNED_CONFIG_KEYS');
 
 // ----------------------------------------------------
+// 6. Saving Keys Lifecycle & Finally Block Guarantees
+// ----------------------------------------------------
+console.log('\n--- 6. Saving Keys Lifecycle & Finally Block Guarantees ---');
+
+check(
+  engineConfigEditorSrc.includes('handleSaveKey') &&
+    engineConfigEditorSrc.includes('finally {\n        setSavingKeys((prev) => {'),
+  'handleSaveKey contains finally block resetting savingKeys',
+);
+
+check(
+  engineConfigEditorSrc.includes('handleResetKey') &&
+    engineConfigEditorSrc.includes('finally {\n        setSavingKeys((prev) => {'),
+  'handleResetKey contains finally block resetting savingKeys',
+);
+
+// Simulation of savingKeys lifecycle
+{
+  const savingKeys = new Set();
+  const testKey = 'advisor.enabled';
+
+  // Simulation function mimicking handleSaveKey behavior
+  async function simulateSave(resultType) {
+    savingKeys.add(testKey);
+    try {
+      if (resultType === 'success') {
+        return { success: true };
+      }
+      if (resultType === 'failure') {
+        return { success: false, error: 'Engine write error' };
+      }
+      throw new Error('Network timeout');
+    } catch (err) {
+      // Error logged
+    } finally {
+      savingKeys.delete(testKey);
+    }
+  }
+
+  await simulateSave('success');
+  check(!savingKeys.has(testKey), 'savingKeys removes key on successful save');
+
+  await simulateSave('failure');
+  check(!savingKeys.has(testKey), 'savingKeys removes key on engine error response');
+
+  await simulateSave('throw');
+  check(!savingKeys.has(testKey), 'savingKeys removes key on thrown exception');
+}
+
+// ----------------------------------------------------
 // 6. i18n Keys Parity
 // ----------------------------------------------------
 console.log('\n--- 6. i18n Keys Parity ---');

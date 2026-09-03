@@ -21,6 +21,8 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
   const [selectedFile, setSelectedFile] = useState<WorkspaceFile | null>(
     isElectron ? null : (DEMO_WORKSPACE_FILES[0]?.children?.[0]?.children?.[0] || null)
   );
+  const selectedFileRef = useRef<WorkspaceFile | null>(selectedFile);
+  selectedFileRef.current = selectedFile;
   const [fileContent, setFileContent] = useState<string>('');
   const [activeTab, setActiveTab] = useState<ActiveCanvasTab>('diff');
 
@@ -126,11 +128,12 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
 
         const firstFile = findFirstFile(dirFiles);
         if (firstFile) {
-          setSelectedFile(firstFile);
           try {
             const content = await window.electronAPI.readFile(firstFile.path);
+            setSelectedFile(firstFile);
             setFileContent(content);
           } catch {
+            setSelectedFile(firstFile);
             setFileContent('');
           }
         }
@@ -147,14 +150,19 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
 
   const selectFile = useCallback(async (file: WorkspaceFile) => {
     if (file.isDirectory) return;
-    setSelectedFile(file);
     setActiveTab('editor');
-
     if (window.electronAPI) {
-      const content = await window.electronAPI.readFile(file.path);
-      setFileContent(content);
+      try {
+        const content = await window.electronAPI.readFile(file.path);
+        setSelectedFile(file);
+        setFileContent(content);
+      } catch (err) {
+        console.error('[useWorkspace] Failed to read file:', file.path, err);
+        setSelectedFile(file);
+        setFileContent('');
+      }
     } else {
-      // Mock content for demo
+      setSelectedFile(file);
       setFileContent(`// Opened file: ${file.relativePath}\nexport const demo = true;`);
     }
   }, []);
@@ -198,7 +206,9 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
       try {
         const success = await window.electronAPI.saveFile(filePath, content);
         if (success) {
-          setFileContent(content);
+          if (selectedFileRef.current?.path === filePath) {
+            setFileContent(content);
+          }
           invalidateArtifactByPath(filePath);
           return true;
         }
@@ -209,7 +219,9 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
       }
     } else {
       // Mock save in browser mode
-      setFileContent(content);
+      if (selectedFileRef.current?.path === filePath) {
+        setFileContent(content);
+      }
       invalidateArtifactByPath(filePath);
       return true;
     }

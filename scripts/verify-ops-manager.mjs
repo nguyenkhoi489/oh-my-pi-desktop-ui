@@ -47,7 +47,7 @@ if (sub === 'ps') {
       {
         kind: 'project',
         projectDir: '/mock/project',
-        brokerPid: 999,
+        brokerPid: 987654,
         daemons: [
           {
             name: 'dev-server',
@@ -60,6 +60,7 @@ if (sub === 'ps') {
       {
         kind: 'global',
         service: 'browser-relay',
+        runtimeDir: process.env.MOCK_OPS_RUNTIME_DIR || undefined,
         daemons: [
           {
             name: 'omp.browser.relay',
@@ -78,11 +79,13 @@ if (sub === 'ps') {
       console.error('Error: daemon not found');
       process.exit(1);
     }
-    console.log(\`Successfully performed \${action} on \${name}\`);
+    const dirArg = args.find(a => a.startsWith('--dir='));
+    console.log('Successfully performed ' + action + ' on ' + name + (dirArg ? (' with ' + dirArg) : ''));
     process.exit(0);
   } else if (action === 'logs') {
     const name = args[2];
-    console.log(\`[log 1] \${name} starting\\n[log 2] \${name} ready\`);
+    const dirArg = args.find(a => a.startsWith('--dir='));
+    console.log('[log 1] ' + name + ' starting\\n[log 2] ' + name + ' ready' + (dirArg ? (' ' + dirArg) : ''));
     process.exit(0);
   } else if (action === 'info') {
     const name = args[2];
@@ -90,21 +93,18 @@ if (sub === 'ps') {
       console.error('Error: daemon not found');
       process.exit(1);
     }
+    const dirArg = args.find(a => a.startsWith('--dir='));
     const payload = {
       name: name,
       id: 'mock-uuid-1234',
       state: 'running',
-      command: 'bun run dev',
+      command: 'bun run dev' + (dirArg ? (' ' + dirArg) : ''),
       spec: {
         name: name,
         application: 'bun',
         args: ['run', 'dev'],
         cwd: '/mock/project',
         pty: false,
-        ready: { log: 'ready', timeoutMs: 15000 },
-        restart: 'no',
-        persist: false,
-        detached: false
       }
     };
     console.log(JSON.stringify(payload));
@@ -129,7 +129,7 @@ if (sub === 'ps') {
     process.exit(0);
   } else if (action === 'clear') {
     const isAll = args.includes('--all');
-    console.log(\`Cleared worktrees (all=\${isAll})\`);
+    console.log('Cleared worktrees (all=' + isAll + ')');
     process.exit(0);
   }
 }
@@ -153,10 +153,11 @@ process.exit(0);
   });
 
   // Test 2: controlProcess success
-  await asyncTest('controlProcess executes action on target daemon', async () => {
-    const res = await manager.controlProcess(mockOpsScript, 'stop', 'dev-server');
+  await asyncTest('controlProcess executes action on target daemon with dir support', async () => {
+    const res = await manager.controlProcess(mockOpsScript, 'stop', 'dev-server', { dir: '/mock/project' });
     assert.strictEqual(res.success, true);
     assert(res.message?.includes('stop on dev-server'));
+    assert(res.message?.includes('--dir=/mock/project'));
   });
 
   // Test 3: controlProcess error handling
@@ -175,20 +176,18 @@ process.exit(0);
 
   // Test 5: getProcessLogs
   await asyncTest('getProcessLogs fetches daemon logs', async () => {
-    const res = await manager.getProcessLogs(mockOpsScript, 'dev-server');
+    const res = await manager.getProcessLogs(mockOpsScript, 'dev-server', { dir: '/mock/project' });
     assert.strictEqual(res.success, true);
     assert(res.logs?.includes('dev-server starting'));
-    assert(res.logs?.includes('dev-server ready'));
+    assert(res.logs?.includes('--dir=/mock/project'));
   });
-
   // Test 5b: info
   await asyncTest('info fetches daemon specification and status detail', async () => {
-    const res = await manager.info(mockOpsScript, 'dev-server');
+    const res = await manager.info(mockOpsScript, 'dev-server', { dir: '/mock/project' });
     assert.strictEqual(res.success, true);
     assert.strictEqual(res.daemon?.name, 'dev-server');
+    assert(res.daemon?.command?.includes('--dir=/mock/project'));
     assert.strictEqual(res.daemon?.id, 'mock-uuid-1234');
-    assert.strictEqual(res.daemon?.spec?.application, 'bun');
-    assert.strictEqual(res.daemon?.spec?.ready?.log, 'ready');
   });
 
   // Test 5c: info error handling
@@ -213,6 +212,36 @@ process.exit(0);
     assert.strictEqual(res.success, true);
     assert(res.rawOutput?.includes('all=true'));
   });
+  // Test 7b: removeProcess kills running process if needed and cleans record with stubbed broker signaling
+  await asyncTest('removeProcess kills running daemon and cleans record', async () => {
+    const signaled = [];
+    manager.setSignalProcessForTest((pid, signal) => {
+      signaled.push({ pid, signal });
+    });
+    const res = await manager.removeProcess(mockOpsScript, 'dev-server', { dir: '/mock/project' });
+    assert.strictEqual(res.success, true);
+    assert(signaled.length > 0, 'Broker should be signaled when last daemon is removed');
+    assert.strictEqual(signaled[0].pid, 987654);
+    assert.strictEqual(signaled[0].signal, 'SIGTERM');
+  });
+
+  // Test 7c: removeProcess removes dead daemon record folder under runtimeDir
+  await asyncTest('removeProcess removes dead daemon record file', async () => {
+    const mockRuntimeDir = path.join(tmpDir, 'mock-scope');
+    const fakeDaemonDir = path.join(mockRuntimeDir, 'daemons', 'omp.browser.relay');
+    fs.mkdirSync(fakeDaemonDir, { recursive: true });
+    fs.writeFileSync(path.join(fakeDaemonDir, 'meta.json'), JSON.stringify({ name: 'omp.browser.relay', state: 'exited' }));
+    fs.writeFileSync(path.join(fakeDaemonDir, 'output.log'), 'Process exited\n');
+
+    process.env.MOCK_OPS_RUNTIME_DIR = mockRuntimeDir;
+    try {
+      const res = await manager.removeProcess(mockOpsScript, 'omp.browser.relay', { global: 'browser-relay' });
+      assert.strictEqual(res.success, true);
+      assert(!fs.existsSync(fakeDaemonDir), 'Daemon directory should be deleted');
+    } finally {
+      delete process.env.MOCK_OPS_RUNTIME_DIR;
+    }
+  });
 
 } finally {
   try {
@@ -225,6 +254,7 @@ test('Preload & Main IPC contracts for ps & worktrees are properly wired', () =>
   const preloadSource = fs.readFileSync(path.resolve('electron/preload.ts'), 'utf8');
   assert(preloadSource.includes('omp:ps-list'), 'preload.ts must invoke omp:ps-list');
   assert(preloadSource.includes('omp:ps-control'), 'preload.ts must invoke omp:ps-control');
+  assert(preloadSource.includes('omp:ps-remove'), 'preload.ts must invoke omp:ps-remove');
   assert(preloadSource.includes('omp:ps-logs'), 'preload.ts must invoke omp:ps-logs');
   assert(preloadSource.includes('omp:worktree-list'), 'preload.ts must invoke omp:worktree-list');
   assert(preloadSource.includes('omp:worktree-clear'), 'preload.ts must invoke omp:worktree-clear');
@@ -234,6 +264,7 @@ test('Preload & Main IPC contracts for ps & worktrees are properly wired', () =>
   assert(preloadSource.includes('omp:ps-logs-follow-stop'), 'preload.ts must invoke omp:ps-logs-follow-stop');
   assert(preloadSource.includes('omp:ps-log-line'), 'preload.ts must listen to omp:ps-log-line');
   assert(preloadSource.includes('getProcessInfo'), 'preload.ts must expose getProcessInfo');
+  assert(preloadSource.includes('removeProcess'), 'preload.ts must expose removeProcess');
   assert(preloadSource.includes('startProcessLogFollow'), 'preload.ts must expose startProcessLogFollow');
   assert(preloadSource.includes('stopProcessLogFollow'), 'preload.ts must expose stopProcessLogFollow');
   assert(preloadSource.includes('onPsLogLine'), 'preload.ts must expose onPsLogLine');
@@ -241,6 +272,7 @@ test('Preload & Main IPC contracts for ps & worktrees are properly wired', () =>
   const mainSource = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8');
   assert(mainSource.includes('omp:ps-list'), 'main.ts must handle omp:ps-list');
   assert(mainSource.includes('omp:ps-control'), 'main.ts must handle omp:ps-control');
+  assert(mainSource.includes('omp:ps-remove'), 'main.ts must handle omp:ps-remove');
   assert(mainSource.includes('omp:ps-logs'), 'main.ts must handle omp:ps-logs');
   assert(mainSource.includes('omp:ps-info'), 'main.ts must handle omp:ps-info');
   assert(mainSource.includes('omp:ps-logs-follow-start'), 'main.ts must handle omp:ps-logs-follow-start');

@@ -1,4 +1,8 @@
 import { tm } from '../shared/i18n/index.ts';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import * as crypto from 'node:crypto';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import readline from 'node:readline';
@@ -92,7 +96,7 @@ export class ProcessLogFollower {
   public start(
     binaryPath: string,
     name: string,
-    options: { lines?: number; head?: boolean; grep?: string; global?: string } = {},
+    options: { lines?: number; head?: boolean; grep?: string; global?: string; dir?: string } = {},
     onLine: (line: string) => void
   ): { success: boolean; error?: string } {
     this.stop();
@@ -114,6 +118,9 @@ export class ProcessLogFollower {
     }
     if (options.global) {
       args.push(`--global=${options.global}`);
+    }
+    if (options.dir) {
+      args.push(`--dir=${options.dir}`);
     }
 
     try {
@@ -201,7 +208,13 @@ export class ProcessLogFollower {
 // Manage daemon background processes and git worktrees
 export class OpsManager {
   private logFollower = new ProcessLogFollower();
+  private signalProcess: (pid: number, signal: NodeJS.Signals) => void = (pid, signal) => {
+    process.kill(pid, signal);
+  };
 
+  public setSignalProcessForTest(fn: (pid: number, signal: NodeJS.Signals) => void): void {
+    this.signalProcess = fn;
+  }
   public getLogFollower(): ProcessLogFollower {
     return this.logFollower;
   }
@@ -209,7 +222,7 @@ export class OpsManager {
   public startLogFollow(
     binaryPath: string,
     name: string,
-    options: { lines?: number; head?: boolean; grep?: string; global?: string },
+    options: { lines?: number; head?: boolean; grep?: string; global?: string; dir?: string },
     onLine: (line: string) => void
   ): { success: boolean; error?: string } {
     return this.logFollower.start(binaryPath, name, options, onLine);
@@ -228,7 +241,7 @@ export class OpsManager {
   public async info(
     binaryPath: string,
     name: string,
-    options?: { global?: string }
+    options?: { global?: string; dir?: string }
   ): Promise<{ success: boolean; daemon?: OmpDaemonDetail; error?: string }> {
     const cleanName = String(name || '').trim();
     if (!cleanName) {
@@ -238,6 +251,9 @@ export class OpsManager {
     const args = ['ps', 'info', cleanName, '--json'];
     if (options?.global) {
       args.push(`--global=${options.global}`);
+    }
+    if (options?.dir) {
+      args.push(`--dir=${options.dir}`);
     }
 
     try {
@@ -300,7 +316,7 @@ export class OpsManager {
     binaryPath: string,
     action: 'stop' | 'kill' | 'restart',
     name: string,
-    options?: { global?: string; timeout?: number }
+    options?: { global?: string; timeout?: number; dir?: string }
   ): Promise<{ success: boolean; message?: string; error?: string }> {
     const cleanName = String(name || '').trim();
     if (!cleanName) {
@@ -310,6 +326,9 @@ export class OpsManager {
     const args = ['ps', action, cleanName];
     if (options?.global) {
       args.push(`--global=${options.global}`);
+    }
+    if (options?.dir) {
+      args.push(`--dir=${options.dir}`);
     }
     if (options?.timeout !== undefined) {
       args.push(`--timeout=${options.timeout}`);
@@ -339,7 +358,7 @@ export class OpsManager {
   public async getProcessLogs(
     binaryPath: string,
     name: string,
-    options?: { lines?: number; head?: boolean; grep?: string; global?: string }
+    options?: { lines?: number; head?: boolean; grep?: string; global?: string; dir?: string }
   ): Promise<{ success: boolean; logs?: string; error?: string }> {
     const cleanName = String(name || '').trim();
     if (!cleanName) {
@@ -359,6 +378,9 @@ export class OpsManager {
     if (options?.global) {
       args.push(`--global=${options.global}`);
     }
+    if (options?.dir) {
+      args.push(`--dir=${options.dir}`);
+    }
 
     try {
       const { stdout, stderr } = await execFileAsync(binaryPath, args, {
@@ -376,6 +398,136 @@ export class OpsManager {
       return {
         success: false,
         error: err?.message || tm('electron.ops.getLogsFailed', { name: cleanName }),
+      };
+    }
+  }
+
+  // 4. Remove exited/dead process record
+  public async removeProcess(
+    binaryPath: string,
+    name: string,
+    options?: { global?: string; dir?: string }
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
+    const cleanName = String(name || '').trim();
+    if (!cleanName || !/^[a-zA-Z0-9_.-]+$/.test(cleanName) || cleanName.includes('..')) {
+      return { success: false, error: tm('electron.ops.processNameEmpty') };
+    }
+
+    try {
+      // Locate scope and daemon
+      const listRes = await this.listProcesses(binaryPath, { all: true, global: options?.global });
+      if (!listRes.success || !listRes.scopes) {
+        return { success: false, error: listRes.error || tm('electron.ops.listProcessesFailed') };
+      }
+
+      let targetScope: OmpPsScope | undefined;
+      let targetDaemon: OmpDaemonInfo | undefined;
+
+      for (const scope of listRes.scopes) {
+        if (options?.global && scope.service === options.global) {
+          const d = scope.daemons.find((item) => item.name === cleanName);
+          if (d) {
+            targetScope = scope;
+            targetDaemon = d;
+            break;
+          }
+        } else if (options?.dir && scope.projectDir === options.dir) {
+          const d = scope.daemons.find((item) => item.name === cleanName);
+          if (d) {
+            targetScope = scope;
+            targetDaemon = d;
+            break;
+          }
+        } else if (!options?.global && !options?.dir) {
+          const d = scope.daemons.find((item) => item.name === cleanName);
+          if (d) {
+            targetScope = scope;
+            targetDaemon = d;
+            break;
+          }
+        }
+      }
+
+      if (!targetScope || !targetDaemon) {
+        return { success: false, error: `Daemon not found: ${cleanName}` };
+      }
+
+      // If daemon is currently running or starting, kill it first
+      if (targetDaemon.state === 'running' || targetDaemon.state === 'starting') {
+        const killRes = await this.controlProcess(binaryPath, 'kill', cleanName, options);
+        if (!killRes.success) {
+          return {
+            success: false,
+            error: killRes.error || tm('electron.ops.controlProcessFailed', { action: 'kill', name: cleanName }),
+          };
+        }
+      }
+
+      // Delete daemon folder or file from candidate base directories
+      const candidateDirs: string[] = [];
+      if (targetScope.runtimeDir) {
+        candidateDirs.push(path.join(targetScope.runtimeDir, 'daemons'));
+      }
+      if (targetScope.kind === 'global' || options?.global) {
+        const serviceName = targetScope.service || options?.global || 'system';
+        if (/^[a-zA-Z0-9_.-]+$/.test(serviceName) && !serviceName.includes('..')) {
+          candidateDirs.push(path.join(os.homedir(), '.omp', 'run', 'daemons', 'global', serviceName, 'daemons'));
+        }
+      }
+      if (targetScope.kind === 'project' || options?.dir) {
+        const projDir = targetScope.projectDir || options?.dir;
+        if (projDir) {
+          try {
+            const h16 = crypto.createHash('sha256').update(projDir).digest('hex').slice(0, 16);
+            candidateDirs.push(path.join(os.homedir(), '.omp', 'run', 'daemons', h16, 'daemons'));
+          } catch {}
+        }
+      }
+      for (const baseDir of candidateDirs) {
+        const dirPath = path.join(baseDir, cleanName);
+        const relDir = path.relative(baseDir, dirPath);
+        if (!relDir.startsWith('..') && !path.isAbsolute(relDir) && relDir === cleanName) {
+          if (fs.existsSync(dirPath)) {
+            fs.rmSync(dirPath, { recursive: true, force: true });
+          }
+        }
+        const jsonPath = path.join(baseDir, `${cleanName}.json`);
+        const relJson = path.relative(baseDir, jsonPath);
+        if (!relJson.startsWith('..') && !path.isAbsolute(relJson) && relJson === `${cleanName}.json`) {
+          if (fs.existsSync(jsonPath)) {
+            fs.rmSync(jsonPath, { force: true });
+          }
+        }
+      }
+
+      // Terminate broker only after re-verifying no active daemons remain in scope
+      if (targetScope.brokerPid) {
+        try {
+          const freshList = await this.listProcesses(binaryPath, { all: true, global: options?.global });
+          const freshScope = freshList.scopes?.find((s) =>
+            targetScope?.kind === 'global'
+              ? s.service === targetScope.service
+              : s.projectDir === targetScope?.projectDir
+          );
+          if (freshScope && freshScope.brokerPid === targetScope.brokerPid) {
+            const stillActive = freshScope.daemons.some(
+              (d) => d.name !== cleanName && (d.state === 'running' || d.state === 'starting')
+            );
+            if (!stillActive) {
+              this.signalProcess(targetScope.brokerPid, 'SIGTERM');
+            }
+          }
+        } catch {}
+      }
+      return {
+        success: true,
+        message: tm('electron.ops.removeProcessSuccess', { name: cleanName }),
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        error: msg || tm('electron.ops.removeProcessFailed', { name: cleanName }),
       };
     }
   }

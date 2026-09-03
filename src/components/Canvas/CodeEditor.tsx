@@ -39,6 +39,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 }) => {
   const { t } = useI18n();
   const [editorValue, setEditorValue] = useState<string>(content);
+  const [isUserDirty, setIsUserDirty] = useState<boolean>(false);
   const [markdownMode, setMarkdownMode] = useState<'source' | 'split' | 'preview'>('source');
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isTimelineOpen, setIsTimelineOpen] = useState<boolean>(false);
@@ -46,22 +47,30 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const [historicalContent, setHistoricalContent] = useState<string | null>(null);
   const [isLoadingCommitContent, setIsLoadingCommitContent] = useState<boolean>(false);
 
-  const isDirty = Boolean(file && editorValue !== content);
+  const prevFilePathRef = useRef<string | null>(file?.path || null);
+  const currentFilePathRef = useRef<string | null>(file?.path || null);
+  currentFilePathRef.current = file?.path || null;
+  const savedContentRef = useRef<string>(content);
+  const latestEditorValueRef = useRef<string>(editorValue);
+  latestEditorValueRef.current = editorValue;
+
+  const isDirty = Boolean(file && isUserDirty && editorValue !== savedContentRef.current);
+
   // Notify parent of dirty state changes
   useEffect(() => {
     onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
 
   const [hasExternalConflict, setHasExternalConflict] = useState<boolean>(false);
-  const prevFilePathRef = useRef<string | null>(file?.path || null);
-  const lastKnownDiskContentRef = useRef<string>(content);
 
   // Synchronize internal state when content prop changes
   useEffect(() => {
+    // 1. File path changed: reset everything to the newly selected file
     if (file?.path !== prevFilePathRef.current) {
       prevFilePathRef.current = file?.path || null;
-      lastKnownDiskContentRef.current = content;
+      savedContentRef.current = content;
       setEditorValue(content);
+      setIsUserDirty(false);
       setHasExternalConflict(false);
       setSelectedCommit(null);
       setHistoricalContent(null);
@@ -69,26 +78,41 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       return;
     }
 
-    if (content !== lastKnownDiskContentRef.current) {
-      lastKnownDiskContentRef.current = content;
-      if (!isDirty) {
+    // 2. Same file, but disk content prop changed
+    if (content !== savedContentRef.current) {
+      if (!isUserDirty) {
+        // User has not edited, safely auto-update to new disk content
+        savedContentRef.current = content;
         setEditorValue(content);
         setHasExternalConflict(false);
         onDraftChange?.(content);
       } else {
+        // User has unsaved edits AND disk content changed -> real external conflict!
         setHasExternalConflict(true);
       }
     }
-  }, [content, file?.path, isDirty, onDraftChange]);
-
+  }, [content, file?.path, isUserDirty, onDraftChange]);
   const handleSave = useCallback(async () => {
     if (!file || !isDirty || isSaving) return;
     setIsSaving(true);
+    const saveTargetFilePath = file.path;
+    const contentToSave = editorValue;
     try {
+      let success = false;
       if (onSaveFile) {
-        await onSaveFile(file.path, editorValue);
+        success = await onSaveFile(saveTargetFilePath, contentToSave);
       } else if (window.electronAPI) {
-        await window.electronAPI.saveFile(file.path, editorValue);
+        success = await window.electronAPI.saveFile(saveTargetFilePath, contentToSave);
+      }
+
+      // Check against currentFilePathRef to verify file hasn't switched during await
+      if (success && currentFilePathRef.current === saveTargetFilePath) {
+        savedContentRef.current = contentToSave;
+        setHasExternalConflict(false);
+        // Only clear isUserDirty if user didn't type newer edits while saving
+        if (latestEditorValueRef.current === contentToSave) {
+          setIsUserDirty(false);
+        }
       }
     } catch (err) {
       console.error('[CodeEditor] Failed to save file:', err);
@@ -125,6 +149,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleRestoreVersion = useCallback(() => {
     if (historicalContent !== null) {
       setEditorValue(historicalContent);
+      setIsUserDirty(historicalContent !== savedContentRef.current);
       onDraftChange?.(historicalContent);
       setSelectedCommit(null);
       setHistoricalContent(null);
@@ -174,42 +199,86 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     <div className="flex-1 flex flex-col h-full bg-background overflow-hidden">
       {/* Editor Header Bar */}
       <div className="h-11 bg-surface border-b border-border flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0 shrink">
           {isMarkdown ? (
-            <FileText className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+            <FileText className="w-4 h-4 text-purple-500 dark:text-purple-400 shrink-0" />
           ) : (
-            <FileCode className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+            <FileCode className="w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0" />
           )}
-          <span className="font-mono text-xs text-slate-800 dark:text-zinc-200 font-semibold">
+          <span className="font-mono text-xs text-slate-800 dark:text-zinc-200 font-semibold truncate">
             {file.relativePath}
           </span>
           {isDirty && (
             <span
-              className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"
+              className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0"
               title={t('editor.unsavedChanges')}
             />
           )}
         </div>
-        <div className="flex items-center gap-2.5">
-          {/* Save Button */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* External Change Conflict Warning Icon & Tooltip */}
+          {hasExternalConflict && (
+            <div className="relative group shrink-0">
+              <button
+                type="button"
+                className="flex items-center justify-center p-1.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-colors cursor-pointer"
+                title={t('editor.externalChangeBanner')}
+              >
+                <AlertTriangle className="w-3.5 h-3.5 animate-pulse" />
+              </button>
+
+              {/* Floating Tooltip / Popover on hover */}
+              <div className="absolute right-0 top-full mt-2 w-72 p-3 bg-surface border border-border rounded-xl shadow-xl z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-150 pointer-events-none group-hover:pointer-events-auto">
+                <div className="flex items-start gap-2 text-xs text-slate-700 dark:text-zinc-200 mb-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <span className="leading-snug">{t('editor.externalChangeBanner')}</span>
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => {
+                      setEditorValue(content);
+                      savedContentRef.current = content;
+                      setIsUserDirty(false);
+                      setHasExternalConflict(false);
+                      onDraftChange?.(content);
+                    }}
+                    className="px-2.5 py-1 bg-surface border border-border hover:bg-panel rounded-md text-[11px] font-medium text-slate-700 dark:text-zinc-200 transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                  >
+                    {t('editor.reloadFromDisk')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      savedContentRef.current = content;
+                      setHasExternalConflict(false);
+                    }}
+                    className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-[11px] font-medium transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                  >
+                    {t('editor.keepDraft')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Timeline Toggle Button */}
           <button
             onClick={() => setIsTimelineOpen((prev) => !prev)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               isTimelineOpen
                 ? 'bg-codex-accent text-white font-semibold shadow-xs'
                 : 'bg-surface text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 border border-border hover:bg-surface/80'
             }`}
             title={t('editor.timeline')}
           >
-            <History className="w-3.5 h-3.5" />
+            <History className="w-3.5 h-3.5 shrink-0" />
             <span>{t('editor.timeline')}</span>
           </button>
 
+          {/* Save Button */}
           <button
             onClick={handleSave}
             disabled={!isDirty || isSaving}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               isDirty
                 ? 'bg-codex-accent text-white font-semibold shadow-xs hover:opacity-90'
                 : 'bg-surface text-slate-400 dark:text-zinc-600 border border-border cursor-not-allowed opacity-60'
@@ -217,91 +286,61 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             title={isDirty ? `${t('editor.save')} (⌘S)` : t('editor.save')}
           >
             {isSaving ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
             ) : (
-              <Save className="w-3.5 h-3.5" />
+              <Save className="w-3.5 h-3.5 shrink-0" />
             )}
             <span>{isSaving ? t('editor.saving') : t('editor.save')}</span>
           </button>
 
           {/* Markdown View Switcher */}
           {isMarkdown && (
-            <div className="flex items-center bg-panel rounded-lg p-0.5 border border-border">
+            <div className="flex items-center bg-panel rounded-lg p-0.5 border border-border shrink-0">
               <button
                 onClick={() => setMarkdownMode('source')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
                   markdownMode === 'source'
                     ? 'bg-surface text-slate-900 dark:text-zinc-100 font-semibold shadow-xs border border-border'
                     : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
                 }`}
                 title={t('editor.viewMarkdownSource')}
               >
-                <Code2 className="w-3.5 h-3.5 text-blue-500" />
+                <Code2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                 <span>Source</span>
               </button>
 
               <button
                 onClick={() => setMarkdownMode('split')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
                   markdownMode === 'split'
                     ? 'bg-surface text-slate-900 dark:text-zinc-100 font-semibold shadow-xs border border-border'
                     : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
                 }`}
                 title={t('editor.splitView')}
               >
-                <Columns className="w-3.5 h-3.5 text-purple-500" />
+                <Columns className="w-3.5 h-3.5 text-purple-500 shrink-0" />
                 <span>Split</span>
               </button>
 
               <button
                 onClick={() => setMarkdownMode('preview')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
                   markdownMode === 'preview'
                     ? 'bg-codex-accent text-white font-semibold shadow-xs'
                     : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
                 }`}
                 title={t('editor.previewMarkdown')}
               >
-                <Eye className="w-3.5 h-3.5" />
+                <Eye className="w-3.5 h-3.5 shrink-0" />
                 <span>Preview</span>
               </button>
             </div>
           )}
 
-          <div className="text-[11px] font-mono font-medium text-slate-500 dark:text-zinc-400 bg-surface px-2.5 py-1 rounded-md border border-border">
+          <div className="text-[11px] font-mono font-medium text-slate-500 dark:text-zinc-400 bg-surface px-2.5 py-1 rounded-md border border-border whitespace-nowrap shrink-0">
             {languageLabel}
           </div>
         </div>
-
-      {/* Conflict Banner when file changed externally and editor is dirty */}
-      {hasExternalConflict && (
-        <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-2 flex items-center justify-between text-xs text-amber-700 dark:text-amber-400 shrink-0">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>{t('editor.externalChangeBanner')}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setEditorValue(content);
-                setHasExternalConflict(false);
-                onDraftChange?.(content);
-              }}
-              className="px-2.5 py-1 bg-surface border border-border rounded-md text-[11px] font-medium text-slate-700 dark:text-zinc-200 hover:bg-surface/80 transition-colors cursor-pointer shadow-2xs"
-            >
-              {t('editor.reloadFromDisk')}
-            </button>
-            <button
-              onClick={() => {
-                setHasExternalConflict(false);
-              }}
-              className="px-2.5 py-1 bg-amber-500 text-white rounded-md text-[11px] font-medium hover:bg-amber-600 transition-colors cursor-pointer shadow-2xs"
-            >
-              {t('editor.keepDraft')}
-            </button>
-          </div>
-        </div>
-      )}
       </div>
 
       {/* Editor Content Area */}
@@ -386,6 +425,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                     onChange={(val) => {
                       const next = val || '';
                       setEditorValue(next);
+                      setIsUserDirty(next !== savedContentRef.current);
                       onDraftChange?.(next);
                     }}
                     onMount={(editor, monaco) => {

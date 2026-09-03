@@ -1394,8 +1394,9 @@ export interface ElectronAPI {
   joinSession: (link: string) => Promise<JoinSessionResult>;
   // Background Process & Worktree Managers (Phase 13)
   listProcesses: (options?: { all?: boolean; global?: string }) => Promise<{ success: boolean; scopes?: OmpPsScope[]; error?: string }>;
-  controlProcess: (action: 'stop' | 'kill' | 'restart', name: string, options?: { global?: string; timeout?: number }) => Promise<{ success: boolean; message?: string; error?: string }>;
-  getProcessLogs: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) => Promise<{ success: boolean; logs?: string; error?: string }>;
+  controlProcess: (action: 'stop' | 'kill' | 'restart', name: string, options?: { global?: string; timeout?: number; dir?: string }) => Promise<{ success: boolean; message?: string; error?: string }>;
+  removeProcess: (name: string, options?: { global?: string; dir?: string }) => Promise<{ success: boolean; message?: string; error?: string }>;
+  getProcessLogs: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string; dir?: string }) => Promise<{ success: boolean; logs?: string; error?: string }>;
   listWorktrees: () => Promise<{ success: boolean; worktrees?: OmpWorktreeInfo[]; error?: string }>;
   clearWorktrees: (options?: { all?: boolean; dryRun?: boolean }) => Promise<{ success: boolean; rawOutput?: string; error?: string }>;
   // Storage GC (Phase 10)
@@ -1410,8 +1411,8 @@ export interface ElectronAPI {
   listGrievances: (options?: GrievancesListOptions) => Promise<GrievancesListResponse>;
   cleanGrievances: (options: GrievancesCleanOptions) => Promise<GrievancesCleanResponse>;
   pushGrievances: (options?: { profile?: string | null }) => Promise<GrievancesPushResponse>;
-  getProcessInfo: (name: string, options?: { global?: string }) => Promise<{ success: boolean; daemon?: OmpDaemonDetail; error?: string }>;
-  startProcessLogFollow: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) => Promise<{ success: boolean; error?: string }>;
+  getProcessInfo: (name: string, options?: { global?: string; dir?: string }) => Promise<{ success: boolean; daemon?: OmpDaemonDetail; error?: string }>;
+  startProcessLogFollow: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string; dir?: string }) => Promise<{ success: boolean; error?: string }>;
   stopProcessLogFollow: () => Promise<{ success: boolean }>;
   onPsLogLine: (callback: (data: { name: string; line: string }) => void) => () => void;
   // Plugin & Agents Managers (Phase 14, 15 & Expansion)

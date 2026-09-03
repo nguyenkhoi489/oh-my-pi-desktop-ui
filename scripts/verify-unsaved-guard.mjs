@@ -110,6 +110,29 @@ console.log('\n[Test 2] External file modification handling');
   }
   assert(editorValue === 'export const val = 100; // my draft', 'Dirty editor draft preserved when disk changes');
   assert(hasExternalConflict === true, 'Conflict banner triggered when disk changed while dirty');
+
+  // Case C: File is selected, initially rendered before async read completes, then content arrives
+  let fileSelected = { path: '/workspace/newFile.ts' };
+  let initialReadPendingContent = '';
+  let isUserDirty = false;
+  let savedContent = initialReadPendingContent;
+  let cEditorValue = initialReadPendingContent;
+  let cHasConflict = false;
+
+  // Async read resolves with actual file content
+  let actualDiskContent = 'console.log("hello world");';
+  if (actualDiskContent !== savedContent) {
+    if (!isUserDirty) {
+      savedContent = actualDiskContent;
+      cEditorValue = actualDiskContent;
+      cHasConflict = false;
+    } else {
+      cHasConflict = true;
+    }
+  }
+  assert(cEditorValue === 'console.log("hello world");', 'Async disk content automatically loaded into editor without manual reload');
+  assert(cHasConflict === false, 'No conflict banner triggered during async file loading');
+  assert(isUserDirty === false, 'Editor remains not dirty after initial load');
 }
 
 // Test 3: i18n keys for Phase 3

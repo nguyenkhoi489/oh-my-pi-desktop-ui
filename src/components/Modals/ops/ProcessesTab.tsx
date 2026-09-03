@@ -57,6 +57,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
   // Logs Viewer
   const [viewingLogsDaemon, setViewingLogsDaemon] = useState<string | null>(null);
   const [viewingLogsService, setViewingLogsService] = useState<string | undefined>(undefined);
+  const [viewingLogsProjectDir, setViewingLogsProjectDir] = useState<string | undefined>(undefined);
   const [daemonLogsLines, setDaemonLogsLines] = useState<string[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
   const [isFollowing, setIsFollowing] = useState<boolean>(true);
@@ -223,26 +224,57 @@ export const ProcessesTab: React.FC = React.memo(() => {
   const handleControlDaemon = async (
     action: 'stop' | 'kill' | 'restart',
     name: string,
-    globalService?: string
+    globalService?: string,
+    projectDir?: string
   ) => {
     if (!window.electronAPI?.controlProcess) return;
     setDaemonActionBusy(name);
     try {
-      const res = await window.electronAPI.controlProcess(action, name, { global: globalService });
+      const res = await window.electronAPI.controlProcess(action, name, {
+        global: globalService,
+        dir: projectDir,
+      });
       if (res.success) {
         await fetchProcesses();
       } else {
         alert(res.error || t('ops.processes.error.actionFailed', { action, name }));
       }
-    } catch (err: any) {
-      alert(t('ops.processes.error.actionFailed', { action: 'command', name: err?.message || '' }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(t('ops.processes.error.actionFailed', { action: 'command', name: msg }));
+    } finally {
+      setDaemonActionBusy(null);
+    }
+  };
+
+  // Remove dead/exited daemon history record
+  const handleRemoveDaemon = async (
+    name: string,
+    globalService?: string,
+    projectDir?: string
+  ) => {
+    if (!window.electronAPI?.removeProcess) return;
+    setDaemonActionBusy(name);
+    try {
+      const res = await window.electronAPI.removeProcess(name, {
+        global: globalService,
+        dir: projectDir,
+      });
+      if (res.success) {
+        await fetchProcesses();
+      } else {
+        alert(res.error || t('ops.processes.error.actionFailed', { action: 'remove', name }));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(t('ops.processes.error.actionFailed', { action: 'command', name: msg }));
     } finally {
       setDaemonActionBusy(null);
     }
   };
 
   // View daemon detail info
-  const handleOpenInfo = async (name: string, globalService?: string) => {
+  const handleOpenInfo = async (name: string, globalService?: string, projectDir?: string) => {
     setInfoDaemonName(name);
     setInfoDaemonDetail(null);
     setInfoError(null);
@@ -254,14 +286,18 @@ export const ProcessesTab: React.FC = React.memo(() => {
     }
 
     try {
-      const res = await window.electronAPI.getProcessInfo(name, { global: globalService });
+      const res = await window.electronAPI.getProcessInfo(name, {
+        global: globalService,
+        dir: projectDir,
+      });
       if (res.success && res.daemon) {
         setInfoDaemonDetail(res.daemon);
       } else {
         setInfoError(res.error || t('ops.processes.error.infoFailed'));
       }
-    } catch (err: any) {
-      setInfoError(err?.message || t('ops.processes.error.infoFailed'));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setInfoError(msg || t('ops.processes.error.infoFailed'));
     } finally {
       setIsLoadingInfo(false);
     }
@@ -274,6 +310,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
     }
     setViewingLogsDaemon(null);
     setViewingLogsService(undefined);
+    setViewingLogsProjectDir(undefined);
     setDaemonLogsLines([]);
   }, []);
 
@@ -282,6 +319,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
     async (
       daemonName: string,
       service?: string,
+      projectDir?: string,
       follow: boolean = true,
       lines: number = 100,
       head: boolean = false,
@@ -289,6 +327,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
     ) => {
       setViewingLogsDaemon(daemonName);
       setViewingLogsService(service);
+      setViewingLogsProjectDir(projectDir);
       setIsLoadingLogs(true);
       setDaemonLogsLines([]);
 
@@ -303,12 +342,14 @@ export const ProcessesTab: React.FC = React.memo(() => {
             head,
             grep: grep.trim() || undefined,
             global: service,
+            dir: projectDir,
           });
           if (!res.success) {
             setDaemonLogsLines([t('ops.processes.logs.followError', { detail: res.error || t('ops.processes.logs.cannotStartStream') })]);
           }
-        } catch (err: any) {
-          setDaemonLogsLines([`[IPC startProcessLogFollow error: ${err?.message}]`]);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setDaemonLogsLines([`[IPC startProcessLogFollow error: ${msg}]`]);
         } finally {
           setIsLoadingLogs(false);
         }
@@ -323,6 +364,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
             head,
             grep: grep.trim() || undefined,
             global: service,
+            dir: projectDir,
           });
           if (res.success && res.logs !== undefined) {
             const rawLines = res.logs ? res.logs.split('\n') : [];
@@ -330,8 +372,9 @@ export const ProcessesTab: React.FC = React.memo(() => {
           } else {
             setDaemonLogsLines([t('ops.processes.logs.fetchError', { detail: res.error || t('ops.processes.logs.noLogs') })]);
           }
-        } catch (err: any) {
-          setDaemonLogsLines([`[IPC getProcessLogs error: ${err?.message}]`]);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setDaemonLogsLines([`[IPC getProcessLogs error: ${msg}]`]);
         } finally {
           setIsLoadingLogs(false);
         }
@@ -339,6 +382,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
     },
     [t]
   );
+
 
   // Subscribe to realtime log lines
   useEffect(() => {
@@ -389,6 +433,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
     await startLogs(
       viewingLogsDaemon,
       viewingLogsService,
+      viewingLogsProjectDir,
       nextFollow,
       logLinesCount,
       headFlag,
@@ -403,6 +448,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
     await startLogs(
       viewingLogsDaemon,
       viewingLogsService,
+      viewingLogsProjectDir,
       isFollowing,
       logLinesCount,
       headFlag,
@@ -667,6 +713,8 @@ export const ProcessesTab: React.FC = React.memo(() => {
               <div className="grid grid-cols-1 gap-2">
                 {scope.daemons.map((d) => {
                   const isRunning = d.state === 'running';
+                  const isStarting = d.state === 'starting';
+                  const isActive = isRunning || isStarting;
                   return (
                     <div
                       key={d.name}
@@ -704,7 +752,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
                         {/* Info button */}
                         <button
                           type="button"
-                          onClick={() => handleOpenInfo(d.name, scope.service)}
+                          onClick={() => handleOpenInfo(d.name, scope.service, scope.projectDir)}
                           className="p-1.5 rounded bg-panel border border-border hover:bg-surface-highlight text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
                           title={t('ops.processes.actions.info')}
                         >
@@ -718,6 +766,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
                             startLogs(
                               d.name,
                               scope.service,
+                              scope.projectDir,
                               isFollowing,
                               logLinesCount,
                               headFlag,
@@ -734,7 +783,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
                         {isRunning && (
                           <button
                             type="button"
-                            onClick={() => handleControlDaemon('stop', d.name, scope.service)}
+                            onClick={() => handleControlDaemon('stop', d.name, scope.service, scope.projectDir)}
                             disabled={daemonActionBusy === d.name}
                             className="px-2 py-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20 text-xs font-medium transition-colors cursor-pointer"
                             title={t('ops.processes.actions.stop')}
@@ -746,7 +795,7 @@ export const ProcessesTab: React.FC = React.memo(() => {
                         {/* Restart button */}
                         <button
                           type="button"
-                          onClick={() => handleControlDaemon('restart', d.name, scope.service)}
+                          onClick={() => handleControlDaemon('restart', d.name, scope.service, scope.projectDir)}
                           disabled={daemonActionBusy === d.name}
                           className="p-1.5 rounded bg-panel border border-border hover:bg-surface-highlight text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
                           title={t('ops.processes.actions.restart')}
@@ -754,26 +803,51 @@ export const ProcessesTab: React.FC = React.memo(() => {
                           <RotateCw className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Kill button */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (
-                              confirm(
-                                t('ops.processes.actions.killConfirm', {
-                                  name: d.name,
-                                })
-                              )
-                            ) {
-                              handleControlDaemon('kill', d.name, scope.service);
-                            }
-                          }}
-                          disabled={daemonActionBusy === d.name}
-                          className="p-1.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 transition-colors cursor-pointer"
-                          title={t('ops.processes.actions.kill')}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Kill button (when active: running or starting) */}
+                        {isActive && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  t('ops.processes.actions.killConfirm', {
+                                    name: d.name,
+                                  })
+                                )
+                              ) {
+                                handleControlDaemon('kill', d.name, scope.service, scope.projectDir);
+                              }
+                            }}
+                            disabled={daemonActionBusy === d.name}
+                            className="p-1.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 transition-colors cursor-pointer"
+                            title={t('ops.processes.actions.kill')}
+                          >
+                            <Square className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        {/* Remove button (only when inactive: exited, stopped, failed) */}
+                        {!isActive && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  t('ops.processes.actions.removeConfirm', {
+                                    name: d.name,
+                                  })
+                                )
+                              ) {
+                                handleRemoveDaemon(d.name, scope.service, scope.projectDir);
+                              }
+                            }}
+                            disabled={daemonActionBusy === d.name}
+                            className="p-1.5 rounded bg-zinc-500/10 border border-zinc-500/20 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            title={t('ops.processes.actions.remove')}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

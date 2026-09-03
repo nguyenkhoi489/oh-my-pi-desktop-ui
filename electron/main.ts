@@ -801,22 +801,27 @@ ipcMain.handle('omp:ps-list', async (_, options?: { all?: boolean; global?: stri
   return opsManager.listProcesses(binary, options);
 });
 
-ipcMain.handle('omp:ps-control', async (_, action: 'stop' | 'kill' | 'restart', name: string, options?: { global?: string; timeout?: number }) => {
+ipcMain.handle('omp:ps-control', async (_, action: 'stop' | 'kill' | 'restart', name: string, options?: { global?: string; timeout?: number; dir?: string }) => {
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
   return opsManager.controlProcess(binary, action, name, options);
 });
 
-ipcMain.handle('omp:ps-logs', async (_, name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) => {
+ipcMain.handle('omp:ps-remove', async (_, name: string, options?: { global?: string; dir?: string }) => {
+  const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
+  return opsManager.removeProcess(binary, name, options);
+});
+
+ipcMain.handle('omp:ps-logs', async (_, name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string; dir?: string }) => {
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
   return opsManager.getProcessLogs(binary, name, options);
 });
 
-ipcMain.handle('omp:ps-info', async (_, name: string, options?: { global?: string }) => {
+ipcMain.handle('omp:ps-info', async (_, name: string, options?: { global?: string; dir?: string }) => {
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
   return opsManager.info(binary, name, options);
 });
 
-ipcMain.handle('omp:ps-logs-follow-start', async (_, name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) => {
+ipcMain.handle('omp:ps-logs-follow-start', async (_, name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string; dir?: string }) => {
   const binary = (await getSettingsStore().get()).customBinaryPath || 'omp';
   return opsManager.startLogFollow(binary, name, options || {}, (line) => {
     if (mainWindow && !mainWindow.isDestroyed()) {

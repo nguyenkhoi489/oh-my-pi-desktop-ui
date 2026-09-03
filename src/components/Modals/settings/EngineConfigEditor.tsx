@@ -294,6 +294,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
           prev.map((e) => (e.key === key ? { ...e, value: entry.value } : e)),
         );
         setKeyErrors((prev) => ({ ...prev, [key]: msg || t('common.error.generic') }));
+      } finally {
         setSavingKeys((prev) => {
           const next = new Set(prev);
           next.delete(key);
@@ -344,6 +345,7 @@ export const EngineConfigEditor: React.FC<EngineConfigEditorProps> = ({
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         setKeyErrors((prev) => ({ ...prev, [key]: msg || t('common.error.generic') }));
+      } finally {
         setSavingKeys((prev) => {
           const next = new Set(prev);
           next.delete(key);

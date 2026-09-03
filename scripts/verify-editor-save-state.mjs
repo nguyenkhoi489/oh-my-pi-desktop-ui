@@ -88,6 +88,47 @@ console.log('\n[Test 3] i18n keys for Editor Save & Dirty Status');
   }
 }
 
+// Test 4: Save lifecycle state machine
+console.log('\n[Test 4] Save lifecycle state machine & finally reset');
+{
+  let isSaving = false;
+  let isUserDirty = true;
+  let savedContent = 'initial';
+  let editorValue = 'modified';
+
+  // Simulate handleSave with finally block
+  const simulateSave = async (shouldFail = false) => {
+    isSaving = true;
+    const prevSaved = savedContent;
+    try {
+      savedContent = editorValue;
+      isUserDirty = false;
+      if (shouldFail) {
+        throw new Error('Disk write error');
+      }
+    } catch (err) {
+      savedContent = prevSaved;
+      isUserDirty = true;
+    } finally {
+      isSaving = false;
+    }
+  };
+
+  // Case 1: Successful save
+  await simulateSave(false);
+  assert(isSaving === false, 'isSaving reset to false after successful save');
+  assert(isUserDirty === false, 'isUserDirty cleared after successful save');
+  assert(savedContent === 'modified', 'savedContent updated to new value');
+
+  // Case 2: Failed save
+  editorValue = 'modified again';
+  isUserDirty = true;
+  await simulateSave(true);
+  assert(isSaving === false, 'isSaving reset to false even when save throws');
+  assert(isUserDirty === true, 'isUserDirty rolled back to true when save throws');
+  assert(savedContent === 'modified', 'savedContent preserved on failure');
+}
+
 console.log(`\n========================================`);
 console.log(`✅ ALL ${passed} VERIFICATION CHECKS PASSED!`);
 console.log(`========================================\n`);

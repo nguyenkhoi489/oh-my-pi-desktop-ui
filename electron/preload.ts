@@ -243,18 +243,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listProcesses: (options?: { all?: boolean; global?: string }) =>
     ipcRenderer.invoke('omp:ps-list', options),
 
-  controlProcess: (action: 'stop' | 'kill' | 'restart', name: string, options?: { global?: string; timeout?: number }) =>
+  controlProcess: (action: 'stop' | 'kill' | 'restart', name: string, options?: { global?: string; timeout?: number; dir?: string }) =>
     ipcRenderer.invoke('omp:ps-control', action, name, options),
 
-  getProcessLogs: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) =>
+  removeProcess: (name: string, options?: { global?: string; dir?: string }) =>
+    ipcRenderer.invoke('omp:ps-remove', name, options),
+
+  getProcessLogs: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string; dir?: string }) =>
     ipcRenderer.invoke('omp:ps-logs', name, options),
 
-  getProcessInfo: (name: string, options?: { global?: string }) =>
+  getProcessInfo: (name: string, options?: { global?: string; dir?: string }) =>
     ipcRenderer.invoke('omp:ps-info', name, options),
 
-  startProcessLogFollow: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string }) =>
+  startProcessLogFollow: (name: string, options?: { lines?: number; head?: boolean; grep?: string; global?: string; dir?: string }) =>
     ipcRenderer.invoke('omp:ps-logs-follow-start', name, options),
-
   stopProcessLogFollow: () =>
     ipcRenderer.invoke('omp:ps-logs-follow-stop'),
 

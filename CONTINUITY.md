@@ -14,6 +14,114 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-03 — Fix & Feature: Rich Markdown Preview (KaTeX Math, Prism Highlighting, DOMPurify) & Ops Process Removal
+- **State:**
+  - **Rich Markdown Preview:**
+    - Cài đặt `katex`, `marked-katex-extension`, `prismjs`, `dompurify`, `@types/dompurify`, `@types/prismjs`, `@types/katex`.
+    - Tách logic markdown core parser ra module độc lập `src/utils/markdownParser.ts`, tích hợp GitHub-flavored alerts, GFM tables, KaTeX inline/display math tokens (`$..$`, `$$..$$`), Prism code syntax highlighting, task lists, and DOMPurify sanitization.
+    - Tích hợp KaTeX CSS (`katex/dist/katex.min.css`) và theme CSS vào `src/styles/globals.css`.
+    - Đa ngôn ngữ hóa toàn bộ nhãn nút bấm/loading Markdown (`markdown.*`) qua `options.t` và `tm` fallback, xóa bỏ hoàn toàn text tiếng Anh hardcode.
+    - Siết chặt bảo mật Mermaid diagram: chuyển `securityLevel: 'strict'` và làm sạch SVG qua `DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })`.
+    - Cập nhật `src/components/Common/MarkdownRenderer.tsx` và `scripts/verify-markdown-renderer.mjs` sử dụng chung module parser.
+    - Verification: `npm run test:markdown` pass 47/47 tests.
+  - **Background Daemon Cross-Scope Operations & Process Removal:**
+    - Chẩn đoán lỗi `omp ps kill <name>` thất bại khi process thuộc project scope khác cwd của app: `omp ps` chạy theo project context, thiếu cờ `--dir=<projectDir>`.
+    - Chẩn đoán lỗi không thể xóa record daemon đã exit: CLI `omp ps` không có lệnh `rm`/`delete`.
+    - Bổ sung `options.dir` cho `controlProcess`, `getProcessLogs`, `getProcessInfo`, `startProcessLogFollow` trong `electron/ops-manager.ts`, `electron/main.ts`, `electron/preload.ts`, và `electron/types.ts`.
+    - Cung cấp `removeProcess` trong `OpsManager` xóa trực tiếp daemon metadata directory/file (`~/.omp/run/daemons/...`), tự động dọn broker nếu là daemon cuối cùng.
+    - Phòng chống triệt để Path Traversal trong `removeProcess`: kiểm tra định dạng tên daemon/service và xác thực qua `path.relative` để ngăn chặn việc thoát khỏi thư mục gốc.
+    - Khắc phục race condition hủy broker: kiểm tra lại danh sách tiến trình hoạt động trước khi gửi tín hiệu SIGTERM.
+    - An toàn hóa test suite `scripts/verify-ops-manager.mjs`: chuyển sang stubbed process kill boundary và mock layout `<runtimeDir>/daemons/<name>/` dưới `tmpDir`, loại bỏ hoàn toàn nguy cơ kill nhầm tiến trình máy chủ.
+    - Cập nhật UI `src/components/Modals/ops/ProcessesTab.tsx`: truyền `scope.projectDir` vào mọi hành động daemon (Info, Logs, Stop, Restart, Kill), phân biệt rõ trạng thái active (`running` / `starting`) và terminal (`exited` / `stopped`), phân tách nút Kill (Square) và nút Remove (Trash2).
+    - Bổ sung đồng bộ i18n keys trong `shared/i18n/vi.ts` và `shared/i18n/en.ts`.
+    - Cập nhật `scripts/verify-ops-manager.mjs` với 12 checks đầy đủ.
+  - **Code Editor Save & Concurrency:**
+    - Sử dụng `currentFilePathRef` và `latestEditorValueRef` để ngăn chặn race condition khi người dùng chuyển file hoặc gõ tiếp trong lúc đang lưu.
+    - Thêm guard `selectedFileRef.current?.path === filePath` trong `useWorkspace.ts` để tránh cập nhật đè `fileContent` khi lưu tệp cũ.
+- **In-flight:** Không có.
+- **Next:** Tiếp tục kiểm thử và phát triển các tính năng tiếp theo theo yêu cầu người dùng.
+- **Refs:**
+  - `plans/reports/fix-260903-2245-ps-cross-scope-dir-and-remove.md`
+  - `plans/260903-2200-rich-markdown-preview/plan.md`
+
+## 2026-09-03 — Fix Engine Config Editor Save and Reset Stuck on "Đang lưu..." Spinner
+
+- **State:** Đã khắc phục triệt để lỗi mục cấu hình trong Engine Config Editor bị treo vô tận ở trạng thái "Đang lưu..." sau khi lưu thành công:
+  - `src/components/Modals/settings/EngineConfigEditor.tsx`:
+    - Bổ sung khối `finally` cho cả `handleSaveKey` và `handleResetKey` để luôn xóa `key` khỏi `savingKeys` Set sau khi hoàn thành request (kể cả trường hợp thành công, lỗi trả về từ engine hay ngoại lệ thrown).
+  - `scripts/verify-engine-config-ui.mjs`:
+    - Bổ sung kiểm tra static contract và unit simulation vòng đời `savingKeys`, đảm bảo key luôn được xóa khỏi state saving ở cả 3 kịch bản: `success`, `failure` response và thrown exception.
+  - Verification: `npm run test:engine-config-ui` (172/172 passed), `npm run test:engine-config` (35/35 passed), `npm run test:settings` (48/48 passed), `npm run test:i18n` (3256/3256 passed), `npx tsc --noEmit` và `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Sẵn sàng theo dõi thêm trải nghiệm người dùng trên bảng cấu hình Engine.
+- **Refs:**
+  - `plans/reports/fix-260903-2220-engine-config-save-stuck-spinner.md`
+  - `src/components/Modals/settings/EngineConfigEditor.tsx`
+  - `scripts/verify-engine-config-ui.mjs`
+
+## 2026-09-03 — Rich Markdown Preview Parity (KaTeX Math, Prism Highlighting, Mermaid Diagrams)
+
+- **State:** Nâng cấp toàn diện bộ dựng Markdown của OMP-Agent đạt độ phong phú tương đương VS Code Preview và GitHub:
+  - `src/utils/markdownParser.ts`:
+    - Trích xuất toàn bộ cấu hình Marked parser ra module độc lập dùng chung cho Renderer và Node test scripts.
+    - Tích hợp KaTeX tokenizer/renderer native cho cả công thức inline `$E = mc^2$` và block `$$\int_0^1 x dx$$` với MathML + HTML display.
+    - Tích hợp PrismJS syntax highlighting cho code blocks (TypeScript, Python, Bash, Rust, Go, SQL, JSON, YAML, v.v.).
+    - Thêm cơ chế nhận diện ````mermaid` và sinh container chuẩn bị cho việc dựng biểu đồ bất đồng bộ phía client.
+    - Bổ sung `DOMPurify.sanitize()` bảo vệ an toàn XSS nhưng whitelist các tags và attributes của KaTeX MathML và SVG.
+  - `src/components/Common/MarkdownRenderer.tsx`:
+    - Bổ sung hiệu ứng dựng lười (lazy load) Mermaid diagrams qua dynamic import khi stream kết thúc (`!isStreaming`).
+    - Bổ sung nút chuyển đổi xem mã nguồn ("Code") và xử lý hiển thị lỗi trực quan khi cú pháp Mermaid không hợp lệ.
+  - `src/styles/globals.css` & `src/main.tsx`:
+    - Import `katex/dist/katex.min.css` vào entry point Vite.
+    - Định nghĩa bảng màu syntax highlighting cho Prism theo theme sáng/tối đồng bộ với Tailwind CSS.
+    - Định nghĩa styling responsive cho biểu đồ Mermaid và thanh cuộn công thức KaTeX.
+  - `shared/i18n/vi.ts` & `shared/i18n/en.ts`: Thêm đầy đủ các key i18n cho Mermaid loading, error, copy, code toggle.
+  - Verification: `npm run test:markdown` (42/42 passed), `npm run test:i18n` (3256/3256 passed), `npm run test:artifacts-hydration` (41/41 passed), `npm run test:composer-attach` (38/38 passed), `npx tsc --noEmit` và `npx tsc -p tsconfig.node.json --noEmit` 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Tiếp tục hoàn thiện trải nghiệm Markdown và Canvas Preview theo phản hồi người dùng.
+- **Refs:**
+  - `plans/260903-2200-rich-markdown-preview/plan.md`
+  - `src/utils/markdownParser.ts`
+  - `src/components/Common/MarkdownRenderer.tsx`
+  - `scripts/verify-markdown-renderer.mjs`
+
+## 2026-09-03 — Fix Code Editor Save Hanging on Saving Spinner
+
+- **State:** Đã khắc phục triệt để lỗi nút Lưu trong Code Editor bị treo vô tận ở trạng thái "Đang lưu...":
+  - `src/components/Canvas/CodeEditor.tsx`:
+    - Bổ sung khối `finally { setIsSaving(false); }` trong `handleSave`. Đảm bảo cờ `isSaving` luôn được reset về `false` sau khi lưu xong hoặc khi gặp lỗi.
+    - Bổ sung cơ chế rollback an toàn cho `savedContentRef` và `isUserDirty` nếu thao tác lưu ghi file thất bại.
+  - `scripts/verify-editor-save-state.mjs`: Bổ sung Test 4 kiểm tra vòng đời của `isSaving` và khẳng định cờ này luôn được reset ở cả 2 nhánh thành công và thất bại.
+  - Verification: `npm run test:editor-save` (19/19 passed), `npm run test:unsaved-guard` (30/30 passed), `npm run test:git-timeline` (31/31 passed), `npm run test:git-file-history` (15/15 passed), `npm run test:i18n` (3244 passed, 0 failed), TypeScript Renderer và Electron 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Sẵn sàng cho các yêu cầu tiếp theo từ người dùng.
+- **Refs:**
+  - `plans/reports/fix-260903-2145-code-editor-save-stuck-spinner.md`
+  - `src/components/Canvas/CodeEditor.tsx`
+  - `scripts/verify-editor-save-state.mjs`
+
+## 2026-09-03 — Fix Code Editor Async File Load and False Conflict Detection
+
+- **State:** Đã khắc phục triệt để lỗi Code Editor không tự động nạp nội dung khi mở file và bắt người dùng phải bấm thủ công "Nạp lại từ đĩa":
+  - `src/components/Canvas/CodeEditor.tsx`:
+    - Bổ sung state `isUserDirty: boolean` và ref `savedContentRef`. Chỉ khi người dùng thực sự gõ phím trong Monaco (`onChange`), cờ `isUserDirty` mới được kích hoạt.
+    - Tự động đồng bộ prop `content` mới từ đĩa vào `editorValue` khi `!isUserDirty` mà không kích hoạt cờ xung đột bên ngoài (`hasExternalConflict`).
+    - Cờ xung đột bên ngoài chỉ kích hoạt khi người dùng có bản nháp chưa lưu VÀ file trên đĩa bị tiến trình bên ngoài sửa đổi khác với mốc đã lưu.
+  - `src/hooks/useWorkspace.ts`: Cập nhật `selectFile` và `openFolderDialog` để đọc file trước khi gán đồng thời `selectedFile` và `fileContent`, loại bỏ trạng thái render trung gian rỗng.
+  - `scripts/verify-unsaved-guard.mjs`: Bổ sung Test Case C kiểm tra việc tải bất đồng bộ không gây conflict giả.
+  - Verification: `npm run test:unsaved-guard` (30/30 passed), `npm run test:editor-save` (13/13 passed), `npm run test:git-timeline` (31/31 passed), `npm run test:git-file-history` (15/15 passed), `npm run test:i18n` (3244 passed, 0 failed), TypeScript Renderer và Electron 0 lỗi.
+- **In-flight:** Không có.
+- **Next:**
+  1. Sẵn sàng cho các yêu cầu tiếp theo từ người dùng.
+- **Refs:**
+  - `plans/reports/fix-260903-2140-code-editor-async-load-conflict.md`
+  - `src/components/Canvas/CodeEditor.tsx`
+  - `src/hooks/useWorkspace.ts`
+  - `scripts/verify-unsaved-guard.mjs`
+
 ## 2026-09-03 — Preserve Complete Assistant Text and System Messages in Session History
 
 - **State:** Đã khắc phục triệt để lỗi mất văn bản phản hồi/kết luận của Agent (sau các lệnh `bash` / tool calls) và mất tin nhắn `system` khi xem lại lịch sử session:
