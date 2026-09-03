@@ -14,6 +14,19 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-03 — Fix SettingsModal React Rules of Hooks Violation
+
+- **State:** Đã sửa lỗi crash `Rendered more hooks than during the previous render` trong `SettingsModal.tsx`:
+  - `src/components/Modals/SettingsModal.tsx`:
+    - Di chuyển hook `useState<string | null>(null)` của `loggingOutProviderId` từ dòng 747 (nằm sau early return `if (!isOpen) return null;` ở dòng 515) lên cùng nhóm khai báo state của Providers ở đầu component (trước early return).
+    - Khắc phục triệt để vi phạm Rules of Hooks khiến React crash khi mở SettingsModal (`isOpen` chuyển từ `false` sang `true`).
+  - Verification: Cả 2 lệnh typecheck (`npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`) và toàn bộ các test suite liên quan (`test:settings`, `test:modal-ux`, `test:auth-login`, `test:provider-config`, `test:roles-config`, `test:engine-config-ui`) pass 100%.
+- **In-flight:** Không có.
+- **Next:**
+- **Refs:**
+  - `plans/reports/fix-260903-1200-settings-modal-rules-of-hooks.md`
+  - `src/components/Modals/SettingsModal.tsx`
+
 ## 2026-09-03 — Fix SSH Hosts Light Mode Inverted Text Colors
 
 - **State:** Đã sửa lỗi hiển thị chữ trắng/mờ tịt trong Light Mode ở tab SSH Hosts (`SshTab.tsx`):

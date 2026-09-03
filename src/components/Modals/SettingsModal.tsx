@@ -280,6 +280,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [headersText, setHeadersText] = useState<string>('');
   const [authedProviders, setAuthedProviders] = useState<string[]>([]);
   const [isEngineOnline, setIsEngineOnline] = useState<boolean | null>(null);
+  const [loggingOutProviderId, setLoggingOutProviderId] = useState<string | null>(null);
 
   // State cho Model Roles (config.yml)
   const [modelRoles, setModelRoles] = useState<Record<string, string>>({});
@@ -744,7 +745,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
     setAuthCodeInput('');
   };
-  const [loggingOutProviderId, setLoggingOutProviderId] = useState<string | null>(null);
 
   const handleLogout = async (providerId: string) => {
     if (!window.electronAPI?.logoutAuthProvider) return;
