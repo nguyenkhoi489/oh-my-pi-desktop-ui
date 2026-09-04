@@ -8,23 +8,28 @@ import {
   ChevronUp,
   AlertCircle,
   XCircle,
+  Clock,
 } from 'lucide-react';
-import type { OmpTodoPhase, OmpTodoItem, OmpTodoStatus } from '../../types';
+import type { OmpTodoPhase, OmpTodoItem, OmpTodoStatus, OmpAgentStatus } from '../../types';
 import { useI18n } from '../../i18n/I18nProvider';
 
 interface TodoPanelProps {
   phases?: OmpTodoPhase[];
   todos?: OmpTodoItem[];
+  engineStatus?: OmpAgentStatus;
 }
 
 // Map todo status to icon and display style
-function renderTodoStatusIcon(status: OmpTodoStatus) {
+function renderTodoStatusIcon(status: OmpTodoStatus, isEngineBusy: boolean = true) {
   switch (status) {
     case 'done':
     case 'completed':
       return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />;
     case 'in_progress':
     case 'active':
+      if (!isEngineBusy) {
+        return <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />;
+      }
       return <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin shrink-0 mt-0.5" />;
     case 'blocked':
       return <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />;
@@ -57,7 +62,8 @@ function getTodoTextStyle(status: OmpTodoStatus): string {
   }
 }
 
-const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [] }) => {
+const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [], engineStatus }) => {
+  const isEngineBusy = engineStatus !== undefined ? engineStatus !== 'idle' : true;
   const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const activeTaskRef = useRef<HTMLDivElement | null>(null);
@@ -178,7 +184,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [] 
                           : 'hover:bg-surface-highlight/40'
                       }`}
                     >
-                      {renderTodoStatusIcon(task.status)}
+                      {renderTodoStatusIcon(task.status, isEngineBusy)}
                       <div className="flex-1 min-w-0">
                         <span className={`text-[12px] leading-snug break-words ${getTodoTextStyle(task.status)}`}>
                           {task.content}

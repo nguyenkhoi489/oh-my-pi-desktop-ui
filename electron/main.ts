@@ -638,6 +638,11 @@ ipcMain.handle('omp:delete-session', async (_, sessionPath: string) => {
   return ompBridge.deleteSession(sessionPath);
 });
 
+ipcMain.handle('omp:repair-session', async (_, sessionPath?: string) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.repairSession(sessionPath);
+});
+
 ipcMain.handle('omp:export-session', async () => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
   const win = mainWindow || BrowserWindow.getFocusedWindow();

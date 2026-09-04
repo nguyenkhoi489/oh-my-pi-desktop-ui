@@ -38,6 +38,9 @@ export interface ChatMessage {
   files?: ChatFileAttachment[];
   steering?: boolean;
   queued?: boolean;
+  stopReason?: string | null;
+  errorMessage?: string;
+  isError?: boolean;
 }
 
 export interface FileDiffItem {
@@ -1357,6 +1360,7 @@ export interface ElectronAPI {
   getBranchEntries: () => Promise<{ success: boolean; entries?: OmpBranchEntry[]; error?: string }>;
   renameSession: (name: string) => Promise<{ success: boolean; error?: string }>;
   deleteSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
+  repairSession: (sessionPath?: string) => Promise<{ success: boolean; repairedTurns?: number; error?: string }>;
   exportSession: () => Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }>;
   listImportCandidates: (source?: 'claude' | 'codex') => Promise<{ success: boolean; candidates?: ForeignSessionCandidate[]; error?: string }>;
   importSession: (candidate: ForeignSessionCandidate, targetCwd?: string) => Promise<ImportSessionResult>;

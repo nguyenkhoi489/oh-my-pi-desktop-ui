@@ -409,14 +409,16 @@ async function runTodosPanelVerification() {
     assert(componentContent.includes('isExpanded'), 'TodoPanel supports collapsible state');
     assert(componentContent.includes('renderTodoStatusIcon'), 'TodoPanel has status icon renderer');
     assert(componentContent.includes('normalizedPhases.length === 0'), 'TodoPanel returns null when empty');
+    assert(componentContent.includes('engineStatus'), 'TodoPanel accepts engineStatus prop');
+    assert(componentContent.includes('isEngineBusy'), 'TodoPanel checks isEngineBusy for spinner animation');
 
     const agentPanelPath = path.join(__dirname, '../src/components/AgentPanel/AgentPanel.tsx');
     const agentPanelContent = fs.readFileSync(agentPanelPath, 'utf-8');
     assert(agentPanelContent.includes('<TodoPanel'), 'AgentPanel mounts TodoPanel');
     assert(agentPanelContent.includes('todoPhases'), 'AgentPanel passes todoPhases');
     assert(agentPanelContent.includes('todos'), 'AgentPanel passes todos');
+    assert(agentPanelContent.includes('engineStatus={status}'), 'AgentPanel passes engineStatus to TodoPanel');
   }
-
   console.log(`\n====================================================`);
   console.log(`Todos Panel Verification Complete: ${passed} passed, ${failed} failed.`);
   console.log(`====================================================\n`);

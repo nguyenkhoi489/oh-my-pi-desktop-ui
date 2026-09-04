@@ -1106,3 +1106,18 @@ Entry template:
   - `plans/reports/ak-debug-260901-2322-composer-lag-attach-sync-project-switch.md`
   - `plans/reports/ak-fix-260901-2327-composer-lag-attach-sync-project-switch.md`
   - `plans/journals/2026-09-01-fix-composer-lag-attach-chip-sync-command-menu-overflow-proj.md`
+
+## 2026-09-04 — API Error Recovery & Session Self-Healing
+
+- **State:** Completed `plan-260904-1145-api-error-recovery-ui`. All verification tests and typechecks passing.
+  - `ChatHistory`: Added `ErrorAssistantCard` rendered whenever an assistant frame has `stopReason === 'error'`, `isError === true`, or `errorMessage`. Features prominent rose border/background, technical error details accordion, and 1-click recovery actions: [Retry], [Repair Session], and [Branch/Rollback].
+  - `electron/omp-bridge.ts`:
+    - `message_end` emits `omp:message-complete` even when assistant message has empty text content if it carries error flags (`stopReason`, `errorMessage`, `isError`).
+    - `translateHistoryMessages` preserves error metadata across history reloads.
+    - Added `repairSession()` method and `omp:repair-session` IPC handler to automatically prune trailing deadlocked error turns and normalize bare primitive boolean tool results (`"true"`, `"false"`) into structured JSON objects.
+    - Host tool execution response sanitizes `res.content` to ensure properly formatted content blocks.
+  - `TodoPanel`: Added `engineStatus` prop; task items in progress render amber clock icon in standby when agent is `idle`, reserving `animate-spin` only for active execution.
+  - `shared/i18n`: Added localized error title, details, and action strings in `vi.ts` and `en.ts`.
+  - Verification: Added Test 6 in `scripts/verify-sessions.mjs` and updated Test 8 in `scripts/verify-todos-panel.mjs`. Verified via `test:i18n` (3274 assertions), `test:todos-panel` (66 assertions), `test:sessions` (77 assertions), and `tsc` (renderer & electron).
+- **Refs:**
+  - `plans/plan-260904-1145-api-error-recovery-ui.md`

@@ -51,6 +51,7 @@ interface AgentPanelProps {
   todos?: OmpTodoItem[];
   retryState?: OmpRetryState;
   onAbortRetry?: () => void;
+  onRepairSession?: () => void;
 }
 
 const AgentPanelComponent: React.FC<AgentPanelProps> = ({
@@ -82,6 +83,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   todos,
   retryState,
   onAbortRetry,
+  onRepairSession,
 }) => {
   const { t } = useI18n();
   return (
@@ -116,7 +118,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
       </div>
 
       {/* Todo Progress & Plan Panel */}
-      <TodoPanel phases={todoPhases} todos={todos} />
+      <TodoPanel phases={todoPhases} todos={todos} engineStatus={status} />
 
       {/* Message & Execution Timeline */}
       <ChatHistory
@@ -127,6 +129,8 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
         status={status}
         onBranchSession={onBranchSession}
         onOpenFile={onOpenFile}
+        onRetry={(prompt) => onSendMessage(prompt || '')}
+        onRepairSession={onRepairSession}
       />
 
       {/* Engine Status & Widgets Strip */}

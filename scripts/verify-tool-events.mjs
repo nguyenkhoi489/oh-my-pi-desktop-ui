@@ -562,6 +562,50 @@ console.log('[Test 9] ast_edit Tool Execution (Decision D6 - No Diff Generated)'
   const diffs = emittedEvents.filter((e) => e.channel === 'omp:diff-generated');
   assert(diffs.length === 0, 'ast_edit emits 0 omp:diff-generated events (D6)');
 }
+
+// ----------------------------------------------------
+// Fixture 10: Virtual Device URIs (xd://browser, etc. - No Diff Generated)
+// ----------------------------------------------------
+console.log('[Test 10] Virtual Device Write (xd://browser - No Diff Generated)');
+{
+  const emittedEvents = [];
+  const mockWindow = {
+    isDestroyed: () => false,
+    webContents: {
+      send: (channel, payload) => emittedEvents.push({ channel, payload }),
+    },
+  };
+
+  const bridge = new OmpBridge(mockWindow);
+  const dispatch = (frame) => bridge.dispatchInboundFrame(frame);
+
+  dispatch({
+    type: 'tool_execution_start',
+    toolCallId: 'call_xd_browser_01',
+    toolName: 'write',
+    args: {
+      path: 'xd://browser',
+      content: JSON.stringify({ action: 'run', code: 'await tab.goto("https://example.com")' }),
+    },
+  });
+
+  dispatch({
+    type: 'tool_execution_end',
+    toolCallId: 'call_xd_browser_01',
+    toolName: 'write',
+    result: {
+      content: [{ type: 'text', text: 'Navigated to https://example.com' }],
+    },
+    isError: false,
+  });
+
+  const toolCalls = emittedEvents.filter((e) => e.channel === 'omp:tool-call');
+  assert(toolCalls.length === 2, 'xd:// tool execution generates ToolCall events');
+  assert(toolCalls[1].payload.status === 'completed', 'xd:// tool execution completes successfully');
+
+  const diffs = emittedEvents.filter((e) => e.channel === 'omp:diff-generated');
+  assert(diffs.length === 0, 'xd:// write emits 0 omp:diff-generated events');
+}
 console.log();
 
 // ----------------------------------------------------

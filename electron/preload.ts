@@ -195,6 +195,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteSession: (sessionPath: string) =>
     ipcRenderer.invoke('omp:delete-session', sessionPath),
 
+  repairSession: (sessionPath?: string) =>
+    ipcRenderer.invoke('omp:repair-session', sessionPath),
   exportSession: () =>
     ipcRenderer.invoke('omp:export-session'),
 

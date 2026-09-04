@@ -439,6 +439,68 @@ console.log('[Test 5] getBranchEntries Extraction & Correlation');
   assert(matchedUserEntries.length === 1, 'Correlated unique user message by (role, timestamp)');
   assert(matchedUserEntries[0].entryId === 'd8487e45', 'Correlated entryId is d8487e45');
 }
+
+// ----------------------------------------------------
+// Test 6: repairSession & Assistant Error Frame Translation
+// ----------------------------------------------------
+console.log('[Test 6] repairSession & Assistant Error Frame Translation');
+{
+  const mockWindow = {
+    isDestroyed: () => false,
+    webContents: { send: () => {} },
+  };
+  const bridge = new OmpBridge(mockWindow);
+
+  // 1. Test translateHistoryMessages preserves error details
+  const errorRawMessages = [
+    {
+      role: 'user',
+      content: 'Run failing command',
+      timestamp: 1700000001000,
+    },
+    {
+      role: 'assistant',
+      content: [],
+      stopReason: 'error',
+      errorMessage: 'HTTP 400 Bad Request',
+      timestamp: 1700000002000,
+    },
+  ];
+  const translated = bridge.translateHistoryMessages(errorRawMessages);
+  assert(translated.length === 2, 'Translated both messages including empty content error assistant');
+  assert(translated[1].role === 'assistant', 'Second message is assistant');
+  assert(translated[1].isError === true, 'Assistant message marked as isError: true');
+  assert(translated[1].stopReason === 'error', 'Assistant stopReason is error');
+  assert(translated[1].errorMessage === 'HTTP 400 Bad Request', 'Assistant errorMessage preserved');
+
+  // 2. Test repairSession self-healing
+  const tempDir = fs.mkdtempSync(path.join(__dirname, '../plans/temp-repair-'));
+  const tempSessionFile = path.join(tempDir, 'broken-session.jsonl');
+  const initialLines = [
+    JSON.stringify({ type: 'session', id: 'sess-repair-1', timestamp: 1700000000000 }),
+    JSON.stringify({ type: 'message', id: 'msg-u1', message: { role: 'user', content: 'hello' } }),
+    JSON.stringify({ type: 'message', id: 'msg-tr1', message: { role: 'toolResult', content: 'true' } }),
+    JSON.stringify({ type: 'message', id: 'msg-err', message: { role: 'assistant', stopReason: 'error', errorMessage: 'HTTP 400', content: [] } }),
+  ];
+  fs.writeFileSync(tempSessionFile, initialLines.join('\n') + '\n', 'utf-8');
+
+  const repairRes = await bridge.repairSession(tempSessionFile);
+  assert(repairRes.success === true, 'repairSession returned success: true');
+  assert((repairRes.repairedTurns || 0) >= 2, `repairSession repaired at least 2 items (got ${repairRes.repairedTurns})`);
+
+  const repairedContent = fs.readFileSync(tempSessionFile, 'utf-8');
+  const repairedLines = repairedContent.trim().split('\n').map((l) => JSON.parse(l));
+
+  // Trailing error assistant should be pruned
+  assert(repairedLines.length === 3, `Pruned trailing error assistant, remaining 3 lines (got ${repairedLines.length})`);
+  // Tool result primitive "true" should be normalized to structured text JSON
+  const trMsg = repairedLines[2].message;
+  assert(Array.isArray(trMsg.content), 'toolResult content normalized to array');
+  assert(trMsg.content[0].type === 'text' && trMsg.content[0].text.includes('result'), 'toolResult wrapped in valid JSON result');
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+}
+console.log();
 console.log();
 
 // Summary

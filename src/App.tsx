@@ -180,6 +180,7 @@ export function App() {
     todos,
     retryState,
     abortRetry,
+    repairSession,
     getLastAssistantText,
     listSshHosts,
     addSshHost,
@@ -621,6 +622,7 @@ export function App() {
               externalAttachment={attachmentRequest}
               retryState={retryState}
               onAbortRetry={abortRetry}
+              onRepairSession={repairSession}
             />
           </div>
         </div>

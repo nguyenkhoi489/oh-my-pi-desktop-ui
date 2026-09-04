@@ -11,6 +11,9 @@ import {
   Copy,
   Check,
   ZoomIn,
+  AlertTriangle,
+  RotateCcw,
+  Wrench,
 } from 'lucide-react';
 import { ChatMessage, ThinkingBlock, ToolCall, OmpAgentStatus } from '../../types';
 import { ThinkingCard } from './ThinkingCard';
@@ -30,7 +33,102 @@ interface ChatHistoryProps {
   status?: OmpAgentStatus;
   onBranchSession?: (entryId: string) => void;
   onOpenFile?: (filePath: string) => void;
+  onRetry?: (prompt?: string) => void;
+  onRepairSession?: () => void;
 }
+
+interface ErrorAssistantCardProps {
+  errorMessage?: string;
+  stopReason?: string | null;
+  content?: string;
+  onRetry?: () => void;
+  onRepair?: () => void;
+  onRollback?: () => void;
+}
+
+const ErrorAssistantCard: React.FC<ErrorAssistantCardProps> = ({
+  errorMessage,
+  stopReason,
+  content,
+  onRetry,
+  onRepair,
+  onRollback,
+}) => {
+  const { t } = useI18n();
+  const [showDetails, setShowDetails] = useState<boolean>(false);
+
+  return (
+    <div className="p-3.5 rounded-2xl border border-rose-500/30 bg-rose-500/5 dark:bg-rose-950/20 text-[13px] flex flex-col gap-2.5 min-w-0 max-w-full my-1">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-semibold text-xs">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>{t('chatHistory.apiErrorTitle')}</span>
+          {stopReason && (
+            <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 font-mono font-normal">
+              {stopReason}
+            </span>
+          )}
+        </div>
+        {errorMessage && (
+          <button
+            type="button"
+            onClick={() => setShowDetails((p) => !p)}
+            className="flex items-center gap-1 text-[11px] text-rose-600 dark:text-rose-400 hover:underline cursor-pointer select-none"
+          >
+            <span>{t('chatHistory.apiErrorDetails')}</span>
+            {showDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+        )}
+      </div>
+
+      {content && content.trim().length > 0 && (
+        <div className="text-slate-800 dark:text-zinc-200">
+          <MarkdownRenderer content={content} />
+        </div>
+      )}
+
+      {showDetails && errorMessage && (
+        <div className="p-2.5 rounded-lg bg-black/5 dark:bg-black/30 font-mono text-[11px] text-rose-700 dark:text-rose-300 break-all whitespace-pre-wrap select-text border border-rose-500/20">
+          {errorMessage}
+        </div>
+      )}
+
+      {/* Fast recovery action buttons */}
+      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-rose-500/15">
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-colors cursor-pointer"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>{t('chatHistory.retryAction')}</span>
+          </button>
+        )}
+        {onRepair && (
+          <button
+            type="button"
+            onClick={onRepair}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30 transition-colors cursor-pointer"
+          >
+            <Wrench className="w-3 h-3" />
+            <span>{t('chatHistory.repairAction')}</span>
+          </button>
+        )}
+        {onRollback && (
+          <button
+            type="button"
+            onClick={onRollback}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          >
+            <GitBranch className="w-3 h-3" />
+            <span>{t('chatHistory.rollbackAction')}</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const SystemMessageCard: React.FC<{ content: string; timestamp?: number }> = ({ content }) => {
   const { t } = useI18n();
@@ -124,6 +222,8 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
   status = 'idle',
   onBranchSession,
   onOpenFile,
+  onRetry,
+  onRepairSession,
 }) => {
   const { t } = useI18n();
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
@@ -344,11 +444,38 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
               </div>
             )}
 
-            {/* Message Bubble only if content is present */}
-            {msg.content && msg.content.trim().length > 0 && (
-              <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed bg-transparent text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
-                <MarkdownRenderer content={msg.content} />
-              </div>
+            {/* Message Bubble or Error Card */}
+            {msg.role === 'assistant' && (msg.stopReason === 'error' || Boolean(msg.isError) || Boolean(msg.errorMessage)) ? (
+              <ErrorAssistantCard
+                errorMessage={msg.errorMessage}
+                stopReason={msg.stopReason}
+                content={msg.content}
+                onRetry={
+                  onRetry
+                    ? () => {
+                        const prevUserMsg = messages.slice(0, index).reverse().find((m) => m.role === 'user');
+                        onRetry(prevUserMsg?.content);
+                      }
+                    : undefined
+                }
+                onRepair={onRepairSession}
+                onRollback={
+                  onBranchSession
+                    ? () => {
+                        const prevEntryId = messages.slice(0, index).reverse().find((m) => m.entryId)?.entryId || msg.entryId;
+                        if (prevEntryId) {
+                          onBranchSession(prevEntryId);
+                        }
+                      }
+                    : undefined
+                }
+              />
+            ) : (
+              msg.content && msg.content.trim().length > 0 && (
+                <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed bg-transparent text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
+                  <MarkdownRenderer content={msg.content} />
+                </div>
+              )
             )}
           </div>
         );

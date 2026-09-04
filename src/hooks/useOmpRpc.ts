@@ -554,6 +554,29 @@ export function useOmpRpc() {
     [status, refreshSessions]
   );
 
+  const repairSession = useCallback(
+    async (sessionPath?: string): Promise<{ success: boolean; repairedTurns?: number; error?: string }> => {
+      if (window.electronAPI && window.electronAPI.repairSession) {
+        try {
+          const res = await window.electronAPI.repairSession(sessionPath);
+          if (res.success) {
+            const histRes = await window.electronAPI.loadHistory();
+            if (histRes.success && Array.isArray(histRes.messages)) {
+              const correlated = await correlateBranchEntries(histRes.messages);
+              setMessages(correlated);
+            }
+          }
+          return res;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { success: false, error: msg };
+        }
+      }
+      return { success: false, error: 'repairSession not available' };
+    },
+    [correlateBranchEntries]
+  );
+
   const exportSession = useCallback(
     async (): Promise<{ success: boolean; path?: string; cancelled?: boolean; error?: string }> => {
       if (status !== 'idle') {
@@ -1989,6 +2012,7 @@ export function useOmpRpc() {
     branchFromMessage,
     renameSession,
     deleteSession,
+    repairSession,
     exportSession,
     subagents,
     sendMessage,

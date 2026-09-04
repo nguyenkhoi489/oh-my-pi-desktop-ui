@@ -2239,6 +2239,86 @@ export class OmpBridge {
     }
   }
 
+  public async repairSession(
+    customSessionPath?: string
+  ): Promise<{ success: boolean; repairedTurns?: number; error?: string }> {
+    try {
+      const targetFile = customSessionPath || this.currentSessionFile;
+      if (!targetFile || !fs.existsSync(targetFile)) {
+        return { success: false, error: 'No valid session file found to repair' };
+      }
+      if (!targetFile.endsWith('.jsonl')) {
+        return { success: false, error: 'Target file must be a .jsonl session file' };
+      }
+
+      const content = fs.readFileSync(targetFile, 'utf-8');
+      const lines = content.split('\n');
+      let repairedCount = 0;
+      const validRecords: Record<string, unknown>[] = [];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const parsed = JSON.parse(trimmed);
+          // Normalize toolResult records if containing primitive content
+          if (parsed && typeof parsed === 'object') {
+            const rec = parsed as Record<string, unknown>;
+            const msg = (rec.message && typeof rec.message === 'object' ? rec.message : rec) as Record<string, unknown>;
+            if (msg.role === 'toolResult' || msg.type === 'toolResult' || rec.type === 'toolResult') {
+              if (typeof msg.content === 'boolean' || msg.content === 'true' || msg.content === 'false') {
+                const val = msg.content === true || msg.content === 'true';
+                msg.content = [{ type: 'text', text: JSON.stringify({ result: val }) }];
+                repairedCount++;
+              } else if (Array.isArray(msg.content)) {
+                for (let i = 0; i < msg.content.length; i++) {
+                  const block = msg.content[i];
+                  if (typeof block === 'boolean' || block === 'true' || block === 'false') {
+                    const val = block === true || block === 'true';
+                    msg.content[i] = { type: 'text', text: JSON.stringify({ result: val }) };
+                    repairedCount++;
+                  }
+                }
+              }
+            }
+          }
+          validRecords.push(parsed);
+        } catch {
+          repairedCount++;
+        }
+      }
+
+      // Prune trailing empty or error assistant turns
+      while (validRecords.length > 0) {
+        const last = validRecords[validRecords.length - 1];
+        const rec = last as Record<string, unknown>;
+        const msg = (rec.message && typeof rec.message === 'object' ? rec.message : rec) as Record<string, unknown>;
+        if (
+          msg &&
+          (msg.role === 'assistant' || rec.type === 'assistant') &&
+          (msg.stopReason === 'error' || msg.isError || (!msg.content || (Array.isArray(msg.content) && msg.content.length === 0)))
+        ) {
+          validRecords.pop();
+          repairedCount++;
+        } else {
+          break;
+        }
+      }
+
+      const newContent = validRecords.map((r) => JSON.stringify(r)).join('\n') + '\n';
+      fs.writeFileSync(targetFile, newContent, 'utf-8');
+
+      if (this.currentSessionFile && path.resolve(targetFile) === path.resolve(this.currentSessionFile)) {
+        await this.loadHistory().catch(() => {});
+      }
+
+      return { success: true, repairedTurns: repairedCount };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Failed to repair session' };
+    }
+  }
+
   public async exportHtml(
     outputPath: string
   ): Promise<{ success: boolean; path?: string; error?: string }> {
@@ -2494,6 +2574,23 @@ export class OmpBridge {
         } else if (typeof (msg as any).output === 'string') {
           textParts.push((msg as any).output);
         }
+        const hasErr = Boolean(msg && typeof msg === 'object' && 'error' in msg && msg.error);
+        const hasErrMsg = Boolean(msg && typeof msg === 'object' && 'errorMessage' in msg && msg.errorMessage);
+        const isError = msg.stopReason === 'error' || Boolean(msg.isError) || hasErr || hasErrMsg;
+        let errorMessage: string | undefined;
+        if (msg && typeof msg === 'object') {
+          if ('errorMessage' in msg && typeof msg.errorMessage === 'string') {
+            errorMessage = msg.errorMessage;
+          } else if ('error' in msg) {
+            if (typeof msg.error === 'string') {
+              errorMessage = msg.error;
+            } else if (msg.error && typeof msg.error === 'object' && 'message' in msg.error && typeof msg.error.message === 'string') {
+              errorMessage = msg.error.message;
+            }
+          }
+        }
+        const stopReason = msg.stopReason || (isError ? 'error' : null);
+
         const lastMsg = result[result.length - 1];
         if (lastMsg && lastMsg.role === 'assistant') {
           const incomingText = textParts.join('\n').trim();
@@ -2517,6 +2614,11 @@ export class OmpBridge {
             }
             lastMsg.toolCalls.push(...toolCalls);
           }
+          if (isError) {
+            lastMsg.isError = true;
+            if (stopReason) lastMsg.stopReason = stopReason;
+            if (errorMessage) lastMsg.errorMessage = errorMessage;
+          }
           lastMsg.timestamp = timestamp;
         } else {
           result.push({
@@ -2526,6 +2628,7 @@ export class OmpBridge {
             timestamp,
             ...(thinkingBlock ? { thinking: thinkingBlock } : {}),
             ...(toolCalls.length > 0 ? { toolCalls } : {}),
+            ...(isError ? { isError: true, stopReason, ...(errorMessage ? { errorMessage } : {}) } : {}),
           });
         }
       } else if (role === 'fileMention') {
@@ -2826,11 +2929,15 @@ export class OmpBridge {
         })
         .then((res) => {
           if (!this.process || !this.process.stdin?.writable) return;
+          const rawContent = res.content;
+          const safeContent = Array.isArray(rawContent)
+            ? rawContent.map((c) => (c && typeof c === 'object' ? c : { type: 'text', text: String(c) }))
+            : [{ type: 'text', text: String(rawContent ?? '') }];
           const replyFrame: HostToolResultFrame = {
             type: 'host_tool_result',
             id: callId,
             result: {
-              content: res.content,
+              content: safeContent,
               details: res.details || {},
             },
             isError: Boolean(res.isError),
@@ -3144,7 +3251,8 @@ export class OmpBridge {
         this.setStatus('executing_tool');
 
         // Capture snapshot before write tool execution (Decision D2)
-        if (toolName === 'write' && params.path) {
+        // Skip virtual URIs like xd:// when capturing file snapshot
+        if (toolName === 'write' && params.path && typeof params.path === 'string' && !params.path.includes('://')) {
           const filePath = path.isAbsolute(params.path)
             ? params.path
             : path.resolve(this.workspacePath || process.cwd(), params.path);
@@ -3322,18 +3430,41 @@ export class OmpBridge {
             this.window.webContents.send('omp:message-complete', chatMessage);
           }
         } else
-        if (msg && msg.role === 'assistant' && Array.isArray(msg.content)) {
+        if (msg && msg.role === 'assistant') {
           const textParts: string[] = [];
-          for (const block of msg.content) {
-            if (block && block.type === 'text' && typeof (block as any).text === 'string') {
-              const textContent = (block as any).text;
-              if (textContent.length > 0) {
-                textParts.push(textContent);
+          if (Array.isArray(msg.content)) {
+            for (const block of msg.content) {
+              if (block && typeof block === 'object' && 'text' in block) {
+                const textVal = block.text;
+                if (typeof textVal === 'string' && textVal.length > 0) {
+                  textParts.push(textVal);
+                }
+              }
+            }
+          } else if (msg && typeof msg === 'object' && 'content' in msg && typeof msg.content === 'string') {
+            textParts.push(msg.content);
+          }
+
+          const hasErrorProp = Boolean(msg && typeof msg === 'object' && 'error' in msg && msg.error);
+          const hasErrMsgProp = Boolean(msg && typeof msg === 'object' && 'errorMessage' in msg && msg.errorMessage);
+          const isError = msg.stopReason === 'error' || Boolean(msg.isError) || hasErrorProp || hasErrMsgProp;
+          let errorMessage: string | undefined;
+          if (msg && typeof msg === 'object') {
+            if ('errorMessage' in msg && typeof msg.errorMessage === 'string') {
+              errorMessage = msg.errorMessage;
+            } else if ('error' in msg) {
+              if (typeof msg.error === 'string') {
+                errorMessage = msg.error;
+              } else if (msg.error && typeof msg.error === 'object' && 'message' in msg.error && typeof msg.error.message === 'string') {
+                errorMessage = msg.error.message;
               }
             }
           }
-
-          if (textParts.length > 0) {
+          if (!errorMessage && isError) {
+            errorMessage = 'API error occurred';
+          }
+          const stopReason = msg.stopReason || (isError ? 'error' : null);
+          if (textParts.length > 0 || isError) {
             const fullText = textParts.join('\n');
             const chatMessage: ChatMessage = {
               id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -3342,6 +3473,9 @@ export class OmpBridge {
               timestamp: typeof msg.completedAt === 'number'
                 ? msg.completedAt
                 : (typeof msg.timestamp === 'number' ? msg.timestamp : Date.now()),
+              stopReason,
+              errorMessage,
+              isError: Boolean(isError),
             };
             if (this.window && !this.window.isDestroyed()) {
               this.window.webContents.send('omp:message-complete', chatMessage);
@@ -3670,7 +3804,7 @@ export class OmpBridge {
           }
 
           const rawPath = entry.path;
-          if (!rawPath) return;
+          if (!rawPath || (typeof rawPath === 'string' && rawPath.includes('://'))) return;
 
           const isDelete = entry.op === 'delete';
           if (!isDelete && !entry.diff && entry.oldText == null && entry.newText == null) {
@@ -3711,7 +3845,7 @@ export class OmpBridge {
       }
 
       const rawPath = details.path || (toolCall?.params?.path as string) || ((frame as any).args?.path as string);
-      if (!rawPath) return [];
+      if (!rawPath || (typeof rawPath === 'string' && rawPath.includes('://'))) return [];
 
       const isDelete = details.op === 'delete';
       if (!isDelete && !details.diff && details.oldText == null && details.newText == null) {
@@ -3749,7 +3883,7 @@ export class OmpBridge {
       const args = (toolCall?.params || (frame as any).args || {}) as Record<string, any>;
       const details = (frame.result as any)?.details as Record<string, any> | undefined;
       const rawPath = (details?.resolvedPath as string) || (args?.path as string);
-      if (!rawPath) return [];
+      if (!rawPath || (typeof rawPath === 'string' && rawPath.includes('://'))) return [];
 
       const filePath = path.isAbsolute(rawPath) ? rawPath : path.resolve(baseDir, rawPath);
       const relativePath = this.workspacePath ? path.relative(this.workspacePath, filePath) : (args?.path || rawPath);
