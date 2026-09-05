@@ -14,6 +14,25 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-06 — Feature: Resizable Right Sidebar with Persistence & Webview Trap Prevention
+- **State:**
+  - **Implementation:**
+    - `src/utils/resizable.ts`: Cung cấp các hàm thuần túy `clampWidth`, `calculateResizedWidth`, `loadPersistedWidth`, `savePersistedWidth` phục vụ tính toán và lưu trữ chiều rộng sidebar.
+    - `src/hooks/useResizable.ts`: Custom hook quản lý trạng thái kéo dãn (`isDragging`, `width`, `startResize`, `resetWidth`), hỗ trợ đồng bộ `requestAnimationFrame` cho 60/120fps mượt mà, tự động cập nhật lại bounds khi resize window và lưu vào `localStorage`.
+    - `src/App.tsx`: Tích hợp thanh kéo `cursor-col-resize` ở mép trái right sidebar, gắn overlay full-screen chặn webview/monaco bắt chuột khi đang kéo, tắt animation transition trong lúc kéo và hỗ trợ nhấp đúp để đặt lại kích thước mặc định (`480px`).
+    - `shared/i18n/{vi,en}.ts`: Bổ sung key `inspector.resizeHandle` (3442 keys, parity 100%).
+    - `scripts/verify-resizable-sidebar.mjs`: Test suite 15/15 checks (math clamp, drag direction, localStorage persistence, source contracts, i18n parity).
+    - `package.json`: Thêm script `test:resizable-sidebar` và cập nhật chuỗi `test`.
+  - **Verification:**
+    - `npm run test:resizable-sidebar`: 15 passed, 0 failed.
+    - `npm run test:i18n`: 3442 passed, 0 failed.
+    - `npm run test:center-chat-layout`: 99 passed, 0 failed.
+    - `npm run test:browser-panel`: 6 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng trải nghiệm kéo dãn sidebar trực tiếp trên ứng dụng.
+- **Refs:** `scripts/verify-resizable-sidebar.mjs`
+
 ## 2026-09-05 — Fix: Large Chunked RPC Frames & Compaction Fallback Causing Blank Chat History
 - **State:**
   - **Root Cause Identified & Fixed:**

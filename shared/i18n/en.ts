@@ -1661,6 +1661,7 @@ export const en: Record<I18nKey, string> = {
   'inspector.collapse': 'Collapse Inspector',
   'inspector.close': 'Close Inspector',
   'inspector.shortcut': 'Shortcut: ⌘⇧B',
+  'inspector.resizeHandle': 'Drag to resize (double-click to reset)',
   'inspector.artifacts.outputs': 'Outputs ({count})',
   'inspector.artifacts.sources': 'Sources ({count})',
   'inspector.artifacts.backToOverview': 'Back to list',

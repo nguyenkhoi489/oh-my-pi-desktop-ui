@@ -1659,6 +1659,7 @@ export const vi = {
   'inspector.collapse': 'Thu gọn Inspector',
   'inspector.close': 'Đóng Inspector',
   'inspector.shortcut': 'Phím tắt: ⌘⇧B',
+  'inspector.resizeHandle': 'Kéo để co dãn (nhấp đúp để đặt lại)',
   'inspector.artifacts.outputs': 'Đầu ra ({count})',
   'inspector.artifacts.sources': 'Tệp đính kèm ({count})',
   'inspector.artifacts.backToOverview': 'Quay lại danh sách',

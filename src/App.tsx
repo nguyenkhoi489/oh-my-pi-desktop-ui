@@ -19,6 +19,7 @@ import { CommitModal } from './components/Modals/CommitModal';
 import { useI18n } from './i18n/I18nProvider';
 import { UnsavedChangesModal } from './components/Canvas/UnsavedChangesModal';
 import { SessionStatsPanel } from './components/HeaderBar/SessionStatsPanel';
+import { useResizable } from './hooks/useResizable';
 
 export function App() {
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -29,6 +30,17 @@ export function App() {
   const [isOmpModalOpen, setIsOmpModalOpen] = useState<boolean>(false);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(true);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(false);
+  const {
+    width: rightSidebarWidth,
+    isDragging: isRightSidebarDragging,
+    startResize: startRightSidebarResize,
+    resetWidth: resetRightSidebarWidth,
+  } = useResizable({
+    initialWidth: 480,
+    minWidth: 340,
+    storageKey: 'omp_right_sidebar_width',
+    direction: 'left',
+  });
   type SidebarOrigin = 'manual' | 'manual_closed' | 'auto_diff' | 'auto_browser' | 'auto_subagent' | null;
   const sidebarOriginRef = useRef<SidebarOrigin>(null);
   const userClosedInspectorRef = useRef<boolean>(false);
@@ -966,15 +978,28 @@ export function App() {
         </div>
         {/* Right Copilot / Inspector Panel */}
         <div
-          className={`bg-panel border-l border-border flex flex-col shrink-0 select-none transition-all duration-200 overflow-hidden ${
+          className={`bg-panel border-l border-border flex flex-col shrink-0 select-none relative overflow-hidden ${
+            isRightSidebarDragging ? 'transition-none' : 'transition-all duration-200'
+          } ${
             isRightSidebarOpen
-              ? rightSidebarView === 'inspector'
-                ? 'w-[480px] opacity-100'
-                : 'w-[420px] opacity-100'
-              : 'w-0 opacity-0 border-l-0 pointer-events-none'
+              ? 'opacity-100'
+              : 'opacity-0 border-l-0 pointer-events-none'
           }`}
+          style={{ width: isRightSidebarOpen ? `${rightSidebarWidth}px` : 0 }}
         >
-          <div className={`${rightSidebarView === 'inspector' ? 'w-[480px]' : 'w-[420px]'} h-full flex flex-col`}>
+          {/* Resize Handle */}
+          {isRightSidebarOpen && (
+            <div
+              onMouseDown={startRightSidebarResize}
+              onDoubleClick={resetRightSidebarWidth}
+              className="absolute left-0 top-0 bottom-0 w-2 -translate-x-1 cursor-col-resize z-30 group flex items-center justify-center hover:bg-codex-accent/40 active:bg-codex-accent transition-colors"
+              title={t('inspector.resizeHandle')}
+            >
+              <div className="w-0.5 h-8 rounded-full bg-transparent group-hover:bg-codex-accent/80 transition-colors" />
+            </div>
+          )}
+
+          <div className="h-full flex flex-col" style={{ width: `${rightSidebarWidth}px` }}>
             {rightSidebarView === 'inspector' ? (
               <InspectorPanel
                 isOpen={isRightSidebarOpen}
@@ -1048,6 +1073,10 @@ export function App() {
           </div>
         </div>
       </div>
+      {/* Fullscreen transparent overlay while resizing to prevent webview/monaco mouse event interception */}
+      {isRightSidebarDragging && (
+        <div className="fixed inset-0 z-50 cursor-col-resize select-none pointer-events-auto bg-transparent" />
+      )}
 
       {/* 3. Global Modals */}
       <OmnibarModal
