@@ -33,6 +33,7 @@ interface ChatHistoryProps {
   status?: OmpAgentStatus;
   onBranchSession?: (entryId: string) => void;
   onOpenFile?: (filePath: string) => void;
+  onOpenBrowser?: (url: string) => void;
   onRetry?: (prompt?: string) => void;
   onRepairSession?: () => void;
 }
@@ -44,8 +45,8 @@ interface ErrorAssistantCardProps {
   onRetry?: () => void;
   onRepair?: () => void;
   onRollback?: () => void;
+  onOpenBrowser?: (url: string) => void;
 }
-
 const ErrorAssistantCard: React.FC<ErrorAssistantCardProps> = ({
   errorMessage,
   stopReason,
@@ -53,6 +54,7 @@ const ErrorAssistantCard: React.FC<ErrorAssistantCardProps> = ({
   onRetry,
   onRepair,
   onRollback,
+  onOpenBrowser,
 }) => {
   const { t } = useI18n();
   const [showDetails, setShowDetails] = useState<boolean>(false);
@@ -83,7 +85,7 @@ const ErrorAssistantCard: React.FC<ErrorAssistantCardProps> = ({
 
       {content && content.trim().length > 0 && (
         <div className="text-slate-800 dark:text-zinc-200">
-          <MarkdownRenderer content={content} />
+          <MarkdownRenderer content={content} onOpenUrl={onOpenBrowser} />
         </div>
       )}
 
@@ -224,6 +226,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
   onOpenFile,
   onRetry,
   onRepairSession,
+  onOpenBrowser,
 }) => {
   const { t } = useI18n();
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
@@ -469,11 +472,12 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                       }
                     : undefined
                 }
+                onOpenBrowser={onOpenBrowser}
               />
             ) : (
               msg.content && msg.content.trim().length > 0 && (
                 <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed bg-transparent text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
-                  <MarkdownRenderer content={msg.content} />
+                  <MarkdownRenderer content={msg.content} onOpenUrl={onOpenBrowser} />
                 </div>
               )
             )}
@@ -490,7 +494,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
       {activeToolCalls.length > 0 && (
         <div className="space-y-1.5">
           {activeToolCalls.map((tc) => (
-            <ToolCallCard key={tc.id} toolCall={tc} />
+            <ToolCallCard key={tc.id} toolCall={tc} onOpenBrowser={onOpenBrowser} />
           ))}
         </div>
       )}
@@ -507,7 +511,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
             </span>
           </div>
           <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
-            <MarkdownRenderer content={currentStreamText} isStreaming={true} />
+            <MarkdownRenderer content={currentStreamText} isStreaming={true} onOpenUrl={onOpenBrowser} />
           </div>
         </div>
       )}

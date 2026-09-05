@@ -451,7 +451,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
               {/* 2. Markdown Preview (Visible in 'preview' or 'split' modes) */}
               {isMarkdown && (markdownMode === 'preview' || markdownMode === 'split') && (
                 <div
-                  className={`h-full min-h-0 overflow-y-auto bg-background ${
+                  className={`h-full min-h-0 overflow-y-auto bg-background text-slate-900 dark:text-zinc-100 ${
                     markdownMode === 'split' ? 'w-1/2' : 'w-full'
                   }`}
                 >

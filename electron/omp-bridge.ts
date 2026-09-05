@@ -38,6 +38,7 @@ import type { SettingsStore } from './settings-store.ts';
 import { NdjsonFramer } from './ndjson-framer.ts';
 import { RpcFrameLogger } from './rpc-frame-logger.ts';
 import { buildLaunchArgs } from './launch-args.ts';
+import { RpcChunkReassembler } from './rpc-chunk-reassembler.ts';
 import { HostToolRegistry, HostUriRouter } from './host-tools.ts';
 import type {
   OmpFrame,
@@ -222,6 +223,7 @@ export class OmpBridge {
 
   private framer: NdjsonFramer;
   private frameLogger: RpcFrameLogger;
+  private chunkReassembler: RpcChunkReassembler = new RpcChunkReassembler();
   private thinkingAccumulator: ThinkingAccumulator = new ThinkingAccumulator();
   private currentTurnId: string | null = null;
   private workspacePath: string | null = null;
@@ -830,6 +832,7 @@ export class OmpBridge {
     this.rejectAllPending(tm('electron.bridge.startingNewProcess'));
     this.frameLogger.truncate();
     this.framer.reset();
+    this.chunkReassembler.reset();
     this.thinkingAccumulator.reset();
     this.activeToolCalls.clear();
     this.writeSnapshots.clear();
@@ -2048,6 +2051,7 @@ export class OmpBridge {
             timestamp,
             updatedAt: updatedAt || timestamp,
             active: isActive,
+            projectPath: this.workspacePath || undefined,
           });
         } catch {
           // File unreadable / corrupted -> skip safely, do not throw
@@ -2106,6 +2110,7 @@ export class OmpBridge {
       return { success: false, error: 'session_busy' };
     }
     try {
+      this.currentSessionFile = sessionPath;
       const cmd: SwitchSessionCommand = {
         type: 'switch_session',
         id: this.generateId(),
@@ -2121,8 +2126,9 @@ export class OmpBridge {
         return { success: false, error: 'cancelled' };
       }
       return { success: false, error: res.error || 'Failed to switch session' };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Error executing switch_session' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing switch_session' };
     }
   }
 
@@ -2384,12 +2390,23 @@ export class OmpBridge {
     };
     this.emit('omp:notification', notif);
   }
-  public async loadHistory(): Promise<{
+  public async loadHistory(customSessionPath?: string): Promise<{
     success: boolean;
     messages?: ChatMessage[];
     error?: string;
   }> {
+    if (customSessionPath && !this.currentSessionFile) {
+      this.currentSessionFile = customSessionPath;
+    }
+    const targetSessionFile = customSessionPath || this.currentSessionFile;
     if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
+      if (targetSessionFile && fs.existsSync(targetSessionFile)) {
+        const diskMessages = this.readSessionMessagesFromDisk(targetSessionFile);
+        if (diskMessages.length > 0) {
+          const messages = this.translateHistoryMessages(diskMessages);
+          return { success: true, messages };
+        }
+      }
       return { success: false, error: 'OMP process is not ready or offline' };
     }
     if (this.status === 'thinking' || this.status === 'streaming' || this.status === 'executing_tool') {
@@ -2402,19 +2419,34 @@ export class OmpBridge {
         id: this.generateId(),
       });
       if (!firstPage.success || !firstPage.data) {
+        if (targetSessionFile && fs.existsSync(targetSessionFile)) {
+          const diskMessages = this.readSessionMessagesFromDisk(targetSessionFile);
+          if (diskMessages.length > 0) {
+            const messages = this.translateHistoryMessages(diskMessages);
+            return { success: true, messages };
+          }
+        }
         return { success: false, error: firstPage.error || 'Failed to load messages page' };
       }
 
       allRawMessages = Array.isArray(firstPage.data.messages) ? [...firstPage.data.messages] : [];
       const totalMessages = firstPage.data.totalMessages ?? allRawMessages.length;
-      let cursor = firstPage.data.cursor;
+      let nextCursor: string | number | undefined =
+        typeof firstPage.data.nextCursor === 'string'
+          ? firstPage.data.nextCursor
+          : (firstPage.data.cursor as string | number | undefined);
 
-      while (allRawMessages.length < totalMessages && typeof cursor === 'number') {
-        const prevCursor = cursor;
+      while (
+        allRawMessages.length < totalMessages &&
+        nextCursor !== undefined &&
+        nextCursor !== null &&
+        nextCursor !== ''
+      ) {
+        const prevCursor = nextCursor;
         const nextPage = await this.sendCommand<GetMessagesPageResponseData>({
           type: 'get_messages_page',
           id: this.generateId(),
-          cursor,
+          cursor: nextCursor,
         });
         if (
           !nextPage.success ||
@@ -2425,17 +2457,64 @@ export class OmpBridge {
           break;
         }
         allRawMessages.push(...nextPage.data.messages);
-        if (nextPage.data.cursor === prevCursor) {
+        const incomingCursor =
+          typeof nextPage.data.nextCursor === 'string'
+            ? nextPage.data.nextCursor
+            : (nextPage.data.cursor as string | number | undefined);
+        if (
+          incomingCursor === undefined ||
+          incomingCursor === null ||
+          incomingCursor === '' ||
+          incomingCursor === prevCursor
+        ) {
           break;
         }
-        cursor = nextPage.data.cursor;
+        nextCursor = incomingCursor;
+      }
+
+      // Fallback defense-in-depth: If allRawMessages is empty but session file exists on disk
+      if (allRawMessages.length === 0 && targetSessionFile && fs.existsSync(targetSessionFile)) {
+        allRawMessages = this.readSessionMessagesFromDisk(targetSessionFile);
       }
 
       const messages = this.translateHistoryMessages(allRawMessages);
       return { success: true, messages };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Error executing loadHistory' };
+    } catch (err: unknown) {
+      if (targetSessionFile && fs.existsSync(targetSessionFile)) {
+        try {
+          const diskMessages = this.readSessionMessagesFromDisk(targetSessionFile);
+          if (diskMessages.length > 0) {
+            const messages = this.translateHistoryMessages(diskMessages);
+            return { success: true, messages };
+          }
+        } catch {}
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Error executing loadHistory' };
     }
+  }
+
+  public readSessionMessagesFromDisk(filePath: string): AgentMessage[] {
+    const rawMessages: AgentMessage[] = [];
+    try {
+      const fileContent = fs.readFileSync(filePath, 'utf-8');
+      const lines = fileContent.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed.type === 'message' && parsed.message) {
+            rawMessages.push(parsed.message);
+          } else if (parsed.role || parsed.type === 'custom_message' || parsed.customType || parsed.type === 'compaction') {
+            rawMessages.push(parsed.message || parsed);
+          }
+        } catch {}
+      }
+    } catch (err) {
+      console.warn('[OmpBridge] Failed to read session messages from disk:', err);
+    }
+    return rawMessages;
   }
 
   public translateHistoryMessages(rawMessages: AgentMessage[]): ChatMessage[] {
@@ -2447,6 +2526,16 @@ export class OmpBridge {
       if (!msg || typeof msg !== 'object') continue;
 
       const role = msg.role;
+      const customType = (msg as any).customType || (msg as any).type;
+      const attribution = (msg as any).attribution;
+      const isSkillPrompt =
+        customType === 'skill-prompt' ||
+        Boolean((msg as any).details && (msg as any).details.name && (msg as any).details.args);
+      const isUserAttributed =
+        attribution === 'user' ||
+        isSkillPrompt ||
+        role === 'user';
+
       const timestamp =
         typeof msg.completedAt === 'number'
           ? msg.completedAt
@@ -2454,10 +2543,17 @@ export class OmpBridge {
           ? msg.timestamp
           : Date.now();
 
-      if (role === 'user') {
+      if (isUserAttributed && role !== 'assistant' && role !== 'toolResult' && role !== 'fileMention') {
         let userText = '';
-        if (typeof msg.content === 'string') {
-          userText = msg.content;
+        if (typeof (msg as any).details?.args === 'string' && (msg as any).details.args.trim()) {
+          userText = (msg as any).details.args.trim();
+        } else if (typeof msg.content === 'string') {
+          const userMatch = msg.content.match(/(?:^|\n)User:\s*([\s\S]*)$/i);
+          if (userMatch && userMatch[1]?.trim()) {
+            userText = userMatch[1].trim();
+          } else if (!msg.content.startsWith('<system-notice>') && !msg.content.startsWith('<advisory')) {
+            userText = msg.content;
+          }
         } else if (Array.isArray(msg.content)) {
           const parts: string[] = [];
           for (const b of msg.content) {
@@ -2475,14 +2571,32 @@ export class OmpBridge {
           userText = (msg as any).text;
         }
 
-        result.push({
-          id: `msg-user-${timestamp}-${i}`,
-          role: 'user',
-          content: userText,
-          timestamp,
-          steering: Boolean(msg && typeof msg === 'object' && 'steering' in msg && msg.steering) || undefined,
-        });
-      } else if (role === 'system') {
+        if (userText.trim() || role === 'user') {
+          result.push({
+            id: `msg-user-${timestamp}-${i}`,
+            role: 'user',
+            content: userText,
+            timestamp,
+            steering: Boolean(msg && typeof msg === 'object' && 'steering' in msg && msg.steering) || undefined,
+          });
+          continue;
+        }
+      }
+      const msgObj = typeof msg === 'object' && msg !== null ? (msg as Record<string, unknown>) : null;
+      if (role === 'compactionSummary' || msgObj?.type === 'compaction') {
+        const summaryText = typeof msgObj?.summary === 'string' ? msgObj.summary : (typeof msgObj?.shortSummary === 'string' ? msgObj.shortSummary : '');
+        if (summaryText.trim()) {
+          result.push({
+            id: `msg-compaction-${timestamp}-${i}`,
+            role: 'system',
+            content: `**Compaction Summary**\n\n${summaryText.trim()}`,
+            timestamp,
+          });
+        }
+        continue;
+      }
+
+      if (role === 'system') {
         let systemText = '';
         if (typeof msg.content === 'string') {
           systemText = msg.content;
@@ -2793,6 +2907,7 @@ export class OmpBridge {
     this.thinkingAccumulator.reset();
     this.activeToolCalls.clear();
     this.writeSnapshots.clear();
+    this.chunkReassembler.reset();
     for (const id of this.pendingUiRequests.keys()) {
       this.emit('omp:ui-request-cancel', id);
     }
@@ -2813,7 +2928,14 @@ export class OmpBridge {
   private handleStdoutData(data: string) {
     const frames = this.framer.push(data);
     for (const frame of frames) {
-      this.dispatchInboundFrame(frame as OmpInboundFrame);
+      if (frame.type === 'rpc_chunk') {
+        const reassembled = this.chunkReassembler.push(frame);
+        if (reassembled) {
+          this.dispatchInboundFrame(reassembled as OmpInboundFrame);
+        }
+      } else {
+        this.dispatchInboundFrame(frame as OmpInboundFrame);
+      }
     }
   }
 
@@ -2825,6 +2947,10 @@ export class OmpBridge {
     if (this.lifecycleState === 'awaiting_ready' && frame.type === 'ready') {
       if (typeof frame.maxFrameBytes === 'number' && frame.maxFrameBytes > 0) {
         this.framer.setMaxFrameBytes(frame.maxFrameBytes);
+      }
+      const rawReady = frame as Record<string, unknown>;
+      if (typeof rawReady.maxReassembledFrameBytes === 'number' && rawReady.maxReassembledFrameBytes > 0) {
+        this.chunkReassembler.setMaxReassembledBytes(rawReady.maxReassembledFrameBytes);
       }
 
       this.lifecycleState = 'negotiating';

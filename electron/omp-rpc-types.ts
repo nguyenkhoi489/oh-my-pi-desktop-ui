@@ -31,6 +31,16 @@ export interface ReadyFrame {
   [key: string]: unknown;
 }
 
+export interface RpcChunkFrame {
+  type: 'rpc_chunk';
+  chunkId: string;
+  index: number;
+  count: number;
+  byteLength: number;
+  data: string;
+  [key: string]: unknown;
+}
+
 export interface ResponseFrame<T = unknown> {
   type: 'response';
   id?: string;
@@ -205,7 +215,7 @@ export interface GetSubagentMessagesCommand {
 export interface GetMessagesPageCommand {
   type: 'get_messages_page';
   id?: string;
-  cursor?: number;
+  cursor?: string | number;
   limit?: number;
   page?: number;
   [key: string]: unknown;
@@ -516,7 +526,7 @@ export interface AgentMessageUsage {
 
 export interface AgentMessage {
   role?: 'user' | 'assistant' | 'system' | 'toolResult' | string;
-  content?: AgentContentBlock[];
+  content?: AgentContentBlock[] | string;
   api?: string;
   provider?: string;
   model?: string;
@@ -945,6 +955,7 @@ export type OmpEventFrame =
 
 export type OmpInboundFrame =
   | ReadyFrame
+  | RpcChunkFrame
   | ResponseFrame
   | OmpEventFrame
   | UnknownFrame;
@@ -1025,7 +1036,8 @@ export interface GetMessagesPageResponseData {
   sessionId?: string;
   leafId?: string;
   messageCount?: number;
-  cursor?: number;
+  nextCursor?: string;
+  cursor?: string | number;
   [key: string]: unknown;
 }
 export interface GetSubagentMessagesResponseData {

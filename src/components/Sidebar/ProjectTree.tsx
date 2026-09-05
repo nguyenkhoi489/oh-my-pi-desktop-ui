@@ -7,7 +7,7 @@ import {
   ChevronRight,
   ChevronDown,
   FolderGit2,
-  PanelLeftClose,
+  RotateCw,
   ChevronsDownUp,
   ChevronsUpDown,
   Terminal,
@@ -28,6 +28,7 @@ interface ProjectTreeProps {
   selectedFile: WorkspaceFile | null;
   onSelectFile: (file: WorkspaceFile) => void;
   onCollapseSidebar?: () => void;
+  onReload?: () => void;
   onAddToChat?: (file: WorkspaceFile) => void;
   onDeleteFile?: (file: WorkspaceFile) => void | Promise<void>;
 }
@@ -40,6 +41,7 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
   selectedFile,
   onSelectFile,
   onCollapseSidebar,
+  onReload,
   onAddToChat,
   onDeleteFile,
 }) => {
@@ -275,15 +277,23 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
             <ChevronsDownUp className="w-3.5 h-3.5" />
           </button>
 
-          {onCollapseSidebar && (
+          {onReload ? (
+            <button
+              onClick={onReload}
+              className="p-1 rounded hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors cursor-pointer ml-0.5"
+              title={t('projectTree.reload')}
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+            </button>
+          ) : onCollapseSidebar ? (
             <button
               onClick={onCollapseSidebar}
               className="p-1 rounded hover:bg-surface-highlight text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors cursor-pointer ml-0.5"
               title={t('projectTree.collapseSidebar')}
             >
-              <PanelLeftClose className="w-3.5 h-3.5" />
+              <RotateCw className="w-3.5 h-3.5" />
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 

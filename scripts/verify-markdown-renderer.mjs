@@ -13,7 +13,8 @@
  * 9. GFM Task List checkboxes (- [ ] and - [x]).
  */
 
-import { parseMarkdown, defaultMarkedInstance } from '../src/utils/markdownParser.ts';
+import fs from 'node:fs';
+import { parseMarkdown, defaultMarkedInstance, sanitizeMarkdownHtml } from '../src/utils/markdownParser.ts';
 
 let passed = 0;
 let failed = 0;
@@ -49,7 +50,7 @@ console.log();
 console.log('[Test 2] Inline Code, Bold & Formatting');
 {
   const html = defaultMarkedInstance.parse('Here is `inline-code` and **bold text** with *italic*.');
-  assert(html.includes('<code class="px-1.5 py-0.5 rounded bg-rose-500/10'), 'Inline code has styled background & border');
+  assert(html.includes('<code class="px-1.5 py-0.5 rounded bg-slate-100'), 'Inline code has styled neutral background & border');
   assert(html.includes('<strong>bold text</strong>'), 'Bold text rendered as <strong>');
   assert(html.includes('<em>italic</em>'), 'Italic text rendered as <em>');
 }
@@ -177,6 +178,11 @@ flowchart TD
 
   const html = parseMarkdown(mermaidSample, false);
   assert(html.includes('class="mermaid-block-wrapper'), 'Mermaid block has wrapper container');
+  assert(html.includes('class="mermaid-viewport'), 'Mermaid has interactive viewport container');
+  assert(html.includes('class="mermaid-controls'), 'Mermaid has floating controls toolbar');
+  assert(html.includes('class="mermaid-zoom-in-btn'), 'Mermaid zoom in button present');
+  assert(html.includes('class="mermaid-zoom-out-btn'), 'Mermaid zoom out button present');
+  assert(html.includes('class="mermaid-reset-btn'), 'Mermaid reset view button present');
   assert(html.includes('class="mermaid-diagram-container'), 'Mermaid diagram container present');
   assert(html.includes('data-mermaid="flowchart%20TD'), 'Container encodes raw diagram source for client render');
   assert(html.includes('class="view-mermaid-source-btn'), 'Toggle source code button present');
@@ -207,18 +213,74 @@ console.log('[Test 10] Localization of Markdown Buttons & Labels');
     if (key === 'markdown.mermaid.code') return 'Mã nguồn';
     if (key === 'markdown.copy') return 'Sao chép';
     if (key === 'markdown.mermaid.loading') return 'Đang tải sơ đồ...';
+    if (key === 'markdown.mermaid.zoomIn') return 'Phóng to sơ đồ';
+    if (key === 'markdown.mermaid.zoomOut') return 'Thu nhỏ sơ đồ';
+    if (key === 'markdown.mermaid.reset') return 'Đặt lại kích thước';
     return key;
   };
   const viHtml = parseMarkdown(sample, { t: mockViT, sanitize: false });
   assert(viHtml.includes('title="Xem mã nguồn"'), 'Mermaid view code button localized');
   assert(viHtml.includes('Mã nguồn'), 'Mermaid code label localized');
   assert(viHtml.includes('Đang tải sơ đồ...'), 'Mermaid loading text localized');
+  assert(viHtml.includes('title="Phóng to sơ đồ"'), 'Mermaid zoom in button localized');
+  assert(viHtml.includes('title="Thu nhỏ sơ đồ"'), 'Mermaid zoom out button localized');
+  assert(viHtml.includes('title="Đặt lại kích thước"'), 'Mermaid reset button localized');
   assert(viHtml.includes('Sao chép'), 'Copy code button text localized');
-
   const defaultHtml = parseMarkdown(sample, { sanitize: false });
   assert(defaultHtml.includes('class="copy-code-btn'), 'Default render includes copy button');
 }
 console.log();
+
+// ----------------------------------------------------
+// Test 11: Mermaid Sanitization & Theme Synchronization
+// ----------------------------------------------------
+console.log('[Test 11] Mermaid Sanitization & Theme Synchronization');
+{
+  const rendererSource = fs.readFileSync('src/components/Common/MarkdownRenderer.tsx', 'utf-8');
+  assert(rendererSource.includes('HTML_INTEGRATION_POINTS'), 'MarkdownRenderer configures HTML_INTEGRATION_POINTS for foreignobject');
+  assert(rendererSource.includes('foreignobject'), 'MarkdownRenderer whitelists foreignobject in DOMPurify');
+  assert(rendererSource.includes('data-rendered-theme'), 'MarkdownRenderer tracks data-rendered-theme to re-render on theme toggle');
+  assert(rendererSource.includes('themeVariables'), 'MarkdownRenderer supplies custom themeVariables for dark/light parity');
+  assert(rendererSource.includes('clusterBkg'), 'ThemeVariables customizes cluster background avoiding harsh yellow');
+  assert(rendererSource.includes('MutationObserver'), 'MarkdownRenderer observes document dark class for instant theme sync');
+  assert(rendererSource.includes('MutationObserver'), 'MarkdownRenderer observes document dark class for instant theme sync');
+  assert(rendererSource.includes('mermaid-zoom-in-btn'), 'MarkdownRenderer handles zoom in click');
+  assert(rendererSource.includes('mermaid-zoom-out-btn'), 'MarkdownRenderer handles zoom out click');
+  assert(rendererSource.includes('mermaid-reset-btn'), 'MarkdownRenderer handles reset click');
+  assert(rendererSource.includes('handleMouseDown'), 'MarkdownRenderer enables drag-to-pan on viewport');
+  assert(rendererSource.includes('handleDoubleClick'), 'MarkdownRenderer supports double-click to reset view');
+  assert(rendererSource.includes('wheel'), 'MarkdownRenderer supports Ctrl/Cmd + wheel zoom');
+  const canvasRendererSource = fs.readFileSync('src/components/Canvas/MarkdownRenderer.tsx', 'utf-8');
+  assert(canvasRendererSource.includes('theme={theme}'), 'Canvas MarkdownRenderer forwards theme prop to CommonMarkdownRenderer');
+
+  const parserSource = fs.readFileSync('src/utils/markdownParser.ts', 'utf-8');
+  assert(parserSource.includes('foreignobject'), 'markdownParser SANITIZE_CONFIG whitelists foreignobject');
+  assert(parserSource.includes('HTML_INTEGRATION_POINTS'), 'markdownParser SANITIZE_CONFIG enables foreignobject integration points');
+
+  // Verify sanitizeMarkdownHtml preserves foreignObject and internal elements when DOMPurify is available
+  const mockForeignObject = '<svg><foreignObject width="100" height="50"><div xmlns="http://www.w3.org/1999/xhtml"><span>Kiến trúc phân tầng</span></div></foreignObject></svg>';
+  const sanitized = sanitizeMarkdownHtml(mockForeignObject);
+  assert(sanitized.includes('Kiến trúc phân tầng'), 'sanitizeMarkdownHtml preserves text inside foreignObject');
+}
+console.log();
+// ----------------------------------------------------
+// Test 12: In-App Browser Link Routing & Tooltip
+// ----------------------------------------------------
+console.log('[Test 12] In-App Browser Link Routing & Tooltip');
+{
+  const sample = '[Swagger UI](http://127.0.0.1:8090/docs)';
+  const html = parseMarkdown(sample, { sanitize: false });
+  assert(html.includes('href="http://127.0.0.1:8090/docs"'), 'Link parsed with target href');
+  assert(html.includes('cursor-pointer'), 'Link includes cursor-pointer class');
+  assert(html.includes('title='), 'Link includes title tooltip');
+
+  const rendererSource = fs.readFileSync('src/components/Common/MarkdownRenderer.tsx', 'utf-8');
+  assert(rendererSource.includes('omp:open-in-app-browser'), 'MarkdownRenderer dispatches omp:open-in-app-browser event');
+  assert(rendererSource.includes('onOpenUrl'), 'MarkdownRenderer supports onOpenUrl prop');
+  assert(rendererSource.includes('isModifierClick'), 'MarkdownRenderer checks for modifier click (Cmd/Ctrl)');
+}
+console.log();
+
 
 // Summary
 console.log('====================================================');

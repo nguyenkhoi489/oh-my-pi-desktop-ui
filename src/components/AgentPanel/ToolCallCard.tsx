@@ -18,6 +18,7 @@ import { useI18n } from '../../i18n/I18nProvider';
 
 interface ToolCallCardProps {
   toolCall: ToolCall;
+  onOpenBrowser?: (url: string) => void;
 }
 
 function extractBrowserMeta(toolCall: ToolCall) {
@@ -104,7 +105,7 @@ function extractScreenshotUrl(toolCall: ToolCall): string | null {
   return null;
 }
 
-export const ToolCallCard: React.FC<ToolCallCardProps> = ({ toolCall }) => {
+export const ToolCallCard: React.FC<ToolCallCardProps> = ({ toolCall, onOpenBrowser }) => {
   const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [lightboxOpen, setLightboxOpen] = useState<boolean>(false);
@@ -166,7 +167,19 @@ export const ToolCallCard: React.FC<ToolCallCardProps> = ({ toolCall }) => {
               </span>
             )}
             {browserMeta.browserUrl && (
-              <span className="text-[11px] text-slate-400 dark:text-zinc-500 truncate max-w-[160px] font-mono">
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (browserMeta.browserUrl) {
+                    onOpenBrowser?.(browserMeta.browserUrl);
+                    window.dispatchEvent(
+                      new CustomEvent('omp:open-in-app-browser', { detail: { url: browserMeta.browserUrl } })
+                    );
+                  }
+                }}
+                className="text-[11px] text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300 truncate max-w-[160px] font-mono cursor-pointer"
+                title={browserMeta.browserUrl}
+              >
                 {browserMeta.browserUrl}
               </span>
             )}

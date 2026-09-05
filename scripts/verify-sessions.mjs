@@ -501,8 +501,183 @@ console.log('[Test 6] repairSession & Assistant Error Frame Translation');
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
 console.log();
-console.log();
 
+// ----------------------------------------------------
+// Test 7: loadHistory Multi-page Pagination & Fallback
+// ----------------------------------------------------
+console.log('[Test 7] loadHistory Multi-page Pagination & Disk Fallback');
+{
+  const mockWindow = {
+    isDestroyed: () => false,
+    webContents: { send: () => {} },
+  };
+  const bridge = new OmpBridge(mockWindow);
+  bridge.lifecycleState = 'ready';
+  bridge.process = { stdin: { writable: true } };
+  bridge.status = 'idle';
+
+  const sentCommands = [];
+  bridge.sendCommand = async (cmd) => {
+    sentCommands.push(cmd);
+    if (cmd.type === 'get_messages_page') {
+      if (!cmd.cursor) {
+        return {
+          success: true,
+          data: {
+            messages: [
+              { role: 'user', content: 'Prompt turn 1', timestamp: 1000 },
+              { role: 'assistant', content: 'Reply turn 1', timestamp: 1100 },
+            ],
+            totalMessages: 5,
+            nextCursor: 'token-page-2-abc',
+          },
+        };
+      } else if (cmd.cursor === 'token-page-2-abc') {
+        return {
+          success: true,
+          data: {
+            messages: [
+              { role: 'user', content: 'Prompt turn 2', timestamp: 2000 },
+              { role: 'assistant', content: 'Reply turn 2', timestamp: 2100 },
+            ],
+            totalMessages: 5,
+            nextCursor: 'token-page-3-xyz',
+          },
+        };
+      } else if (cmd.cursor === 'token-page-3-xyz') {
+        return {
+          success: true,
+          data: {
+            messages: [
+              { role: 'user', content: 'Prompt turn 3', timestamp: 3000 },
+            ],
+            totalMessages: 5,
+          },
+        };
+      }
+    }
+    return { success: false, error: 'unknown_cmd' };
+  };
+
+  const pagedRes = await bridge.loadHistory();
+  assert(pagedRes.success === true, 'loadHistory with multi-page pagination succeeded');
+  assert(Array.isArray(pagedRes.messages) && pagedRes.messages.length === 5, `Aggregated all 5 messages across 3 pages (got ${pagedRes.messages?.length})`);
+  assert(sentCommands.length === 3, `Sent 3 get_messages_page commands for pagination (got ${sentCommands.length})`);
+  assert(sentCommands[0].cursor === undefined, 'First page command has undefined cursor');
+  assert(sentCommands[1].cursor === 'token-page-2-abc', 'Second page command passed nextCursor string');
+  assert(sentCommands[2].cursor === 'token-page-3-xyz', 'Third page command passed nextCursor string');
+
+  // Fallback test: when RPC returns empty messages but session file exists on disk
+  const tempDir = fs.mkdtempSync(path.join(__dirname, '../plans/temp-history-fallback-'));
+  const tempFile = path.join(tempDir, 'fallback-session.jsonl');
+  const diskLines = [
+    JSON.stringify({ type: 'session', id: 'sess-fb-1', timestamp: 1000 }),
+    JSON.stringify({
+      type: 'custom_message',
+      customType: 'skill-prompt',
+      details: { name: 'ak-advise', args: 'User prompt via skill args' },
+      attribution: 'user',
+      timestamp: 1001,
+    }),
+    JSON.stringify({
+      type: 'custom_message',
+      customType: 'skill-prompt',
+      content: '[IMPORTANT: User invoked skill]\n\nUser: User prompt via content regex',
+      timestamp: 1002,
+    }),
+    JSON.stringify({ type: 'message', message: { role: 'assistant', content: 'Disk assistant msg', timestamp: 1003 } }),
+  ];
+  fs.writeFileSync(tempFile, diskLines.join('\n') + '\n', 'utf-8');
+
+  bridge.currentSessionFile = tempFile;
+  bridge.sendCommand = async () => ({
+    success: true,
+    data: { messages: [], totalMessages: 0 },
+  });
+
+  const fbRes = await bridge.loadHistory();
+  assert(fbRes.success === true, 'loadHistory fallback succeeded');
+  assert(Array.isArray(fbRes.messages) && fbRes.messages.length === 3, `Fallback loaded 3 messages including skill prompts (got ${fbRes.messages?.length})`);
+  assert(fbRes.messages[0].role === 'user' && fbRes.messages[0].content === 'User prompt via skill args', 'Skill prompt with details.args translated to user role');
+  assert(fbRes.messages[1].role === 'user' && fbRes.messages[1].content === 'User prompt via content regex', 'Skill prompt with content regex translated to user role');
+  assert(fbRes.messages[2].role === 'assistant' && fbRes.messages[2].content === 'Disk assistant msg', 'Fallback assistant message content restored');
+
+  // RPC failure fallback: when sendCommand rejects or returns success: false
+  bridge.sendCommand = async () => {
+    throw new Error('Command timed out after 30000ms: get_messages_page');
+  };
+  const timeoutFallbackRes = await bridge.loadHistory();
+  assert(timeoutFallbackRes.success === true, 'loadHistory falls back to disk on RPC command timeout');
+  assert(timeoutFallbackRes.messages?.length === 3, 'Timeout fallback restored disk messages');
+
+  // Compaction summary translation test
+  const compactionRaw = [
+    {
+      role: 'compactionSummary',
+      summary: 'Archived prior discussion about database schema',
+      timestamp: 1000,
+    },
+    {
+      role: 'user',
+      content: 'Let us proceed with migrations',
+      timestamp: 2000,
+    },
+  ];
+  const compactionTranslated = bridge.translateHistoryMessages(compactionRaw);
+  assert(compactionTranslated.length === 2, 'Compaction summary translated to ChatMessages');
+  assert(compactionTranslated[0].role === 'system', 'Compaction summary message role is system');
+  assert(compactionTranslated[0].content.includes('Archived prior discussion'), 'Compaction summary content preserved');
+
+  // Chunked RPC response resolution test via handleStdoutData
+  const bridgeChunked = new OmpBridge(mockWindow);
+  bridgeChunked.lifecycleState = 'ready';
+  bridgeChunked.process = { stdin: { writable: true } };
+  bridgeChunked.status = 'idle';
+
+  const chunkedPayload = {
+    id: 'req_chunk_page',
+    type: 'response',
+    command: 'get_messages_page',
+    success: true,
+    data: {
+      messages: [{ role: 'user', content: 'Chunked test prompt', timestamp: 5000 }],
+      totalMessages: 1,
+    },
+  };
+  const chunkedBuf = Buffer.from(JSON.stringify(chunkedPayload), 'utf-8');
+  const c1 = {
+    type: 'rpc_chunk',
+    chunkId: 'rpc-chunk-test',
+    index: 0,
+    count: 2,
+    byteLength: chunkedBuf.length,
+    data: chunkedBuf.subarray(0, 40).toString('base64'),
+  };
+  const c2 = {
+    type: 'rpc_chunk',
+    chunkId: 'rpc-chunk-test',
+    index: 1,
+    count: 2,
+    byteLength: chunkedBuf.length,
+    data: chunkedBuf.subarray(40).toString('base64'),
+  };
+
+  bridgeChunked.writeFrame = (frame) => {
+    if (frame.type === 'get_messages_page') {
+      setTimeout(() => {
+        bridgeChunked['handleStdoutData'](JSON.stringify(c1) + '\n');
+        bridgeChunked['handleStdoutData'](JSON.stringify(c2) + '\n');
+      }, 10);
+    }
+  };
+  bridgeChunked['generateId'] = () => 'req_chunk_page';
+
+  const chunkedHistRes = await bridgeChunked.loadHistory();
+  assert(chunkedHistRes.success === true, 'loadHistory succeeded with chunked RPC stream');
+  assert(chunkedHistRes.messages?.[0]?.content === 'Chunked test prompt', 'Chunked messages parsed and translated');
+  fs.rmSync(tempDir, { recursive: true, force: true });
+}
+console.log();
 // Summary
 console.log(`=== Sessions Verification Summary: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

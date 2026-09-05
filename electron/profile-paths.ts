@@ -33,6 +33,40 @@ export function getProfileSessionDir(profile?: string | null, workspacePath?: st
   return path.join(sessionsBase, `--${sanitizedWs}--`);
 }
 
+// Resolve all possible session directory candidates for a workspace
+export function getProfileSessionDirCandidates(profile?: string | null, workspacePath?: string | null): string[] {
+  const base = getOmpBaseDir(profile);
+  const sessionsBase = path.join(base, 'agent', 'sessions');
+  if (!workspacePath) return [sessionsBase];
+
+  const home = getOmpHome();
+  const candidates: string[] = [];
+
+  // Candidate 1: Home-relative with single dash (OMP CLI standard: -Data-Web_Project-cooling)
+  if (workspacePath.startsWith(home)) {
+    const rel = path.relative(home, workspacePath);
+    candidates.push(path.join(sessionsBase, '-' + rel.replace(/[\\/]/g, '-')));
+    candidates.push(path.join(sessionsBase, '--' + rel.replace(/[\\/]/g, '-') + '--'));
+  }
+
+  // Candidate 2: Absolute clean with double dashes (--Users-nguyenkhoi-...)
+  const sanitizedWs = workspacePath.replace(/^[/\\]+/, '').replace(/[/\\:]+/g, '-');
+  candidates.push(path.join(sessionsBase, `--${sanitizedWs}--`));
+
+  // Candidate 3: Absolute clean with single dash (-Users-nguyenkhoi-...)
+  candidates.push(path.join(sessionsBase, `-${sanitizedWs}`));
+
+  // Candidate 4: Handle /private/tmp or /private/var on macOS
+  if (workspacePath.startsWith('/private/')) {
+    const nonPrivate = workspacePath.replace(/^\/private/, '');
+    const cleanNonPriv = nonPrivate.replace(/^[/\\]+/, '').replace(/[/\\:]+/g, '-');
+    candidates.push(path.join(sessionsBase, `--${cleanNonPriv}--`));
+    candidates.push(path.join(sessionsBase, `-${cleanNonPriv}`));
+  }
+
+  return Array.from(new Set(candidates));
+}
+
 // List all profiles on system
 export async function listProfiles(): Promise<string[]> {
   const profilesDir = path.join(getOmpHome(), '.omp', 'profiles');

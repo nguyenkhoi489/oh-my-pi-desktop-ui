@@ -93,21 +93,37 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
 
       if (!matchedProjectId) {
         for (const project of projects) {
-          const sanitized = project.path.replace(/^[\\/]/, '').replace(/[\\/]/g, '--');
-          if (session.path.includes(project.path) || session.path.includes(sanitized)) {
+          const sanitizedDoubleDash = project.path.replace(/^[\\/]/, '').replace(/[\\/]/g, '--');
+          const sanitizedSingleDash = project.path.replace(/[\\/]/g, '-');
+          const homeRelativeDash = project.path.replace(/^(\/Users\/[^/]+|\/home\/[^/]+)/, '').replace(/[\\/]/g, '-');
+          const projectName = project.path.split(/[\\/]/).filter(Boolean).pop();
+
+          if (
+            session.path.includes(project.path) ||
+            session.path.includes(sanitizedDoubleDash) ||
+            session.path.includes(sanitizedSingleDash) ||
+            (homeRelativeDash && session.path.includes(homeRelativeDash)) ||
+            (projectName && session.path.includes(`-${projectName}`))
+          ) {
             matchedProjectId = project.id;
             break;
           }
         }
       }
 
-      if (!matchedProjectId && activeProjectPath) {
+      if (!matchedProjectId && (session.active || activeSessionPath === session.path) && activeProjectId) {
+        matchedProjectId = activeProjectId;
+      } else if (!matchedProjectId && activeProjectPath) {
         const sanitizedActive = activeProjectPath.replace(/^[\\/]/, '').replace(/[\\/]/g, '--');
-        if (session.path.includes(activeProjectPath) || session.path.includes(sanitizedActive)) {
+        const homeRelativeActive = activeProjectPath.replace(/^(\/Users\/[^/]+|\/home\/[^/]+)/, '').replace(/[\\/]/g, '-');
+        if (
+          session.path.includes(activeProjectPath) ||
+          session.path.includes(sanitizedActive) ||
+          (homeRelativeActive && session.path.includes(homeRelativeActive))
+        ) {
           matchedProjectId = activeProjectId || undefined;
         }
       }
-
       if (matchedProjectId && map.has(matchedProjectId)) {
         map.get(matchedProjectId)!.push(session);
       } else {

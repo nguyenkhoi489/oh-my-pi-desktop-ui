@@ -14,6 +14,125 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-05 — Fix: Large Chunked RPC Frames & Compaction Fallback Causing Blank Chat History
+- **State:**
+  - **Root Cause Identified & Fixed:**
+    - **Unchecked RPC Chunking:** Khi tải lịch sử chat (`get_messages_page`) của phiên lớn (>1MB) hoặc phiên đã trải qua Compaction (như session `Chatbox` chứa `compactionSummary` và khối ảnh/tóm tắt với kích thước 1.38MB), OMP Engine tự động phân mảnh payload thành các frame `rpc_chunk` (base64). `OmpBridge` trước đây không xử lý `rpc_chunk`, dẫn tới frame phản hồi bị nuốt chửng, lệnh `sendCommand` timeout sau 30 giây, `loadHistory()` thất bại và frontend để trống khung chat.
+    - **Compaction Translation Gap:** `translateHistoryMessages` chưa nhận diện `role: 'compactionSummary'`, khiến các khối tóm tắt lịch sử bị bỏ qua.
+    - **Premature RPC Failure Exit:** Trong `loadHistory()`, nếu RPC thất bại hoặc timeout, hàm trả về ngay mà không kích hoạt đọc dự phòng từ file `.jsonl` trên đĩa.
+  - **Defense-in-Depth Implementation:**
+    - `electron/rpc-chunk-reassembler.ts`: Thêm class `RpcChunkReassembler` gom các frame `rpc_chunk` theo `chunkId`, ghép `Buffer` giải mã base64 và parse JSON thành frame hoàn chỉnh an toàn (hỗ trợ cả out-of-order chunks, giới hạn kích thước tối đa và tự động dọn dẹp các chunk treo).
+    - `electron/omp-bridge.ts`:
+      - Tích hợp `chunkReassembler` vào `handleStdoutData`, tự động ghép lại các frame `rpc_chunk` trước khi chuyển tiếp vào `dispatchInboundFrame`.
+      - Cập nhật `loadHistory(customSessionPath?: string)`: nếu RPC thất bại/timeout, tự động fallback sang `readSessionMessagesFromDisk()`, đảm bảo luôn tải được lịch sử nếu file `.jsonl` tồn tại trên đĩa.
+      - Hỗ trợ `compactionSummary` trong `translateHistoryMessages`: chuyển thành tin nhắn `system` kèm định dạng `**Compaction Summary**` dễ quan sát.
+      - Lưu ngay `this.currentSessionFile = sessionPath` trong `switchSession`.
+    - `electron/main.ts` & `electron/preload.ts`: chuyển tiếp `sessionPath` qua kênh IPC `omp:load-history`.
+    - `src/hooks/useOmpRpc.ts`: truyền `sessionPath` vào `loadHistory(sessionPath)` trong `switchSession` và `repairSession`.
+    - `electron/omp-rpc-types.ts`: bổ sung type `RpcChunkFrame` và thêm vào `OmpInboundFrame`.
+  - **Verification:**
+    - **Live Session Reproduction Test:** Tải trực tiếp session Chatbox thực tế (`01a07186-4035-7617-bd02-3d3e0858386c.jsonl`, 3.27MB) qua `OmpBridge`: thành công 100% trong 2.57s, trích xuất đủ 12 lượt hội thoại (kèm compaction summary).
+    - `scripts/verify-rpc-chunk-reassembler.mjs`: 28/28 checks passed (ordered, out-of-order, concurrent streams, guards).
+    - `scripts/verify-sessions.mjs`: 95/95 checks passed (thêm multi-page, timeout fallback sang đĩa, compaction translation, chunked RPC simulation).
+    - `npm run test:preload`: Electron preload is valid CommonJS.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng nghiệm thu trực tiếp trên ứng dụng OMP Agent.
+- **Refs:** `plans/reports/debug-260905-2305-session-history-chunking-load.md`
+
+## 2026-09-05 — Fix: Markdown Links Route to In-App Sidebar Browser Instead of External Tabs
+- **State:**
+  - **Root Cause Identified & Fixed:**
+    - **Markdown Links Native Open:** `src/utils/markdownParser.ts` sinh thẻ `<a target="_blank">` và `src/components/Common/MarkdownRenderer.tsx` không can thiệp sự kiện click trên thẻ `<a>`. Trình duyệt mặc định mở new tab ra trình duyệt ngoài (Chrome/Safari) thay vì In-App Browser ở sidebar phải.
+    - **BrowserPanel Isolation & Tab Visibility:** `BrowserPanel.tsx` chỉ dùng state khởi tạo `useState(initialUrl)`, không cập nhật khi URL thay đổi từ bên ngoài. `InspectorPanel.tsx` ẩn tab Browser khỏi thanh tab strip khi `currentTab !== 'browser'`, và `App.tsx` chưa định nghĩa callback điều hướng In-App Browser.
+  - **Defense-in-Depth Implementation:**
+    - `src/components/Common/MarkdownRenderer.tsx`: can thiệp `handleClick` trên thẻ `<a>`. Nếu là URL web (`http://`, `https://`, `//`):
+      - Nhấp thông thường: ngăn chặn mở tab ngoài (`preventDefault()`), kích hoạt `onOpenUrl` và phát sự kiện `omp:open-in-app-browser`.
+      - Giữ phím `Cmd` / `Ctrl` hoặc nhấp chuột giữa: tôn trọng ý định mở trình duyệt ngoài (`openExternal` / `window.open`).
+      - Hash anchor (`#`): cuộn mượt mà trong tài liệu.
+    - `src/components/AgentPanel/AgentPanel.tsx` & `ChatHistory.tsx`: truyền dẫn `onOpenBrowser` vào các khối markdown và cho phép click badge URL trong `ToolCallCard.tsx`.
+    - `src/components/Inspector/BrowserPanel.tsx`: thêm `urlNonce`, tự động gọi `navigateTo(initialUrl)` khi có liên kết mới được click (kể cả click lại cùng một link).
+    - `src/components/Inspector/InspectorPanel.tsx`: duy trì cờ `hasVisitedBrowser`, giữ tab Browser luôn hiện diện trên tab strip khi đã mở để dễ dàng chuyển đổi qua lại giữa `Changes` và `Browser`.
+    - `src/App.tsx`: quản lý `browserUrl`, `browserUrlNonce`, hàm `handleOpenBrowser`, lắng nghe sự kiện `omp:open-in-app-browser` và IPC `onOpenInAppBrowser`.
+    - `electron/main.ts`: cấu hình `mainWindow.webContents.setWindowOpenHandler` chặn đứng mọi yêu cầu mở cửa sổ ngoài ý muốn từ host window và chuyển tiếp về In-App Browser của renderer.
+    - `shared/i18n/{vi,en}.ts`: bổ sung key `markdown.openInSidebarBrowser` (3440 keys, parity 100%).
+  - **Verification:**
+    - `npm run test:markdown`: 78/78 passed (thêm Test 12 kiểm tra cú pháp thẻ link, tooltip, cursor-pointer, dispatch event).
+    - `npm run test:browser-panel`: 6/6 passed (thêm Test 6 kiểm tra `urlNonce`, `hasVisitedBrowser`, `handleOpenBrowser`, `setWindowOpenHandler`).
+    - `npm run test:i18n`: 3440/3440 passed.
+    - `npm run test:artifacts-hydration`: 41/41 passed; `test:center-chat-layout`: 99/99 passed; `test:multi-runtime-ui`: 10/10 passed.
+    - `npm run test:renderer-chat` (18/18), `test:renderer-tool-diff` (39/39), `test:renderer-ui-request` (55/55), `test:renderer-sessions` (51/51) passed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng kiểm chứng trực tiếp trên ứng dụng.
+- **Refs:** `plans/reports/fix-260905-2245-sidebar-browser-link-routing.md`
+
+## 2026-09-05 — Fix: Session History Pagination Truncation & Skill-Prompt User Text Restoration
+- **State:**
+  - **Root Cause Identified & Fixed:**
+    - **Pagination Truncation:** Khi tải lại session dài (như phiên Chatbox với 207 messages), hàm `loadHistory()` trong `electron/omp-bridge.ts` chỉ tải được trang 1 (79 messages) vì `omp` binary trả về `nextCursor` dạng Base64 string token, trong khi code cũ đọc `firstPage.data.cursor` (`undefined`) và kiểm tra `typeof cursor === 'number'`.
+    - **Missing User Prompts from Skills:** Trong các phiên làm việc có sử dụng skill (như `/ak:advise`, `/ak:plan`, `/ak:cook`), OMP lưu tin nhắn kích hoạt dưới dạng `type: 'custom_message'`, `customType: 'skill-prompt'`, `attribution: 'user'`. Hàm `translateHistoryMessages` trước đây chỉ lọc các message có `role === 'user'`, bỏ qua hoàn toàn `custom_message`, khiến đoạn text câu hỏi mở đầu quan trọng nhất của người dùng (và các câu prompt gọi skill tiếp theo) bị biến mất hoàn toàn khỏi giao diện.
+  - **Multi-page Pagination, Skill-Prompt Extraction & Fallback Implementation:**
+    - `electron/omp-rpc-types.ts`: sửa `GetMessagesPageCommand.cursor?: string | number`, `AgentMessage.content?: AgentContentBlock[] | string`, thêm `GetMessagesPageResponseData.nextCursor?: string`.
+    - `electron/omp-bridge.ts`:
+      - Trích xuất `nextCursor` và lặp `while (allRawMessages.length < totalMessages && Boolean(nextCursor))` qua từng trang RPC.
+      - Nhận diện `isUserAttributed` (`attribution === 'user'`, `customType === 'skill-prompt'`, hoặc `details.args`). Tự động trích xuất chuỗi prompt nguyên bản của người dùng từ `details.args` hoặc regex `User: <text>`, chuyển thành `ChatMessage` role `'user'` chuẩn xác.
+      - Cập nhật cả luồng đọc file `.jsonl` fallback để nạp đầy đủ `custom_message` khi RPC gặp sự cố.
+  - **Verification:**
+    - Kiểm tra thực tế trên phiên `Chatbox`: nạp đầy đủ **29 chat messages** (gồm cả câu mở đầu `hiện tại tôi đang có yêu cầu về xây dựng Trợ lý ảo...` ở Turn 0 và câu yêu cầu lập kế hoạch ở Turn 27).
+    - Cập nhật `Test 7` trong `scripts/verify-sessions.mjs` kiểm tra cả phân trang và trích xuất skill-prompt.
+    - `npm run test:sessions`: 88/88 passed; `npm run test:renderer-sessions`: 51/51 passed; `npm run test:i18n`: 3438/3438 passed; `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng chuyển giao cho người dùng kiểm chứng trên app.
+- **Refs:** `plans/reports/debug-260905-2025-session-history-pagination-truncation.md`
+
+## 2026-09-05 — Fix & Feature: Mermaid Diagram Empty Label Stripping, Dark Mode Parity & VS Code Interactive Controls
+- **State:**
+  - **Mermaid Empty Label Stripping & Markdown List Fix:**
+    - Sửa lỗi toàn bộ text/label trong sơ đồ Mermaid bị xóa sạch: DOMPurify v3.1.7+ mặc định loại bỏ thẻ `<foreignObject>` khỏi SVG profile. Đã cấu hình `HTML_INTEGRATION_POINTS: { foreignobject: true }` và `ADD_TAGS: ['foreignobject']` trong `src/components/Common/MarkdownRenderer.tsx` và `src/utils/markdownParser.ts`.
+    - Khắc phục lỗi `Unsupported markdown: list` của Mermaid v11 khi gặp nhãn có số thứ tự `1. ` hoặc gạch đầu dòng `- `: hàm `sanitizeMermaidSource` tự động chuẩn hóa thành `1.\u00A0` và `• ` an toàn.
+  - **VS Code Parity Interactive Controls (Zoom, Pan, Reset):**
+    - Bổ sung floating controls toolbar chuẩn VS Code ở góc trên bên phải sơ đồ: nút `Thu nhỏ (Zoom Out)`, `Phóng to (Zoom In)`, `Đặt lại kích thước (Reset / Fit-to-view)`.
+    - Hỗ trợ thao tác kéo rê chuột (Drag-to-Pan) với con trỏ `cursor-grab` / `active:cursor-grabbing`.
+    - Hỗ trợ cuộn chuột `Ctrl / Cmd + Wheel` để zoom in/out mượt mà và Double-click để Reset view.
+    - Thêm đầy đủ 3 key i18n mới (`markdown.mermaid.zoomIn`, `markdown.mermaid.zoomOut`, `markdown.mermaid.reset`) vào `shared/i18n/vi.ts` và `shared/i18n/en.ts`.
+  - **Theme Synchronization & Dark Mode Parity:**
+    - Khắc phục lỗi sơ đồ không cập nhật khi đổi Light <-> Dark: bổ sung `MutationObserver` lắng nghe class `dark` của `document.documentElement`, hỗ trợ prop `theme?: ThemeMode`, gắn `data-rendered-theme` tự động re-render sơ đồ khi đổi theme.
+    - Thiết kế bộ `themeVariables` chuyên sâu cho Mermaid: loại bỏ hoàn toàn màu nền subgraph vàng chanh (`#ffffde`) gây nhức mắt, chuyển sang tông nền tối `#12141c` (dark mode) và xám sáng `#f8fafc` (light mode), chữ sắc nét, đường nối thanh thoát.
+    - Cập nhật `src/components/Canvas/MarkdownRenderer.tsx`, `ArtifactViewer.tsx` và `CodeEditor.tsx` truyền đúng prop `theme` và áp dụng màu văn bản chuẩn `text-slate-900 dark:text-zinc-100`.
+  - **Verification:**
+    - `npm run test:markdown`: Đạt 72/72 passed (thêm kiểm tra viewport, controls, zoom/reset localization, drag-to-pan, wheel zoom).
+    - Visual Verification bằng Chromium Headless: chụp ảnh kiểm chứng side-by-side Dark Mode và Light Mode hiển thị sắc nét 100% tiếng Việt, toolbar nổi bật chuẩn VS Code.
+    - `npm run test:i18n`: 3438/3438 passed; `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` đạt 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng kiểm chứng trực tiếp trên giao diện người dùng.
+- **Refs:** `plans/reports/debug-260905-2015-mermaid-diagram-darkmode.md`
+
+## 2026-09-05 — Feature & Fix: State Clean Slate & ChatGPT-Style Right Sidebar (Artifacts Overview)
+- **State:**
+  - **State Clean Slate:**
+    - Khắc phục triệt để lỗi rò rỉ trạng thái (state leakage) khi mở hoặc chuyển sang project mới: `handleAddProject`, `handleSelectProject` và `handleOpenFolder` trong `src/App.tsx` đều gọi `resetChat(false)` dọn sạch 100% messages, diffs, todos, stream text và pending queues trước khi mở workspace.
+    - Cập nhật `handleProcessStarted`: gọi `resetChat(false)` để phiên làm việc mới luôn bắt đầu với màn hình trắng tinh, không tự động nạp lịch sử cũ trừ khi người dùng chủ động chọn session.
+    - Gia cố `resetChat` trong `src/hooks/useOmpRpc.ts` xóa sạch `activeSessionPath`, `activeDiff`, `todoPhases`, `todos` và các reference buffer.
+  - **Session Grouping & Project Matching:**
+    - Khắc phục lỗi session mới tạo bị nhảy xuống mục 'Phiên khác' thay vì hiển thị ngay trong dự án đang chọn:
+    - Cập nhật `electron/omp-bridge.ts`: hàm `listSessions()` bổ sung `projectPath: this.workspacePath || undefined`.
+    - Cập nhật `src/components/Sidebar/ProjectGroupList.tsx`: giải mã đúng quy tắc đặt tên thư mục session của OMP CLI (`-Data-MacAPP-OMP-Agent`, home-relative dash), và ưu tiên gán session đang kích hoạt (`activeSessionPath`) trực tiếp vào `activeProjectId`.
+    - Cập nhật `src/utils/markdownParser.ts`: thay thế style inline code màu hồng/đỏ nhạt bằng tông neutral slate/zinc (`bg-slate-100 dark:bg-zinc-800/80 text-slate-800 dark:text-zinc-200 border-slate-200/80 dark:border-zinc-700/60`).
+    - Cập nhật `src/components/AgentPanel/TodoPanel.tsx`: đặt `isExpanded = false` mặc định, thu gọn thành 1 thanh pill mỏng tinh gọn (`● Tiến độ thực hiện X/Y`) kèm indicator task đang chạy và accordion mở rộng mượt mà.
+  - **ChatGPT-Style Right Sidebar (Artifacts Overview):**
+    - Tạo mới `src/components/Inspector/ArtifactsOverview.tsx` hiển thị danh sách thẻ `Outputs >` (các tệp đã sửa/tạo với delta `+X -Y`, status chip) và `Sources >` (thumbnail tài liệu/ảnh đính kèm trong phiên).
+    - Tích hợp vào `src/components/Inspector/InspectorPanel.tsx`: `ArtifactsOverview` làm màn hình mặc định khi xem tab Changes, chuyển sang `DiffViewer` khi người dùng bấm vào một tệp và cung cấp nút `← Quay lại danh sách`.
+    - Gỡ bỏ auto-switch `setActiveTab('diff')` và `setInspectorTab('changes')` tự động ép mở full-diff khi có diff mới.
+    - Bổ sung 10 key i18n mới đồng bộ trong `shared/i18n/vi.ts` và `shared/i18n/en.ts`.
+  - **Verification:**
+    - Tạo mới test suite `scripts/verify-clean-slate-and-artifacts.mjs` (`npm run test:clean-slate`) đạt 44/44 passed.
+    - Chạy full verification suite: `test:i18n` (3426 passed), `test:markdown` (47 passed), `test:todos-panel` (66 passed), `test:center-chat-layout` (99 passed), `test:unsaved-guard` (35 passed), `test:editor-save` (19 passed).
+    - `npx tsc --noEmit` (Renderer) và `npx tsc -p tsconfig.node.json --noEmit` (Electron) đạt 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng kiểm chứng trực tiếp trên ứng dụng OMP-Agent Desktop.
+- **Refs:** `plans/260905-1720-gpt-ui-clean-slate/plan.md`, `plans/reports/advise-260905-1725-gpt-ui-and-clean-slate.md`
+
 ## 2026-09-03 — Fix: hdiutil DMG creation "Operation not permitted" on macOS Sequoia
 - **State:**
   - Chẩn đoán nguyên nhân gốc rễ lỗi `hdiutil create failed - Operation not permitted` khi đóng gói DMG release:
@@ -1304,3 +1423,52 @@ Entry template:
 - **Next:** Ready for packaging and QA testing.
 - **Refs:**
   - `plans/reports/fix-260905-1355-project-order-swap.md`
+
+## 2026-09-05 — All-Project Session Preloading & Explorer Reload Button
+- **State:** Resolved user feedback regarding session preloading across all projects and Explorer toolbar ergonomics:
+  - `electron/profile-paths.ts` & `electron/session-indexer.ts`:
+    - Added `getProfileSessionDirCandidates` resolving both OMP CLI relative-to-home conventions (`-rel-path`) and legacy/canonical formats (`--path--`, `-path`).
+    - Upgraded `indexProjectSessions` to scan candidate directories and deduplicate sessions, successfully parsing sessions for unactive background projects (e.g. CLIProxy-API 18 sessions).
+  - `electron/main.ts`:
+    - In `omp:list-sessions`, aggregated sessions across all projects in `ProjectsStore` (merging active bridge sessions with indexed sessions of other projects).
+  - `src/App.tsx`:
+    - Synchronized `refreshSessions()` whenever projects are loaded, added, removed, or pinned.
+    - Replaced `onCollapseSidebar` with `onReload={refreshFiles}` passed into `ProjectTree`.
+  - `src/components/Sidebar/ProjectTree.tsx`:
+    - Replaced sidebar collapse button (`PanelLeftClose`) in Explorer header toolbar with a Reload button (`RotateCw` icon) calling `onReload`.
+  - `shared/i18n/vi.ts` & `shared/i18n/en.ts`:
+    - Registered `'projectTree.reload'` in both `vi` and `en`.
+  - Verification:
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` passed with 0 errors.
+    - All verify suites (`test:i18n`, `test:session-indexer`, `test:runtime-manager`, `test:multi-runtime-ui`, `test:headerbar-layout`, `test:browser-panel`, `test:center-chat-layout`, `test:renderer-sessions`, `test:sessions`) passed 100%.
+    - Rebuilt `dist-electron` and restarted live dev Electron process.
+- **In-flight:** None.
+- **Next:** Ready for packaging and QA testing.
+
+## 2026-09-05 — Context-driven Right Sidebar & Sub-agents Integration
+- **State:** Resolved intrusive auto-opening Right Sidebar behavior and integrated Sub-agents panel per user request:
+  - `src/App.tsx`:
+    - Removed `isEngineBusy` (`thinking`, `streaming`, `executing_tool`) from triggering automatic sidebar opening. Normal text chat keeps the Right Sidebar completely collapsed (0px width), restoring focus to the center chat.
+    - Implemented State Machine for opening origin (`sidebarOriginRef: 'manual' | 'manual_closed' | 'auto_diff' | 'auto_browser' | 'auto_subagent' | null`).
+    - Context-driven Auto-open:
+      - New `activeDiff` $\rightarrow$ automatically opens sidebar, sets tab to `changes`, marks origin as `auto_diff`.
+      - Running subagent (`subagents.some(s => s.status === 'running' || s.status === 'started')`) $\rightarrow$ automatically opens sidebar, sets tab to `subagents`, marks origin as `auto_subagent`.
+      - Shortcut `Cmd+Shift+B` or browser tool $\rightarrow$ opens sidebar, sets tab to `browser`, marks origin as `manual`.
+    - Smart Auto-collapse:
+      - When `activeDiff` is cleared or reviewed, if origin is `auto_diff`, automatically collapses sidebar.
+      - When subagents complete, if origin is `auto_subagent`, automatically collapses sidebar after a 1.2s debounce.
+      - If user opened or closed sidebar manually (`manual` / `manual_closed`), system does not override user intent.
+  - `src/types/index.ts`:
+    - Updated `InspectorTab` to `'subagents' | 'changes' | 'browser' | 'summary'`.
+  - `src/components/Inspector/InspectorPanel.tsx`:
+    - Replaced the default static Summary tab with a dynamic **Sub-agents** panel displaying subagent status, description, and opening the `SubagentTranscript` drawer.
+    - Implemented **Dynamic Tab Strip**: Tabs only appear when relevant tasks or data exist (`diffFiles.length > 0` for Changes, `subagents.length > 0` for Sub-agents, or when Browser tab is active).
+  - `shared/i18n/vi.ts` & `shared/i18n/en.ts`:
+    - Added `'inspector.tabs.subagents'` and `'inspector.tabs.noActiveTasks'` in both languages with 100% parity.
+  - Verification:
+    - All verify suites (`npm run test:browser-panel`, `npm run test:clean-slate`, `npm run test:i18n`, `npm run test:headerbar-layout`, `npm run test:center-chat-layout`) passed 100%.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` passed with 0 errors.
+- **In-flight:** None.
+- **Next:** Ready for packaging and QA testing.
+- **Refs:**
+  - `plans/260905-1815-context-driven-right-sidebar/plan.md`

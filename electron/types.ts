@@ -1379,7 +1379,7 @@ export interface ElectronAPI {
   newSession: (parentSession?: string) => Promise<{ success: boolean; error?: string }>;
   switchSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
   branchSession: (entryId: string) => Promise<{ success: boolean; error?: string }>;
-  loadHistory: () => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
+  loadHistory: (sessionPath?: string) => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
   getBranchEntries: () => Promise<{ success: boolean; entries?: OmpBranchEntry[]; error?: string }>;
   renameSession: (name: string) => Promise<{ success: boolean; error?: string }>;
   deleteSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
@@ -1510,6 +1510,7 @@ export interface ElectronAPI {
     filePath: string
   ) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
   getPathForFile: (file: any) => string | undefined;
+  onOpenInAppBrowser?: (callback: (url: string) => void) => () => void;
 
 
   // Settings & Persistence (Phase 7)

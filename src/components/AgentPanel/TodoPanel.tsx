@@ -5,7 +5,6 @@ import {
   Circle,
   Loader2,
   ChevronDown,
-  ChevronUp,
   AlertCircle,
   XCircle,
   Clock,
@@ -65,7 +64,7 @@ function getTodoTextStyle(status: OmpTodoStatus): string {
 const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [], engineStatus }) => {
   const isEngineBusy = engineStatus !== undefined ? engineStatus !== 'idle' : true;
   const { t } = useI18n();
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const activeTaskRef = useRef<HTMLDivElement | null>(null);
   // Normalize phases and tasks list
   const normalizedPhases = useMemo<OmpTodoPhase[]>(() => {
@@ -108,6 +107,18 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [],
 
     return { totalTasks: total, completedTasks: completed, inProgressCount: inProgress };
   }, [normalizedPhases]);
+  // Active task for collapsed inline pill summary
+  const activeTask = useMemo(() => {
+    for (const phase of normalizedPhases) {
+      for (const task of phase.tasks) {
+        if (task.status === 'in_progress' || task.status === 'active') {
+          return task;
+        }
+      }
+    }
+    return null;
+  }, [normalizedPhases]);
+
 
   // Auto-scroll to active task when expanded
   useEffect(() => {
@@ -127,16 +138,22 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [],
       {/* Todo progress bar header */}
       <div
         onClick={() => setIsExpanded((prev) => !prev)}
-        className="px-3.5 py-2 flex items-center justify-between cursor-pointer hover:bg-surface-highlight/50 transition-colors"
+        className="px-3.5 py-1.5 flex items-center justify-between cursor-pointer hover:bg-surface-highlight/50 transition-colors gap-3"
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <ListTodo className="w-4 h-4 text-codex-accent shrink-0" />
-          <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 truncate">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <ListTodo className="w-3.5 h-3.5 text-accent shrink-0" />
+          <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 shrink-0">
             {t('todos.progress')}
           </span>
-          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-surface-highlight font-mono font-medium text-slate-600 dark:text-zinc-400">
+          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-surface-highlight font-mono font-medium text-slate-600 dark:text-zinc-400 shrink-0">
             {completedTasks}/{totalTasks}
           </span>
+          {!isExpanded && activeTask && (
+            <span className="text-[11px] text-slate-500 dark:text-zinc-400 truncate flex items-center gap-1.5 min-w-0 ml-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0" />
+              <span className="truncate">{activeTask.content}</span>
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -147,17 +164,16 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ phases = [], todos = [],
               style={{ width: `${progressPercentage}%` }}
             />
           </div>
-          <button
-            type="button"
+          <div
             className="p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"
             aria-label={isExpanded ? t('todos.collapse') : t('todos.expand')}
           >
-            {isExpanded ? (
-              <ChevronUp className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5" />
-            )}
-          </button>
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                isExpanded ? 'rotate-180' : ''
+              }`}
+            />
+          </div>
         </div>
       </div>
 

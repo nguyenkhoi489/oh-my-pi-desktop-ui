@@ -435,7 +435,7 @@ export function useOmpRpc() {
         try {
           const res = await window.electronAPI.switchSession(sessionPath);
           if (res.success) {
-            const histRes = await window.electronAPI.loadHistory();
+            const histRes = await window.electronAPI.loadHistory(sessionPath);
             if (histRes.success && Array.isArray(histRes.messages)) {
               if (rafIdRef.current !== null) {
                 cancelAnimationFrame(rafIdRef.current);
@@ -494,11 +494,15 @@ export function useOmpRpc() {
             }
             tokenBufferRef.current = '';
             setMessages([]);
+            messagesRef.current = [];
             setCurrentStreamText('');
+            currentStreamTextRef.current = '';
             setCurrentThinking(null);
+            currentThinkingRef.current = null;
             activeToolCallsRef.current = [];
             setActiveToolCalls([]);
             setActiveDiff(null);
+            activeDiffRef.current = null;
             setUiRequestQueue([]);
             setFollowUpQueue([]);
             uiRequestQueueRef.current = [];
@@ -533,16 +537,22 @@ export function useOmpRpc() {
       }
       tokenBufferRef.current = '';
       setMessages([]);
+      messagesRef.current = [];
       setCurrentStreamText('');
+      currentStreamTextRef.current = '';
       setCurrentThinking(null);
+      currentThinkingRef.current = null;
       activeToolCallsRef.current = [];
       setActiveToolCalls([]);
       setActiveDiff(null);
+      activeDiffRef.current = null;
       setUiRequestQueue([]);
       setFollowUpQueue([]);
       uiRequestQueueRef.current = [];
+      followUpQueueRef.current = [];
       setTodoPhases([]);
       setTodos([]);
+      setActiveSessionPath(null);
       if (reloadHistory && window.electronAPI?.loadHistory) {
         try {
           const histRes = await window.electronAPI.loadHistory();
@@ -612,7 +622,7 @@ export function useOmpRpc() {
         try {
           const res = await window.electronAPI.repairSession(sessionPath);
           if (res.success) {
-            const histRes = await window.electronAPI.loadHistory();
+            const histRes = await window.electronAPI.loadHistory(sessionPath);
             if (histRes.success && Array.isArray(histRes.messages)) {
               const correlated = await correlateBranchEntries(histRes.messages);
               setMessages(correlated);

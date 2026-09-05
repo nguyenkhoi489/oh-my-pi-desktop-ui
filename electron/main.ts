@@ -15,6 +15,7 @@ import type {
   OmpThinkingLevel,
   OmpApprovalMode,
   OmpTodoPhase,
+  OmpSessionInfo,
   FetchEngineConfigOptions,
   SetEngineConfigOptions,
   ResetEngineConfigOptions,
@@ -136,6 +137,20 @@ function createWindow() {
       devTools: isDev,
       webviewTag: true,
     },
+  });
+
+  // Intercept window open in main window and route to In-App Sidebar Browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        mainWindow?.webContents.send('omp:open-in-app-browser', url);
+        return { action: 'deny' };
+      }
+    } catch {
+      // Drop invalid URLs
+    }
+    return { action: 'deny' };
   });
 
   // Block DevTools shortcuts in production
@@ -689,7 +704,53 @@ ipcMain.handle('omp:set-todos', async (_, phases: OmpTodoPhase[]) => {
 // IPC Handlers: Sessions & Subagent Hub (Phase 1 Additions)
 ipcMain.handle('omp:list-sessions', async () => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
-  return ompBridge.listSessions();
+  try {
+    const activeRes = await ompBridge.listSessions().catch(() => ({ success: true, sessions: [] as OmpSessionInfo[] }));
+    const activeSessions = activeRes.sessions || [];
+    const activeWs = ompBridge.getWorkspacePath();
+
+    const projects = await projectsStore.getProjects().catch(() => []);
+    if (projects.length === 0) {
+      return activeRes;
+    }
+
+    // Find active project to enrich its sessions with projectId
+    const activeProject = projects.find((p) => activeWs && path.resolve(p.path) === path.resolve(activeWs));
+    if (activeProject) {
+      for (const s of activeSessions) {
+        if (!s.projectId) s.projectId = activeProject.id;
+        if (!s.projectPath) s.projectPath = activeProject.path;
+      }
+    }
+
+    // Index sessions for all other projects
+    const otherProjects = projects.filter((p) => !activeProject || p.id !== activeProject.id);
+    const otherSessionsNested = await Promise.all(
+      otherProjects.map(async (p) => {
+        try {
+          return await indexProjectSessions(p.id, p.path);
+        } catch {
+          return [];
+        }
+      })
+    );
+
+    const sessionMap = new Map<string, OmpSessionInfo>();
+    for (const s of otherSessionsNested.flat()) {
+      sessionMap.set(s.path, s);
+    }
+    for (const s of activeSessions) {
+      sessionMap.set(s.path, s);
+    }
+
+    return {
+      success: true,
+      sessions: Array.from(sessionMap.values()),
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
+  }
 });
 
 ipcMain.handle('omp:new-session', async (_, parentSession?: string) => {
@@ -707,9 +768,9 @@ ipcMain.handle('omp:branch-session', async (_, entryId: string) => {
   return ompBridge.branchSession(entryId);
 });
 
-ipcMain.handle('omp:load-history', async () => {
+ipcMain.handle('omp:load-history', async (_, sessionPath?: string) => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
-  return ompBridge.loadHistory();
+  return ompBridge.loadHistory(sessionPath);
 });
 
 ipcMain.handle('omp:branch-entries', async () => {

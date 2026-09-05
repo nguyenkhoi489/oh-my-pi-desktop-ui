@@ -184,9 +184,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   branchSession: (entryId: string) =>
     ipcRenderer.invoke('omp:branch-session', entryId),
 
-  loadHistory: () =>
-    ipcRenderer.invoke('omp:load-history'),
-
+  loadHistory: (sessionPath?: string) =>
+    ipcRenderer.invoke('omp:load-history', sessionPath),
   getBranchEntries: () =>
     ipcRenderer.invoke('omp:branch-entries'),
 
@@ -631,6 +630,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: unknown, data: { text: string; id?: string }) => callback(data);
     ipcRenderer.on('omp:bash-output', handler);
     return () => ipcRenderer.removeListener('omp:bash-output', handler);
+  },
+  onOpenInAppBrowser: (callback: (url: string) => void) => {
+    const handler = (_: unknown, url: string) => callback(url);
+    ipcRenderer.on('omp:open-in-app-browser', handler);
+    return () => ipcRenderer.removeListener('omp:open-in-app-browser', handler);
   },
   // Multi-Project & Runtime Management (Phase 1)
   listProjects: () => ipcRenderer.invoke('projects:list'),

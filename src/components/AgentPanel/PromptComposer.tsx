@@ -1220,9 +1220,6 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
 
           {status === 'idle' ? (
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400 dark:text-zinc-500 hidden sm:inline">
-                ↵ send
-              </span>
               <button
                 type="button"
                 onClick={handleSend}

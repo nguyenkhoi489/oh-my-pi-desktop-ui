@@ -1395,7 +1395,7 @@ export interface ElectronAPI {
   newSession: (parentSession?: string) => Promise<{ success: boolean; error?: string }>;
   switchSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
   branchSession: (entryId: string) => Promise<{ success: boolean; error?: string }>;
-  loadHistory: () => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
+  loadHistory: (sessionPath?: string) => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
   getBranchEntries: () => Promise<{ success: boolean; entries?: OmpBranchEntry[]; error?: string }>;
   renameSession: (name: string) => Promise<{ success: boolean; error?: string }>;
   deleteSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
@@ -1528,6 +1528,7 @@ export interface ElectronAPI {
     filePath: string
   ) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
   getPathForFile: (file: File) => string | undefined;
+  onOpenInAppBrowser?: (callback: (url: string) => void) => () => void;
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => () => void;
   onOmpStreamToken: (callback: (token: string) => void) => () => void;
   onOmpThinking: (callback: (thinking: ThinkingBlock) => void) => () => void;
@@ -1581,7 +1582,7 @@ export interface ElectronAPI {
   indexSessions?: (projectId: string, projectPath: string, profile?: string) => Promise<{ success: boolean; sessions?: OmpSessionInfo[]; error?: string }>;
   onOmpEvent?: (callback: (envelope: OmpEventEnvelope) => void) => () => void;
 }
-export type InspectorTab = 'summary' | 'changes' | 'browser';
+export type InspectorTab = 'subagents' | 'changes' | 'browser' | 'summary';
 
 export interface ElectronWebviewElement extends HTMLElement {
   loadURL(url: string, options?: Record<string, unknown>): Promise<void>;

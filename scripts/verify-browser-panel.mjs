@@ -341,4 +341,22 @@ await test('All required Inspector, Browser, and Summary i18n keys are registere
   }
 });
 
+// ----------------------------------------------------
+// Test 6: In-App Browser Link Routing & Session Synchronization
+// ----------------------------------------------------
+await test('BrowserPanel and InspectorPanel support external URL navigation and event routing', async () => {
+  const browserPanelSrc = await fs.readFile(path.resolve('src/components/Inspector/BrowserPanel.tsx'), 'utf-8');
+  const inspectorPanelSrc = await fs.readFile(path.resolve('src/components/Inspector/InspectorPanel.tsx'), 'utf-8');
+  const appSrc = await fs.readFile(path.resolve('src/App.tsx'), 'utf-8');
+  const mainSrc = await fs.readFile(path.resolve('electron/main.ts'), 'utf-8');
+
+  assert(browserPanelSrc.includes('urlNonce'), 'BrowserPanel supports urlNonce prop for external re-navigation');
+  assert(inspectorPanelSrc.includes('hasVisitedBrowser'), 'InspectorPanel preserves browser tab visibility once visited');
+  assert(inspectorPanelSrc.includes('browserUrlNonce'), 'InspectorPanel forwards browserUrlNonce to BrowserPanel');
+  assert(appSrc.includes('handleOpenBrowser'), 'App.tsx defines handleOpenBrowser callback');
+  assert(appSrc.includes('omp:open-in-app-browser'), 'App.tsx listens for omp:open-in-app-browser event');
+  assert(appSrc.includes('onOpenBrowser={handleOpenBrowser}'), 'App.tsx passes onOpenBrowser to AgentPanel');
+  assert(mainSrc.includes('mainWindow.webContents.setWindowOpenHandler'), 'electron/main.ts intercepts window open to route to in-app browser');
+});
+
 console.log(`\nAll ${passCount} browser-panel verify tests passed successfully!`);

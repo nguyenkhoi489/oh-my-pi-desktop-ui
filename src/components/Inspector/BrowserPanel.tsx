@@ -17,6 +17,7 @@ import type { ElectronWebviewElement } from '../../types';
 
 export interface BrowserPanelProps {
   initialUrl?: string;
+  urlNonce?: number;
   onSendUrlToChat?: (url: string) => void;
   className?: string;
 }
@@ -38,6 +39,7 @@ interface WebviewFailLoadEvent extends Event {
 
 export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPanel({
   initialUrl = 'http://localhost:5173',
+  urlNonce,
   onSendUrlToChat,
   className = '',
 }) {
@@ -73,6 +75,20 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
       }
     }
   }, []);
+
+  // Keep url in sync when initialUrl or urlNonce changes from external triggers
+  const prevUrlRef = useRef<string>(initialUrl);
+  const prevNonceRef = useRef<number | undefined>(urlNonce);
+
+  useEffect(() => {
+    const isUrlChanged = Boolean(initialUrl) && initialUrl !== prevUrlRef.current;
+    const isNonceChanged = urlNonce !== undefined && urlNonce !== prevNonceRef.current;
+    if (initialUrl && (isUrlChanged || isNonceChanged)) {
+      prevUrlRef.current = initialUrl;
+      prevNonceRef.current = urlNonce;
+      navigateTo(initialUrl);
+    }
+  }, [initialUrl, urlNonce, navigateTo]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {

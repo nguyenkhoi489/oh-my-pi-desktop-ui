@@ -18,13 +18,14 @@ import { DEMO_ARTIFACTS } from '../../mock/demoData';
 import { MarkdownRenderer } from '../Common/MarkdownRenderer';
 import { stripMarkdownFrontmatter } from '../../utils/artifactDiscovery';
 import { useI18n } from '../../i18n/I18nProvider';
+import type { ThemeMode } from '../../types';
 
 interface ArtifactViewerProps {
   artifacts?: ArtifactDocument[];
   selectedArtifactId?: string;
   onSelectArtifact?: (id: string) => void;
   onReloadArtifact?: (id?: string) => void;
-  theme?: string;
+  theme?: ThemeMode;
 }
 
 export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
@@ -32,6 +33,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
   selectedArtifactId: controlledArtifactId,
   onSelectArtifact,
   onReloadArtifact,
+  theme,
 }) => {
   const { t } = useI18n();
   const [internalArtifactId, setInternalArtifactId] = useState<string>(artifacts[0]?.id || '');
@@ -267,7 +269,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({
                 {currentArtifact.description}
               </p>
             )}
-            <MarkdownRenderer content={stripMarkdownFrontmatter(currentArtifact.content)} />
+            <MarkdownRenderer content={stripMarkdownFrontmatter(currentArtifact.content)} theme={theme} />
           </div>
         )}
 

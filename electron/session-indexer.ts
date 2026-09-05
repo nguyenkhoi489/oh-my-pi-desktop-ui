@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import type { OmpSessionInfo } from './types.ts';
-import { getProfileSessionDir } from './profile-paths.ts';
+import { getProfileSessionDir, getProfileSessionDirCandidates } from './profile-paths.ts';
 
 const HEADER_CHUNK_BYTES = 8192;
 
@@ -81,63 +81,86 @@ export async function indexProjectSessions(
     canonicalPath = path.resolve(projectPath);
   }
 
-  const sessionDir = customSessionDir || getProfileSessionDir(profile, canonicalPath);
-  const dirStat = await fs.stat(sessionDir).catch(() => null);
-  if (!dirStat || !dirStat.isDirectory()) {
-    return [];
+  const targetDirs: string[] = [];
+  if (customSessionDir) {
+    targetDirs.push(customSessionDir);
+  } else {
+    const candidates = Array.from(
+      new Set([
+        ...getProfileSessionDirCandidates(profile, canonicalPath),
+        ...getProfileSessionDirCandidates(profile, projectPath),
+      ])
+    );
+    for (const cand of candidates) {
+      const dirStat = await fs.stat(cand).catch(() => null);
+      if (dirStat && dirStat.isDirectory()) {
+        targetDirs.push(cand);
+      }
+    }
+    if (targetDirs.length === 0) {
+      targetDirs.push(getProfileSessionDir(profile, canonicalPath));
+    }
   }
 
-  const entries = await fs.readdir(sessionDir, { withFileTypes: true });
-  const jsonlEntries = entries.filter((e) => e.isFile() && e.name.endsWith('.jsonl'));
-
-  const results: OmpSessionInfo[] = [];
+  const resultsMap = new Map<string, OmpSessionInfo>();
   const chunkSize = 20;
 
-  for (let i = 0; i < jsonlEntries.length; i += chunkSize) {
-    const chunk = jsonlEntries.slice(i, i + chunkSize);
-    const chunkResults = await Promise.all(
-      chunk.map(async (entry) => {
-        const fullPath = path.join(sessionDir, entry.name);
-        try {
-          const [header, stat] = await Promise.all([
-            parseSessionHeader(fullPath),
-            fs.stat(fullPath),
-          ]);
+  for (const sessionDir of targetDirs) {
+    const dirStat = await fs.stat(sessionDir).catch(() => null);
+    if (!dirStat || !dirStat.isDirectory()) {
+      continue;
+    }
 
-          if (!header.hasValidHeader) {
+    const entries = await fs.readdir(sessionDir, { withFileTypes: true }).catch(() => []);
+    const jsonlEntries = entries.filter((e) => e.isFile() && e.name.endsWith('.jsonl'));
+
+    for (let i = 0; i < jsonlEntries.length; i += chunkSize) {
+      const chunk = jsonlEntries.slice(i, i + chunkSize);
+      const chunkResults = await Promise.all(
+        chunk.map(async (entry) => {
+          const fullPath = path.join(sessionDir, entry.name);
+          try {
+            const [header, stat] = await Promise.all([
+              parseSessionHeader(fullPath),
+              fs.stat(fullPath),
+            ]);
+
+            if (!header.hasValidHeader) {
+              return null;
+            }
+
+            const fallbackDate = stat.mtime.toISOString();
+            const timestamp = header.timestamp || fallbackDate;
+            const updatedAt = header.updatedAt || timestamp;
+            const sessionId = header.sessionId || path.basename(entry.name, '.jsonl');
+            const title = header.title || 'New Session';
+
+            const session: OmpSessionInfo = {
+              path: fullPath,
+              id: sessionId,
+              title,
+              timestamp,
+              updatedAt,
+              active: false,
+              projectId,
+              projectPath: canonicalPath,
+            };
+            return session;
+          } catch {
             return null;
           }
+        })
+      );
 
-          const fallbackDate = stat.mtime.toISOString();
-          const timestamp = header.timestamp || fallbackDate;
-          const updatedAt = header.updatedAt || timestamp;
-          const sessionId = header.sessionId || path.basename(entry.name, '.jsonl');
-          const title = header.title || 'New Session';
-
-          const session: OmpSessionInfo = {
-            path: fullPath,
-            id: sessionId,
-            title,
-            timestamp,
-            updatedAt,
-            active: false,
-            projectId,
-            projectPath: canonicalPath,
-          };
-          return session;
-        } catch {
-          return null;
+      for (const item of chunkResults) {
+        if (item && !resultsMap.has(item.path)) {
+          resultsMap.set(item.path, item);
         }
-      })
-    );
-
-    for (const item of chunkResults) {
-      if (item) {
-        results.push(item);
       }
     }
   }
 
+  const results = Array.from(resultsMap.values());
   results.sort((a, b) => {
     const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
     const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;

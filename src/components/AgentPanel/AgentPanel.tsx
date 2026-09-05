@@ -50,6 +50,7 @@ export interface AgentPanelProps {
   onBranchSession?: (entryId: string) => void;
   onCollapsePanel?: () => void;
   onOpenFile?: (filePath: string) => void;
+  onOpenBrowser?: (url: string) => void;
   externalAttachment?: { path: string; nonce: number } | null;
   todoPhases?: OmpTodoPhase[];
   todos?: OmpTodoItem[];
@@ -97,6 +98,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   onBranchSession,
   onCollapsePanel,
   onOpenFile,
+  onOpenBrowser,
   externalAttachment,
   onFollowUpMessage,
   followUpQueue,
@@ -173,6 +175,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
             status={status}
             onBranchSession={onBranchSession}
             onOpenFile={onOpenFile}
+            onOpenBrowser={onOpenBrowser}
             onRetry={handleRetry}
             onRepairSession={onRepairSession}
           />

@@ -12,7 +12,7 @@ import { SettingsModal } from './components/Modals/SettingsModal';
 import { ToastStack } from './components/Notifications/ToastStack';
 import { useOmpRpc } from './hooks/useOmpRpc';
 import { useWorkspace } from './hooks/useWorkspace';
-import { ThemeMode, FileDiffItem, WorkspaceFile, InspectorTab, ProjectItem, GitStatusResult } from './types';
+import { ThemeMode, FileDiffItem, WorkspaceFile, InspectorTab, ProjectItem, GitStatusResult, ChatFileAttachment } from './types';
 import { InspectorPanel } from './components/Inspector/InspectorPanel';
 import { OpsModal } from './components/Modals/OpsModal';
 import { CommitModal } from './components/Modals/CommitModal';
@@ -29,12 +29,49 @@ export function App() {
   const [isOmpModalOpen, setIsOmpModalOpen] = useState<boolean>(false);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(true);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(false);
+  type SidebarOrigin = 'manual' | 'manual_closed' | 'auto_diff' | 'auto_browser' | 'auto_subagent' | null;
+  const sidebarOriginRef = useRef<SidebarOrigin>(null);
   const userClosedInspectorRef = useRef<boolean>(false);
+  const prevActiveDiffRef = useRef<FileDiffItem | null>(null);
+  const prevHasActiveSubagentsRef = useRef<boolean>(false);
   const [centerView, setCenterView] = useState<'chat' | 'workbench'>('chat');
   const [rightSidebarView, setRightSidebarView] = useState<'agent' | 'inspector'>('inspector');
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('summary');
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('changes');
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [gitStatus, setGitStatus] = useState<GitStatusResult | null>(null);
+  const [browserUrl, setBrowserUrl] = useState<string>('http://localhost:5173');
+  const [browserUrlNonce, setBrowserUrlNonce] = useState<number>(0);
+
+  const handleOpenBrowser = useCallback((targetUrl: string) => {
+    if (targetUrl) {
+      setBrowserUrl(targetUrl);
+      setBrowserUrlNonce((prev) => prev + 1);
+    }
+    setCenterView('chat');
+    setIsRightSidebarOpen(true);
+    setRightSidebarView('inspector');
+    setInspectorTab('browser');
+    sidebarOriginRef.current = 'auto_browser';
+  }, []);
+
+  // Handle open browser requests from in-app links or electron host window
+  useEffect(() => {
+    const handleOpenInAppBrowserEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ url?: string }>;
+      if (customEvent.detail?.url) {
+        handleOpenBrowser(customEvent.detail.url);
+      }
+    };
+    window.addEventListener('omp:open-in-app-browser', handleOpenInAppBrowserEvent);
+    return () => window.removeEventListener('omp:open-in-app-browser', handleOpenInAppBrowserEvent);
+  }, [handleOpenBrowser]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onOpenInAppBrowser) return;
+    return window.electronAPI.onOpenInAppBrowser((url) => {
+      handleOpenBrowser(url);
+    });
+  }, [handleOpenBrowser]);
 
   // Keyboard shortcut: Cmd+Shift+B opens Browser tab in Inspector
   useEffect(() => {
@@ -44,6 +81,7 @@ export function App() {
         setIsRightSidebarOpen(true);
         setRightSidebarView('inspector');
         setInspectorTab('browser');
+        sidebarOriginRef.current = 'manual';
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -123,20 +161,26 @@ export function App() {
   const toggleRightSidebar = () => {
     setIsRightSidebarOpen((prev) => {
       const next = !prev;
-      if (!next) userClosedInspectorRef.current = true;
-      else userClosedInspectorRef.current = false;
+      if (!next) {
+        userClosedInspectorRef.current = true;
+        sidebarOriginRef.current = 'manual_closed';
+      } else {
+        userClosedInspectorRef.current = false;
+        sidebarOriginRef.current = 'manual';
+      }
       return next;
     });
   };
 
   // Stable callbacks to avoid breaking React.memo of ProjectTree/AgentPanel
-  const collapseLeftSidebar = useCallback(() => setIsLeftSidebarOpen(false), []);
   const collapseRightSidebar = useCallback(() => {
     userClosedInspectorRef.current = true;
+    sidebarOriginRef.current = 'manual_closed';
     setIsRightSidebarOpen(false);
   }, []);
   const handleCloseInspector = useCallback(() => {
     userClosedInspectorRef.current = true;
+    sidebarOriginRef.current = 'manual_closed';
     setIsRightSidebarOpen(false);
   }, []);
 
@@ -241,24 +285,74 @@ export function App() {
     }
   }, [installStatus]);
 
-  // Tu dong mo Inspector khi agent bat dau thuc thi task hoac co diff moi
-  const isEngineBusy = status === 'thinking' || status === 'streaming' || status === 'executing_tool';
+  // 1. Theo doi su kien activeDiff de auto-open va auto-collapse
   useEffect(() => {
-    if (isEngineBusy || activeDiff) {
-      if (!userClosedInspectorRef.current) {
+    const hadDiff = !!prevActiveDiffRef.current;
+    const hasDiff = !!activeDiff;
+    prevActiveDiffRef.current = activeDiff;
+
+    if (hasDiff && !hadDiff) {
+      // Co diff moi -> tu dong mo Changes tab neu user chua chu dong dong
+      if (sidebarOriginRef.current !== 'manual_closed') {
         setIsRightSidebarOpen(true);
         setRightSidebarView('inspector');
-        if (activeDiff) {
-          setInspectorTab('changes');
-        }
+        setInspectorTab('changes');
+        sidebarOriginRef.current = 'auto_diff';
       }
-    } else if (status === 'idle' && !activeDiff) {
-      userClosedInspectorRef.current = false;
+    } else if (!hasDiff && hadDiff) {
+      // Diff da duyet xong hoac da clear -> neu he thong tu mo thi tu dong thu gon
+      if (sidebarOriginRef.current === 'auto_diff') {
+        setIsRightSidebarOpen(false);
+        sidebarOriginRef.current = null;
+      }
     }
-  }, [isEngineBusy, activeDiff, status]);
+  }, [activeDiff]);
+
+  // 2. Theo doi su kien subagents de auto-open va auto-collapse
+  useEffect(() => {
+    const hasActiveSubagents = Array.isArray(subagents) && subagents.some(
+      (s) => s.status === 'running' || s.status === 'started'
+    );
+    const hadActiveSubagents = prevHasActiveSubagentsRef.current;
+    prevHasActiveSubagentsRef.current = hasActiveSubagents;
+
+    if (hasActiveSubagents && !hadActiveSubagents) {
+      // Subagent bat dau chay -> tu dong mo Subagents tab neu user chua chu dong dong
+      if (sidebarOriginRef.current !== 'manual_closed' && !activeDiff) {
+        setIsRightSidebarOpen(true);
+        setRightSidebarView('inspector');
+        setInspectorTab('subagents');
+        sidebarOriginRef.current = 'auto_subagent';
+      }
+    } else if (!hasActiveSubagents && hadActiveSubagents) {
+      // Subagents da hoan tat -> neu la auto_subagent va khong co diff thi tu dong thu gon sau 1.2s
+      if (sidebarOriginRef.current === 'auto_subagent' && !activeDiff) {
+        const timer = setTimeout(() => {
+          setIsRightSidebarOpen((isOpen) => {
+            if (sidebarOriginRef.current === 'auto_subagent') {
+              sidebarOriginRef.current = null;
+              return false;
+            }
+            return isOpen;
+          });
+        }, 1200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [subagents, activeDiff]);
+
+  // 3. Reset co manual_closed khi engine tro ve idle hoan toan
+  useEffect(() => {
+    if (status === 'idle' && !activeDiff && (!subagents || subagents.length === 0)) {
+      if (sidebarOriginRef.current === 'manual_closed') {
+        sidebarOriginRef.current = null;
+        userClosedInspectorRef.current = false;
+      }
+    }
+  }, [status, activeDiff, subagents]);
 
   const handleProcessStarted = useCallback(async () => {
-    await resetChat(true);
+    await resetChat(false);
     refreshEngineState();
     refreshModels();
     refreshSessions();
@@ -373,12 +467,13 @@ export function App() {
         const res = await window.electronAPI.listProjects();
         if (res.success && res.projects) {
           setProjects(res.projects);
+          refreshSessions();
         }
       } catch (err) {
         console.warn('[App] Failed to load projects:', err);
       }
     }
-  }, []);
+  }, [refreshSessions]);
 
   useEffect(() => {
     loadProjects();
@@ -412,10 +507,21 @@ export function App() {
     refreshGitStatus();
   }, [refreshGitStatus, status, activeDiff]);
 
+  const [isFloatingDismissed, setIsFloatingDismissed] = useState<boolean>(false);
+
+  useEffect(() => {
+    setIsFloatingDismissed(false);
+  }, [activeDiff]);
+
+  // Floating changes card reflects active pending session diffs (gitStatus used for branch & commits)
   const floatingChanges = useMemo(() => {
-    const count = gitStatus?.filesCount || (activeDiff ? 1 : 0);
-    const insertions = gitStatus?.insertions ?? (activeDiff?.additions || 0);
-    const deletions = gitStatus?.deletions ?? (activeDiff?.deletions || 0);
+    if (isFloatingDismissed || !activeDiff) {
+      return null;
+    }
+
+    const count = 1;
+    const insertions = activeDiff.additions || 0;
+    const deletions = activeDiff.deletions || 0;
 
     if (count <= 0 && insertions <= 0 && deletions <= 0) {
       return null;
@@ -429,22 +535,43 @@ export function App() {
         setIsRightSidebarOpen(true);
         setRightSidebarView('inspector');
         setInspectorTab('changes');
+        sidebarOriginRef.current = 'manual';
+      },
+      onDismiss: () => {
+        setIsFloatingDismissed(true);
       },
     };
-  }, [gitStatus, activeDiff]);
+  }, [activeDiff, isFloatingDismissed]);
+  // Aggregate unique attachments across current session messages for Artifacts Overview
+  const sessionSources = useMemo(() => {
+    const map = new Map<string, ChatFileAttachment>();
+    for (const msg of messages) {
+      if (Array.isArray(msg.files)) {
+        for (const file of msg.files) {
+          if (file.path && !map.has(file.path)) {
+            map.set(file.path, file);
+          }
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [messages]);
+
 
   const handleAddProject = useCallback(async () => {
     if (window.electronAPI?.selectFolder) {
       const selected = await window.electronAPI.selectFolder();
       if (selected) {
+        await resetChat(false);
         if (window.electronAPI.addProject) {
           await window.electronAPI.addProject(selected);
           await loadProjects();
+          await refreshSessions();
         }
         openFolderDialog(selected);
       }
     }
-  }, [openFolderDialog, loadProjects]);
+  }, [openFolderDialog, loadProjects, resetChat, refreshSessions]);
 
   const handleSelectProject = useCallback(async (project: ProjectItem) => {
     if (project.path !== workspacePath) {
@@ -457,15 +584,21 @@ export function App() {
     if (window.electronAPI?.removeProject) {
       await window.electronAPI.removeProject(id);
       await loadProjects();
+      await refreshSessions();
     }
-  }, [loadProjects]);
+  }, [loadProjects, refreshSessions]);
 
   const handleTogglePinProject = useCallback(async (id: string) => {
     if (window.electronAPI?.togglePinProject) {
       await window.electronAPI.togglePinProject(id);
       await loadProjects();
+      await refreshSessions();
     }
-  }, [loadProjects]);
+  }, [loadProjects, refreshSessions]);
+  const handleOpenFolder = useCallback(async (customPath?: string) => {
+    await resetChat(false);
+    await openFolderDialog(customPath);
+  }, [resetChat, openFolderDialog]);
 
   const handleSelectSessionFromGroup = useCallback(
     async (sessionPath: string, projectId?: string) => {
@@ -502,11 +635,10 @@ export function App() {
   // Auto-switch Visual Diff tab when a new pending diff arrives
   const prevDiffIdRef = useRef<string | null>(activeDiff?.id ?? null);
   useEffect(() => {
-    if (activeDiff && activeDiff.status === 'pending' && activeDiff.id !== prevDiffIdRef.current) {
-      prevDiffIdRef.current = activeDiff.id;
-      setActiveTab('diff');
+    if (!activeDiff) {
+      prevDiffIdRef.current = null;
     }
-  }, [activeDiff, setActiveTab]);
+  }, [activeDiff]);
 
   // Refresh ProjectTree when engine creates/deletes a file or after accept/reject of create/delete ops
   const prevDiffRef = useRef<FileDiffItem | null>(null);
@@ -675,7 +807,7 @@ export function App() {
       <HeaderBar
         workspaceName={workspaceName}
         hasWorkspace={Boolean(workspacePath)}
-        onOpenFolder={openFolderDialog}
+        onOpenFolder={handleOpenFolder}
         status={status}
         installStatus={installStatus}
         onOpenInstallModal={() => setIsOmpModalOpen(true)}
@@ -751,7 +883,7 @@ export function App() {
               files={files}
               selectedFile={selectedFile}
               onSelectFile={handleSelectFileWithGuard}
-              onCollapseSidebar={collapseLeftSidebar}
+              onReload={refreshFiles}
               onAddToChat={handleAddToChat}
               onDeleteFile={handleDeleteFile}
             />
@@ -789,6 +921,7 @@ export function App() {
               followUpQueue={followUpQueue}
               onBranchSession={branchFromMessage}
               onOpenFile={handleOpenFileByPath}
+              onOpenBrowser={handleOpenBrowser}
               externalAttachment={attachmentRequest}
               retryState={retryState}
               onAbortRetry={abortRetry}
@@ -849,6 +982,8 @@ export function App() {
                 onExpandCanvas={() => setCenterView((prev) => (prev === 'workbench' ? 'chat' : 'workbench'))}
                 activeTab={inspectorTab}
                 onTabChange={setInspectorTab}
+                initialBrowserUrl={browserUrl}
+                browserUrlNonce={browserUrlNonce}
                 diffFiles={activeDiff ? [activeDiff] : []}
                 onAcceptDiff={acceptDiff}
                 onRejectDiff={rejectDiff}
@@ -865,6 +1000,8 @@ export function App() {
                   });
                 }}
                 theme={theme}
+                sources={sessionSources}
+                subagents={subagents}
               />
             ) : (
               <AgentPanel
@@ -893,6 +1030,7 @@ export function App() {
                 onBranchSession={branchFromMessage}
                 onCollapsePanel={collapseRightSidebar}
                 onOpenFile={handleOpenFileByPath}
+                onOpenBrowser={handleOpenBrowser}
                 externalAttachment={attachmentRequest}
                 retryState={retryState}
                 onAbortRetry={abortRetry}
