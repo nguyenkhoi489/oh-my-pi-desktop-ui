@@ -11,7 +11,7 @@ import {
   AlertTriangle,
   RefreshCw,
 } from 'lucide-react';
-import { normalizeUrl } from '../../utils/urlHelper';
+import { normalizeUrl, isLocalFileTarget, extractFilePath } from '../../utils/urlHelper';
 import { useI18n } from '../../i18n/I18nProvider';
 import type { ElectronWebviewElement } from '../../types';
 
@@ -60,6 +60,15 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
 
   // Navigate to target URL
   const navigateTo = useCallback((targetUrl: string) => {
+    if (isLocalFileTarget(targetUrl)) {
+      const filePath = extractFilePath(targetUrl);
+      if (filePath) {
+        window.dispatchEvent(
+          new CustomEvent('omp:open-file', { detail: { path: filePath } })
+        );
+        return;
+      }
+    }
     const normalized = normalizeUrl(targetUrl);
     setUrl(normalized);
     setInputUrl(normalized);

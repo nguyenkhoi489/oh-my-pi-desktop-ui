@@ -98,3 +98,114 @@ export function normalizeUrl(input: string): string {
   // Fallback to search query
   return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
 }
+
+const COMMON_FILE_EXTENSIONS: Record<string, true> = {
+  md: true, markdown: true, mdown: true, mkd: true,
+  txt: true, text: true, log: true, rtf: true,
+  ts: true, tsx: true, js: true, jsx: true, mjs: true, cjs: true,
+  json: true, jsonl: true, jsonc: true, yaml: true, yml: true, toml: true, xml: true, csv: true, tsv: true,
+  html: true, htm: true, css: true, scss: true, sass: true, less: true,
+  py: true, pyw: true, rb: true, go: true, rs: true, c: true, cpp: true, h: true, hpp: true, cs: true, java: true, kt: true, swift: true,
+  sh: true, bash: true, zsh: true, fish: true, bat: true, cmd: true, ps1: true,
+  sql: true, graphql: true, gql: true, proto: true, env: true,
+  png: true, jpg: true, jpeg: true, gif: true, svg: true, webp: true, bmp: true, ico: true,
+  pdf: true, zip: true, tar: true, gz: true,
+};
+/**
+ * Determines if an input target is a local file rather than a web URL.
+ */
+export function isLocalFileTarget(input: string): boolean {
+  if (!input || typeof input !== 'string') return false;
+  const trimmed = input.trim();
+  if (!trimmed || trimmed === '#' || trimmed.startsWith('#')) return false;
+
+  // 1. Explicit file:// protocol
+  if (/^file:\/\//i.test(trimmed)) return true;
+
+  // 2. Localhost URL prefixing local file paths (e.g. http://localhost:5173/Users/...)
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/(Users|home|private|var|tmp|[a-zA-Z]:)\//i.test(trimmed)) {
+    return true;
+  }
+
+  // 3. Web or standard protocols (http, https, mailto, tel, etc.)
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed) || trimmed.startsWith('//') || trimmed.startsWith('mailto:') || trimmed.startsWith('tel:')) {
+    return false;
+  }
+
+  // 4. POSIX absolute path: /Users/..., /home/..., /tmp/...
+  if (trimmed.startsWith('/')) {
+    return true;
+  }
+
+  // 5. Windows absolute path: C:\... or C:/...
+  if (/^[a-zA-Z]:[\\/]/.test(trimmed)) {
+    return true;
+  }
+
+  // 6. Relative path containing directory traversal
+  if (trimmed.startsWith('./') || trimmed.startsWith('../')) {
+    return true;
+  }
+
+  // 7. Path ending with a known file extension (ignoring query/hash)
+  const cleanPath = trimmed.split('?')[0].split('#')[0];
+  const extMatch = cleanPath.match(/\.([a-zA-Z0-9_-]+)$/);
+  if (extMatch && COMMON_FILE_EXTENSIONS[extMatch[1].toLowerCase()]) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Extracts clean filesystem path from file://, localhost-prefixed path, or raw path.
+ */
+export function extractFilePath(input: string): string | null {
+  if (!isLocalFileTarget(input)) return null;
+  const trimmed = input.trim();
+
+  // Strip file:// prefix
+  if (/^file:\/\//i.test(trimmed)) {
+    const withoutScheme = trimmed.replace(/^file:\/\//i, '');
+    try {
+      const decoded = decodeURIComponent(withoutScheme);
+      // Windows file:///C:/path -> C:/path
+      return decoded.replace(/^\/([a-zA-Z]:)/, '$1');
+    } catch {
+      return withoutScheme.replace(/^\/([a-zA-Z]:)/, '$1');
+    }
+  }
+
+  // Strip localhost URL prefix if it points to filesystem path
+  const localhostMatch = trimmed.match(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/.*)$/i);
+  if (localhostMatch) {
+    const rawPath = localhostMatch[3];
+    try {
+      return decodeURIComponent(rawPath);
+    } catch {
+      return rawPath;
+    }
+  }
+
+  // Plain filesystem path
+  try {
+    return decodeURIComponent(trimmed);
+  } catch {
+    return trimmed;
+  }
+}
+
+/**
+ * Converts a filesystem path into standard file:/// URI format.
+ */
+export function toFileUrl(filePath: string): string {
+  if (!filePath || typeof filePath !== 'string') return 'about:blank';
+  const trimmed = filePath.trim();
+  if (/^file:\/\//i.test(trimmed)) return trimmed;
+
+  const clean = extractFilePath(trimmed) || trimmed;
+  if (clean.startsWith('/')) {
+    return `file://${clean}`;
+  }
+  return `file:///${clean}`;
+}

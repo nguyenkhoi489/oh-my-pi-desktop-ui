@@ -3,6 +3,7 @@
 import React, { useMemo, useCallback, useRef, useEffect, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { parseMarkdown } from '../../utils/markdownParser';
+import { isLocalFileTarget, extractFilePath } from '../../utils/urlHelper';
 import { useI18n } from '../../i18n/I18nProvider';
 import type { ThemeMode } from '../../types';
 
@@ -12,6 +13,7 @@ interface MarkdownRendererProps {
   isStreaming?: boolean;
   theme?: ThemeMode;
   onOpenUrl?: (url: string) => void;
+  onOpenFile?: (filePath: string) => void;
 }
 
 // Prevent Mermaid v11 unsupported markdown list errors on quoted labels
@@ -27,6 +29,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = React.memo(({
   isStreaming = false,
   theme,
   onOpenUrl,
+  onOpenFile,
 }) => {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -291,9 +294,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = React.memo(({
     const anchor = target.closest('a') as HTMLAnchorElement | null;
     if (anchor) {
       const href = anchor.getAttribute('href');
-      if (href) {
+      const dataFilePath = anchor.getAttribute('data-file-path');
+      if (href || dataFilePath) {
         // Hash anchor link (e.g. #section)
-        if (href.startsWith('#')) {
+        if (href && href.startsWith('#')) {
           e.preventDefault();
           const targetEl = containerRef.current?.querySelector(href) || document.getElementById(href.slice(1));
           if (targetEl) {
@@ -301,10 +305,37 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = React.memo(({
           }
           return;
         }
+        // Local file link (data-file-path, file://, or local filesystem path)
+        if (dataFilePath || (href && isLocalFileTarget(href))) {
+          e.preventDefault();
+          e.stopPropagation();
+          const resolvedPath = dataFilePath ? decodeURIComponent(dataFilePath) : (extractFilePath(href!) || href!);
+          if (onOpenFile) {
+            onOpenFile(resolvedPath);
+          }
+          window.dispatchEvent(
+            new CustomEvent('omp:open-file', { detail: { path: resolvedPath } })
+          );
+          return;
+        }
 
         // Web URL (http://, https://, //)
-        const isHttpUrl = /^https?:\/\//i.test(href) || href.startsWith('//');
+        const isHttpUrl = href && (/^https?:\/\//i.test(href) || href.startsWith('//'));
         if (isHttpUrl) {
+          // Check if it is accidentally a local file disguised as localhost:5173 URL
+          if (isLocalFileTarget(href!)) {
+            e.preventDefault();
+            e.stopPropagation();
+            const resolvedPath = extractFilePath(href!) || href!;
+            if (onOpenFile) {
+              onOpenFile(resolvedPath);
+            }
+            window.dispatchEvent(
+              new CustomEvent('omp:open-file', { detail: { path: resolvedPath } })
+            );
+            return;
+          }
+
           // Cmd+Click / Ctrl+Click or Middle-Click -> open in external browser
           const isModifierClick = e.metaKey || e.ctrlKey || e.button === 1;
           if (isModifierClick) {
@@ -333,7 +364,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = React.memo(({
         }
       }
     }
-  }, [t, updateDiagramTransform, onOpenUrl]);
+  }, [t, updateDiagramTransform, onOpenUrl, onOpenFile]);
 
   // Mouse down drag-to-pan handler
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {

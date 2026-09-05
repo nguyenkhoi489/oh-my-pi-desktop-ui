@@ -281,10 +281,17 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
                       const title = (isActiveSession && activeSessionName) || session.title || 'New Session';
 
                       return (
-                        <button
+                        <div
                           key={session.path}
-                          type="button"
+                          role="button"
+                          tabIndex={0}
                           onClick={() => onSelectSession?.(session.path, project.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onSelectSession?.(session.path, project.id);
+                            }
+                          }}
                           className={`w-full text-left px-2 py-1 rounded flex items-center justify-between text-xs transition-colors group cursor-pointer ${
                             isActiveSession
                               ? 'bg-surface-highlight text-slate-900 dark:text-zinc-100 font-medium'
@@ -336,7 +343,7 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
                               </button>
                             )}
                           </div>
-                        </button>
+                        </div>
                       );
                     })
                   )}
@@ -359,10 +366,17 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
                 const title = (isActiveSession && activeSessionName) || session.title || 'New Session';
 
                 return (
-                  <button
+                  <div
                     key={session.path}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onSelectSession?.(session.path)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSelectSession?.(session.path);
+                      }
+                    }}
                     className={`w-full text-left px-2 py-1 rounded flex items-center justify-between text-xs transition-colors group cursor-pointer ${
                       isActiveSession
                         ? 'bg-surface-highlight text-slate-900 dark:text-zinc-100 font-medium'
@@ -409,7 +423,7 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
                         </button>
                       )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>

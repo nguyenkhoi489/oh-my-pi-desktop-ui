@@ -1648,6 +1648,7 @@ export const vi = {
   'markdown.copy': 'Copy',
   'markdown.copied': 'Copied!',
   'markdown.openInSidebarBrowser': 'Mở trong In-App Browser (Cmd+Click để mở trình duyệt ngoài)',
+  'markdown.openFileInEditor': 'Xem trước và mở tệp trong Editor',
   'inspector.title': 'Inspector',
   'inspector.tabs.summary': 'Tổng quan',
   'inspector.tabs.changes': 'Thay đổi ({count})',

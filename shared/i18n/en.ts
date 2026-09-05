@@ -1650,6 +1650,7 @@ export const en: Record<I18nKey, string> = {
   'markdown.copy': 'Copy',
   'markdown.copied': 'Copied!',
   'markdown.openInSidebarBrowser': 'Open in In-App Browser (Cmd+Click to open in external browser)',
+  'markdown.openFileInEditor': 'Preview and open file in Editor',
   'inspector.title': 'Inspector',
   'inspector.tabs.summary': 'Summary',
   'inspector.tabs.changes': 'Changes ({count})',

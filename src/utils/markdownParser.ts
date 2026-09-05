@@ -5,6 +5,7 @@ import katex, { type KatexOptions } from 'katex';
 import Prism from 'prismjs';
 import DOMPurify from 'dompurify';
 import { tm, type I18nKey } from '../../shared/i18n/index.ts';
+import { isLocalFileTarget, toFileUrl, extractFilePath } from './urlHelper.ts';
 // Load popular languages for Prism syntax highlighting
 import 'prismjs/components/prism-typescript.js';
 import 'prismjs/components/prism-jsx.js';
@@ -266,8 +267,15 @@ export function createMarkedInstance(translateFn?: (key: I18nKey) => string): Ma
       },
 
       link({ href, title, text }) {
-        const titleAttr = title ? `title="${title}"` : `title="${t('markdown.openInSidebarBrowser')}"`;
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-medium transition-colors inline-flex items-center gap-0.5 cursor-pointer" ${titleAttr}><span>${text}</span><svg class="w-3 h-3 inline opacity-60 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`;
+        const isFile = isLocalFileTarget(href);
+        const resolvedHref = isFile ? toFileUrl(href) : href;
+        const defaultTitle = isFile ? t('markdown.openFileInEditor') : t('markdown.openInSidebarBrowser');
+        const titleAttr = title ? `title="${title}"` : `title="${defaultTitle}"`;
+        const dataFileAttr = isFile ? ` data-file-path="${encodeURIComponent(extractFilePath(href) || href)}"` : '';
+        const iconSvg = isFile
+          ? `<svg class="w-3 h-3 inline opacity-70 ml-0.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`
+          : `<svg class="w-3 h-3 inline opacity-60 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
+        return `<a href="${resolvedHref}" target="_blank" rel="noopener noreferrer"${dataFileAttr} class="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline font-medium transition-colors inline-flex items-center gap-0.5 cursor-pointer" ${titleAttr}><span>${text}</span>${iconSvg}</a>`;
       },
 
       blockquote({ text }) {
@@ -347,6 +355,8 @@ export const defaultMarkedInstance = createMarkedInstance();
 // DOMPurify whitelist config for KaTeX, SVG, and HTML elements
 const SANITIZE_CONFIG = {
   USE_PROFILES: { html: true, mathMl: true, svg: true },
+  ALLOWED_URI_REGEXP:
+    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   ADD_TAGS: [
     'semantics',
     'annotation',
@@ -386,8 +396,8 @@ const SANITIZE_CONFIG = {
     'rel',
     'data-code',
     'data-mermaid',
+    'data-file-path',
     'xmlns',
-    'display',
     'aria-hidden',
     'viewBox',
     'd',

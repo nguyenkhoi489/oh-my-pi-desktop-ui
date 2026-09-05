@@ -14,6 +14,29 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-06 — Fix: Nested Button Hydration Error in ProjectGroupList & File Link Clickability in Markdown
+- **State:**
+  - **Root Cause Identified & Fixed:**
+    - **Nested Button Hydration Error:** Trong `src/components/Sidebar/ProjectGroupList.tsx`, mỗi dòng session trong project/unassigned list được render dưới dạng thẻ `<button>` cha (để click chọn session), bên trong lại chứa các `<button>` con (nút Export HTML và nút Delete session có tooltip "Xóa phiên"). HTML không cho phép thẻ `<button>` lồng trong `<button>` khác, gây ra warning/hydration error `validateDOMNesting: <button> cannot contain a nested <button>` trên console.
+    - **Unclickable File Link in Markdown:** Khi render markdown link dạng `[file](file:///...)`, DOMPurify sử dụng cấu hình mặc định chỉ cho phép các URI scheme `http:`, `https:`, `mailto:`, v.v., dẫn đến việc thuộc tính `href="file:///..."` bị DOMPurify lược bỏ (strip) trong quá trình `DOMPurify.sanitize()`, biến thẻ `<a>` thành link rỗng không click được trên giao diện.
+  - **Defense-in-Depth Implementation:**
+    - `src/components/Sidebar/ProjectGroupList.tsx`: Thay thế thẻ `<button>` cha của session item bằng thẻ `<div role="button" tabIndex={0} onClick={...} onKeyDown={...}>`. Vừa giữ trọn vẹn khả năng click/chọn bằng bàn phím (Enter/Space), vừa hỗ trợ các nút thao tác `<button>` con (Export, Delete) mà hoàn toàn hợp lệ chuẩn DOM HTML.
+    - `src/utils/markdownParser.ts`: Cấu hình `ALLOWED_URI_REGEXP` trong `SANITIZE_CONFIG` của DOMPurify để cho phép giao thức `file:`, đảm bảo thuộc tính `href="file:///..."` được bảo toàn nguyên vẹn sau khi sanitize.
+    - `src/components/Common/MarkdownRenderer.tsx`: Cập nhật logic bắt sự kiện click link, kiểm tra `if (href || dataFilePath)` để ngay cả khi thẻ `<a>` chỉ có `data-file-path` hoặc `href="file:///..."` thì vẫn chặn hành vi mặc định và phát sự kiện `omp:open-file` chuẩn xác.
+    - `src/App.tsx`: Chuẩn hóa `targetPath` trong `handleOpenFileByPath` qua `extractFilePath(targetPath)` để xử lý triệt để cả trường hợp nhận chuỗi `file:///...` hoặc đường dẫn thuần túy.
+    - `scripts/verify-file-preview-links.mjs`: Mở rộng test suite kiểm tra DOMPurify `ALLOWED_URI_REGEXP`, kiểm tra `ProjectGroupList` không lồng thẻ `<button>`, và kiểm tra chuẩn hóa đường dẫn trong `App.tsx` (18/18 checks passed).
+  - **Verification:**
+    - `npm run test:file-preview-links`: 18 passed, 0 failed.
+    - `npm run test:clean-slate`: 47 passed, 0 failed.
+    - `npm run test:markdown`: 78 passed, 0 failed.
+    - `npm run test:center-chat-layout`: 99 passed, 0 failed.
+    - `npm run test:resizable-sidebar`: 15 passed, 0 failed.
+    - `npm run test:i18n`: 3444 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng kiểm tra trải nghiệm trực tiếp trên ứng dụng.
+- **Refs:** `scripts/verify-file-preview-links.mjs`, `src/components/Sidebar/ProjectGroupList.tsx`, `src/utils/markdownParser.ts`
+
 ## 2026-09-06 — Feature: Resizable Right Sidebar with Persistence & Webview Trap Prevention
 - **State:**
   - **Implementation:**

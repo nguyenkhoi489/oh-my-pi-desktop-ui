@@ -144,7 +144,22 @@ function createWindow() {
     try {
       const parsed = new URL(url);
       if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        // Intercept local filesystem paths mistakenly prefixed with localhost
+        if (
+          parsed.pathname.startsWith('/Users/') ||
+          parsed.pathname.startsWith('/home/') ||
+          /^\/[a-zA-Z]:\//.test(parsed.pathname)
+        ) {
+          const filePath = decodeURIComponent(parsed.pathname).replace(/^\/([a-zA-Z]:)/, '$1');
+          mainWindow?.webContents.send('omp:host-open-request', { kind: 'file', target: filePath });
+          return { action: 'deny' };
+        }
         mainWindow?.webContents.send('omp:open-in-app-browser', url);
+        return { action: 'deny' };
+      }
+      if (parsed.protocol === 'file:') {
+        const filePath = decodeURIComponent(parsed.pathname).replace(/^\/([a-zA-Z]:)/, '$1');
+        mainWindow?.webContents.send('omp:host-open-request', { kind: 'file', target: filePath });
         return { action: 'deny' };
       }
     } catch {

@@ -46,6 +46,7 @@ interface ErrorAssistantCardProps {
   onRepair?: () => void;
   onRollback?: () => void;
   onOpenBrowser?: (url: string) => void;
+  onOpenFile?: (filePath: string) => void;
 }
 const ErrorAssistantCard: React.FC<ErrorAssistantCardProps> = ({
   errorMessage,
@@ -55,6 +56,7 @@ const ErrorAssistantCard: React.FC<ErrorAssistantCardProps> = ({
   onRepair,
   onRollback,
   onOpenBrowser,
+  onOpenFile,
 }) => {
   const { t } = useI18n();
   const [showDetails, setShowDetails] = useState<boolean>(false);
@@ -85,7 +87,7 @@ const ErrorAssistantCard: React.FC<ErrorAssistantCardProps> = ({
 
       {content && content.trim().length > 0 && (
         <div className="text-slate-800 dark:text-zinc-200">
-          <MarkdownRenderer content={content} onOpenUrl={onOpenBrowser} />
+          <MarkdownRenderer content={content} onOpenUrl={onOpenBrowser} onOpenFile={onOpenFile} />
         </div>
       )}
 
@@ -473,11 +475,12 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                     : undefined
                 }
                 onOpenBrowser={onOpenBrowser}
+                onOpenFile={onOpenFile}
               />
             ) : (
               msg.content && msg.content.trim().length > 0 && (
                 <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed bg-transparent text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
-                  <MarkdownRenderer content={msg.content} onOpenUrl={onOpenBrowser} />
+                  <MarkdownRenderer content={msg.content} onOpenUrl={onOpenBrowser} onOpenFile={onOpenFile} />
                 </div>
               )
             )}
@@ -511,7 +514,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
             </span>
           </div>
           <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
-            <MarkdownRenderer content={currentStreamText} isStreaming={true} onOpenUrl={onOpenBrowser} />
+            <MarkdownRenderer content={currentStreamText} isStreaming={true} onOpenUrl={onOpenBrowser} onOpenFile={onOpenFile} />
           </div>
         </div>
       )}

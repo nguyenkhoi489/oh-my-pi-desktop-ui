@@ -20,6 +20,7 @@ import { useI18n } from './i18n/I18nProvider';
 import { UnsavedChangesModal } from './components/Canvas/UnsavedChangesModal';
 import { SessionStatsPanel } from './components/HeaderBar/SessionStatsPanel';
 import { useResizable } from './hooks/useResizable';
+import { isLocalFileTarget, extractFilePath } from './utils/urlHelper';
 
 export function App() {
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -53,9 +54,17 @@ export function App() {
   const [gitStatus, setGitStatus] = useState<GitStatusResult | null>(null);
   const [browserUrl, setBrowserUrl] = useState<string>('http://localhost:5173');
   const [browserUrlNonce, setBrowserUrlNonce] = useState<number>(0);
+  const handleOpenFileByPathRef = useRef<(path: string) => void>(() => {});
 
   const handleOpenBrowser = useCallback((targetUrl: string) => {
     if (targetUrl) {
+      if (isLocalFileTarget(targetUrl)) {
+        const filePath = extractFilePath(targetUrl);
+        if (filePath) {
+          handleOpenFileByPathRef.current(filePath);
+          return;
+        }
+      }
       setBrowserUrl(targetUrl);
       setBrowserUrlNonce((prev) => prev + 1);
     }
@@ -84,6 +93,18 @@ export function App() {
       handleOpenBrowser(url);
     });
   }, [handleOpenBrowser]);
+
+  // Handle open local file requests from in-app markdown links or events
+  useEffect(() => {
+    const handleOpenFileEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ path?: string }>;
+      if (customEvent.detail?.path) {
+        handleOpenFileByPathRef.current(customEvent.detail.path);
+      }
+    };
+    window.addEventListener('omp:open-file', handleOpenFileEvent);
+    return () => window.removeEventListener('omp:open-file', handleOpenFileEvent);
+  }, []);
 
   // Keyboard shortcut: Cmd+Shift+B opens Browser tab in Inspector
   useEffect(() => {
@@ -708,12 +729,13 @@ export function App() {
 
   const handleOpenFileByPath = useCallback(
     (targetPath: string) => {
+      const normalizedPath = extractFilePath(targetPath) || targetPath;
       const findInTree = (tree: WorkspaceFile[]): WorkspaceFile | null => {
         for (const item of tree) {
           if (
-            item.path === targetPath ||
-            item.relativePath === targetPath ||
-            item.path.endsWith(targetPath)
+            item.path === normalizedPath ||
+            item.relativePath === normalizedPath ||
+            item.path.endsWith(normalizedPath)
           ) {
             return item;
           }
@@ -726,18 +748,19 @@ export function App() {
       };
 
       const found = findInTree(files);
-      const isAbsolute = targetPath.startsWith('/');
-      const fullPath = !isAbsolute && workspacePath ? `${workspacePath}/${targetPath}` : targetPath;
+      const isAbsolute = normalizedPath.startsWith('/');
+      const fullPath = !isAbsolute && workspacePath ? `${workspacePath}/${normalizedPath}` : normalizedPath;
       const targetFile: WorkspaceFile = found || {
         path: fullPath,
-        relativePath: targetPath,
-        name: targetPath.split('/').pop() || targetPath,
+        relativePath: normalizedPath,
+        name: normalizedPath.split('/').pop() || normalizedPath,
         isDirectory: false,
       };
       handleSelectFileWithGuard(targetFile);
     },
     [files, workspacePath, handleSelectFileWithGuard]
   );
+  handleOpenFileByPathRef.current = handleOpenFileByPath;
 
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
