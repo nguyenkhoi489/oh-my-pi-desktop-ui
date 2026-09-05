@@ -553,6 +553,8 @@ export function useOmpRpc() {
       setTodoPhases([]);
       setTodos([]);
       setActiveSessionPath(null);
+      setContextUsage(null);
+      setTokensPerSecond(null);
       if (reloadHistory && window.electronAPI?.loadHistory) {
         try {
           const histRes = await window.electronAPI.loadHistory();

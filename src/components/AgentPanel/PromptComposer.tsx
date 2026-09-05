@@ -59,6 +59,7 @@ interface PromptComposerProps {
   availableCommands?: OmpCommandInfo[];
   isToolApprovalPending?: boolean;
   externalAttachment?: { path: string; nonce: number } | null;
+  onClearExternalAttachment?: () => void;
   // Model, Thinking Level, Approval Mode & Context
   availableModels?: OmpModelInfo[];
   selectedModel?: OmpModelInfo | string | null;
@@ -100,6 +101,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   availableCommands,
   isToolApprovalPending = false,
   externalAttachment,
+  onClearExternalAttachment,
   availableModels,
   selectedModel,
   onSelectModel,
@@ -170,6 +172,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   };
 
   const hasContextUsage =
+    Boolean(workspacePath) &&
     contextUsage?.percent != null &&
     typeof contextUsage.percent === 'number' &&
     !isNaN(contextUsage.percent);
@@ -330,7 +333,12 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     const p = externalAttachment.path.trim();
     if (!p) return;
     setAttachedFiles((prev) => (prev.includes(p) ? prev : [...prev, p]));
-  }, [externalAttachment]);
+    onClearExternalAttachment?.();
+    // Focus textarea de nguoi dung tiep tuc nhap prompt
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+  }, [externalAttachment, onClearExternalAttachment]);
 
   const removeAttachment = (file: string) => {
     setAttachedFiles((prev) => prev.filter((f) => f !== file));

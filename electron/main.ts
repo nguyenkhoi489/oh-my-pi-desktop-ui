@@ -206,6 +206,12 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
+  mainWindow.webContents.on('did-finish-load', () => {
+    // Reset active runtime ve default bridge khi reload trang
+    if (runtimeManager) {
+      runtimeManager.setActiveRuntime(null);
+    }
+  });
   mainWindow.on('closed', () => {
     mainWindow = null;
     disposeAll();

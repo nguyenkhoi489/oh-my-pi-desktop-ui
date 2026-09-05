@@ -243,6 +243,26 @@ console.log('\n[Test 5] App.tsx 3-Column Layout Architecture');
   assert(code.includes('floatingChanges'), 'App.tsx computes floatingChanges from git and active diffs');
   assert(code.includes('onExpandCanvas'), 'InspectorPanel can toggle workbench mode');
   assert(code.includes('onToggleCenterView'), 'HeaderBar is passed centerView toggle callback');
+  assert(
+    code.includes("setCenterView('chat');\n    setAttachmentRequest"),
+    'handleAddToChat automatically switches centerView to chat when adding file'
+  );
+  assert(
+    code.includes('onClearExternalAttachment={handleClearAttachmentRequest}'),
+    'App.tsx passes onClearExternalAttachment to reset consumed attachmentRequest'
+  );
+
+  const composerPath = path.resolve('src/components/AgentPanel/PromptComposer.tsx');
+  assert(fs.existsSync(composerPath), 'PromptComposer.tsx exists');
+  const composerCode = fs.readFileSync(composerPath, 'utf8');
+  assert(
+    composerCode.includes('textareaRef.current?.focus()'),
+    'PromptComposer focuses textarea when externalAttachment is received'
+  );
+  assert(
+    composerCode.includes('onClearExternalAttachment?.()'),
+    'PromptComposer clears consumed external attachment'
+  );
 }
 
 // ----------------------------------------------------

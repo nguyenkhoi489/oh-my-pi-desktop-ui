@@ -52,6 +52,7 @@ export interface AgentPanelProps {
   onOpenFile?: (filePath: string) => void;
   onOpenBrowser?: (url: string) => void;
   externalAttachment?: { path: string; nonce: number } | null;
+  onClearExternalAttachment?: () => void;
   todoPhases?: OmpTodoPhase[];
   todos?: OmpTodoItem[];
   retryState?: OmpRetryState;
@@ -100,6 +101,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   onOpenFile,
   onOpenBrowser,
   externalAttachment,
+  onClearExternalAttachment,
   onFollowUpMessage,
   followUpQueue,
   todoPhases,
@@ -143,7 +145,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {contextUsage?.tokens != null && (
+          {Boolean(workspacePath) && contextUsage?.tokens != null && (
             <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-surface-highlight text-slate-600 dark:text-zinc-400">
               {contextUsage.tokens >= 1000 ? `${(contextUsage.tokens / 1000).toFixed(1)}k` : contextUsage.tokens} tokens
             </span>
@@ -164,7 +166,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0 max-w-4xl w-full mx-auto">
           {/* Todo Progress & Plan Panel */}
-          <TodoPanel phases={todoPhases} todos={todos} engineStatus={status} />
+          {Boolean(workspacePath) && <TodoPanel phases={todoPhases} todos={todos} engineStatus={status} />}
 
           {/* Message & Execution Timeline */}
           <ChatHistory
@@ -247,6 +249,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
             availableCommands={availableCommands}
             isToolApprovalPending={Boolean(pendingToolApproval)}
             externalAttachment={externalAttachment}
+            onClearExternalAttachment={onClearExternalAttachment}
             availableModels={availableModels}
             selectedModel={selectedModel}
             onSelectModel={onSelectModel}

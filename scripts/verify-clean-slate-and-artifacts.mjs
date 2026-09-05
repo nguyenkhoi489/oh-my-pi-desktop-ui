@@ -53,11 +53,27 @@ console.log('[Test 1] State Clean Slate contract...');
   assert(useOmpRpcSource.includes('setTodoPhases([]);'), 'resetChat clears todoPhases');
   assert(useOmpRpcSource.includes('setTodos([]);'), 'resetChat clears todos');
   assert(useOmpRpcSource.includes('setFollowUpQueue([]);'), 'resetChat clears followUpQueue');
+  assert(useOmpRpcSource.includes('setContextUsage(null);'), 'resetChat clears contextUsage');
+  assert(useOmpRpcSource.includes('setTokensPerSecond(null);'), 'resetChat clears tokensPerSecond');
 
   const appSource = fs.readFileSync(path.join(rootDir, 'src/App.tsx'), 'utf-8');
   assert(appSource.includes('handleProcessStarted = useCallback(async () => {\n    await resetChat(false);'), 'handleProcessStarted calls resetChat(false)');
   assert(appSource.includes('handleAddProject = useCallback(async () => {\n    if (window.electronAPI?.selectFolder) {\n      const selected = await window.electronAPI.selectFolder();\n      if (selected) {\n        await resetChat(false);'), 'handleAddProject calls resetChat(false) before opening');
   assert(appSource.includes('handleOpenFolder = useCallback(async (customPath?: string) => {\n    await resetChat(false);\n    await openFolderDialog(customPath);'), 'handleOpenFolder calls resetChat(false)');
+  assert(appSource.includes('todoPhases={hasWorkspace ? todoPhases : []}'), 'App.tsx suppresses todoPhases when hasWorkspace is false');
+  assert(appSource.includes('todos={hasWorkspace ? todos : []}'), 'App.tsx suppresses todos when hasWorkspace is false');
+  assert(appSource.includes('contextUsage={hasWorkspace ? contextUsage : null}'), 'App.tsx suppresses contextUsage when hasWorkspace is false');
+
+  const agentPanelSource = fs.readFileSync(path.join(rootDir, 'src/components/AgentPanel/AgentPanel.tsx'), 'utf-8');
+  assert(agentPanelSource.includes('{Boolean(workspacePath) && <TodoPanel'), 'AgentPanel guards TodoPanel with Boolean(workspacePath)');
+  assert(agentPanelSource.includes('{Boolean(workspacePath) && contextUsage?.tokens != null && ('), 'AgentPanel guards contextUsage tokens with Boolean(workspacePath)');
+
+  const composerSource = fs.readFileSync(path.join(rootDir, 'src/components/AgentPanel/PromptComposer.tsx'), 'utf-8');
+  assert(composerSource.includes('Boolean(workspacePath) &&\n    contextUsage?.percent != null'), 'PromptComposer guards hasContextUsage with Boolean(workspacePath)');
+
+  const mainSource = fs.readFileSync(path.join(rootDir, 'electron/main.ts'), 'utf-8');
+  assert(mainSource.includes('mainWindow.webContents.on(\'did-finish-load\''), 'electron/main.ts listens to did-finish-load on mainWindow');
+  assert(mainSource.includes('runtimeManager.setActiveRuntime(null)'), 'electron/main.ts resets active runtime on window reload');
 }
 console.log();
 

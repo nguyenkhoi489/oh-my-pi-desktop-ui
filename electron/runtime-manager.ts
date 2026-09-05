@@ -228,7 +228,11 @@ export class RuntimeManager {
     return { success: true, runtime: this.toSnapshot(managed), isNew: true };
   }
 
-  public setActiveRuntime(runtimeId: string): boolean {
+  public setActiveRuntime(runtimeId: string | null): boolean {
+    if (!runtimeId) {
+      this.activeRuntimeId = null;
+      return true;
+    }
     const runtime = this.runtimes.get(runtimeId);
     if (!runtime) {
       return false;

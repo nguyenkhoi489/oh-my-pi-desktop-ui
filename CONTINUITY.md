@@ -14,6 +14,50 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-06 — Fix: Stale Task History and Context Tokens Leaking on Refresh Without Selected Project
+- **State:**
+  - **Root Cause Identified & Fixed:**
+    - **Root Cause:** Khi người dùng tải lại trang (`Ctrl + Shift + R` / `Cmd + Shift + R`), cửa sổ renderer khởi tạo lại với trạng thái ban đầu chưa chọn project nào (`workspacePath = ''`, "No workspace opened"). Tuy nhiên, tiến trình Electron Main Process vẫn giữ nguyên `activeRuntimeId` của project trước đó trong `RuntimeManager`. Khi renderer mới tải xong, `useOmpRpc.ts` gọi `refreshEngineState()` và `refreshTodos()`, khiến bridge trả về danh sách task (6/6 completed) và lượng tokens (109.0k) của session trước đó. Đồng thời, `AgentPanel.tsx`, `PromptComposer.tsx`, và `HeaderBar.tsx` không ràng buộc điều kiện `hasWorkspace`, dẫn tới việc thanh tiến độ nhiệm vụ và số lượng token cũ hiển thị lộn xộn dù chưa có workspace nào được mở.
+  - **Defense-in-Depth Implementation:**
+    - `electron/runtime-manager.ts`: Cập nhật `setActiveRuntime(runtimeId: string | null)` cho phép truyền `null` để đưa active runtime về `defaultBridge`.
+    - `electron/main.ts`: Lắng nghe sự kiện `mainWindow.webContents.on('did-finish-load')` để tự động gọi `runtimeManager.setActiveRuntime(null)` mỗi khi cửa sổ renderer reload.
+    - `src/hooks/useOmpRpc.ts`: Bổ sung `setContextUsage(null)` và `setTokensPerSecond(null)` vào `resetChat` để dọn sạch dữ liệu observability khi reset.
+    - `src/App.tsx`: Ràng buộc điều kiện `hasWorkspace = Boolean(workspacePath)` cho các props `todoPhases`, `todos`, `contextUsage`, `tokensPerSecond`, `engineStatuses`, và `engineWidgets` truyền vào `HeaderBar` và `AgentPanel` (cả Center Stage lẫn Right Sidebar).
+    - `src/components/AgentPanel/AgentPanel.tsx`: Thêm điều kiện `Boolean(workspacePath)` trước khi render `<TodoPanel>` và số token ở header.
+    - `src/components/AgentPanel/PromptComposer.tsx`: Thêm điều kiện `Boolean(workspacePath)` vào `hasContextUsage` để ẩn pill tokens khi chưa mở workspace.
+    - `src/hooks/useWorkspace.ts`: Cập nhật `onProcessStarted` thành `() => void | Promise<void>` và thêm `await options?.onProcessStarted?.()` tại dòng 143, loại bỏ race condition khi chuyển đổi sang session của project khác khiến `resetChat` chạy sau và xoá nhầm tin nhắn vừa nạp của `switchSession`.
+    - `scripts/verify-clean-slate-and-artifacts.mjs`: Mở rộng test suite kiểm tra toàn bộ các guard `hasWorkspace`, `did-finish-load`, và reset context usage (57 passed, 0 failed).
+  - **Verification:**
+    - `npm run test:clean-slate`: 57 passed, 0 failed.
+    - `npm run test:runtime-manager`: 7 passed, 0 failed.
+    - `npm run test:todos-panel`: 66 passed, 0 failed.
+    - `npm run test:center-chat-layout`: 104 passed, 0 failed.
+    - `npm run test:file-preview-links`: 18 passed, 0 failed.
+    - `npm run test:i18n`: 3444 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng kiểm tra tải lại trang (Ctrl + Shift + R) với trạng thái clean slate khi chưa chọn project.
+- **Refs:** `scripts/verify-clean-slate-and-artifacts.mjs`, `electron/main.ts`, `electron/runtime-manager.ts`, `src/App.tsx`, `src/components/AgentPanel/AgentPanel.tsx`
+
+## 2026-09-06 — Feature: Auto Return to Chat and Focus Composer on Add to Chat
+- **State:**
+  - **Root Cause & Behavior:** Trước đây khi người dùng ở chế độ Workbench (`centerView === 'workbench'`) xem file editor, git diff hoặc artifacts, nếu nhấp chuột phải chọn "Thêm vào chat" (`handleAddToChat`), ứng dụng chỉ đính kèm file vào state `attachmentRequest` mà không chuyển `centerView` về `'chat'`. Người dùng vẫn kẹt lại ở màn hình Workbench và không thấy ô chat/composer.
+  - **Implementation:**
+    - `src/App.tsx`: `handleAddToChat` lập tức kích hoạt `setCenterView('chat')` đồng thời với `setAttachmentRequest`, đảm bảo Center Stage lập tức chuyển về khu vực Chat của phiên làm việc hiện tại. Bổ sung `handleClearAttachmentRequest` truyền vào `onClearExternalAttachment` của `AgentPanel` để reset `attachmentRequest` về `null` ngay khi đã được tiêu thụ, ngăn chặn lỗi remount re-attach khi chuyển đổi giữa Workbench và Chat.
+    - `src/components/AgentPanel/AgentPanel.tsx`: Truyền `onClearExternalAttachment` vào `PromptComposer`.
+    - `src/components/AgentPanel/PromptComposer.tsx`: Trong `useEffect` xử lý `externalAttachment`, gọi `onClearExternalAttachment?.()` ngay sau khi thêm tệp và bổ sung lệnh tự động `textareaRef.current?.focus()` để người dùng có thể gõ ngay câu lệnh cho tệp vừa đính kèm.
+    - `scripts/verify-center-chat-layout.mjs`: Bổ sung kiểm tra contract cho `handleAddToChat` kích hoạt `setCenterView('chat')`, tiêu thụ an toàn reset `attachmentRequest`, và `PromptComposer` tự động focus textarea khi nhận file (104 passed, 0 failed).
+  - **Verification:**
+    - `npm run test:center-chat-layout`: 104 passed, 0 failed.
+    - `npm run test:composer-attach`: 38 passed, 0 failed.
+    - `npm run test:file-preview-links`: 18 passed, 0 failed.
+    - `npm run test:i18n`: 3444 passed, 0 failed.
+    - `npm run test:resizable-sidebar`: 15 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng trải nghiệm thao tác chuột phải "Thêm vào chat" từ mọi chế độ hiển thị.
+- **Refs:** `scripts/verify-center-chat-layout.mjs`, `src/App.tsx`, `src/components/AgentPanel/PromptComposer.tsx`, `src/components/AgentPanel/AgentPanel.tsx`
+
 ## 2026-09-06 — Fix: Nested Button Hydration Error in ProjectGroupList & File Link Clickability in Markdown
 - **State:**
   - **Root Cause Identified & Fixed:**

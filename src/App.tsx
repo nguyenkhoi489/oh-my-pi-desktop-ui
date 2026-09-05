@@ -445,6 +445,7 @@ export function App() {
   } = useWorkspace({
     onProcessStarted: handleProcessStarted,
   });
+  const hasWorkspace = Boolean(workspacePath);
 
   const handleSelectFileWithGuard = useCallback((file: WorkspaceFile) => {
     if (file.isDirectory) return;
@@ -711,7 +712,12 @@ export function App() {
   );
 
   const handleAddToChat = useCallback((file: WorkspaceFile) => {
+    setCenterView('chat');
     setAttachmentRequest((prev) => ({ path: file.relativePath, nonce: (prev?.nonce ?? 0) + 1 }));
+  }, []);
+
+  const handleClearAttachmentRequest = useCallback(() => {
+    setAttachmentRequest(null);
   }, []);
 
   const handleDeleteFile = useCallback(
@@ -841,7 +847,7 @@ export function App() {
       {/* 1. macOS Header & Titlebar */}
       <HeaderBar
         workspaceName={workspaceName}
-        hasWorkspace={Boolean(workspacePath)}
+        hasWorkspace={hasWorkspace}
         onOpenFolder={handleOpenFolder}
         status={status}
         installStatus={installStatus}
@@ -858,8 +864,8 @@ export function App() {
         onToggleLeftSidebar={toggleLeftSidebar}
         isRightSidebarOpen={isRightSidebarOpen}
         onToggleRightSidebar={toggleRightSidebar}
-        contextUsage={contextUsage}
-        tokensPerSecond={tokensPerSecond}
+        contextUsage={hasWorkspace ? contextUsage : null}
+        tokensPerSecond={hasWorkspace ? tokensPerSecond : null}
         onGetSessionStats={getSessionStats}
         onGetGlobalUsage={getGlobalUsage}
         onGetGlobalStats={getGlobalStats}
@@ -935,16 +941,16 @@ export function App() {
               activeToolCalls={activeToolCalls}
               currentStreamText={currentStreamText}
               status={status}
-              contextUsage={contextUsage}
-              engineStatuses={engineStatuses}
-              engineWidgets={engineWidgets}
+              contextUsage={hasWorkspace ? contextUsage : null}
+              engineStatuses={hasWorkspace ? engineStatuses : []}
+              engineWidgets={hasWorkspace ? engineWidgets : []}
               workspaceFiles={files}
               workspacePath={workspacePath || undefined}
               projectName={workspaceName}
               gitBranch={gitStatus?.branch}
               availableCommands={availableCommands}
-              todoPhases={todoPhases}
-              todos={todos}
+              todoPhases={hasWorkspace ? todoPhases : []}
+              todos={hasWorkspace ? todos : []}
               pendingToolApproval={isCurrentToolApproval ? activeUiRequest : null}
               toolApprovalQueueLength={uiRequestQueue.length}
               onApproveTool={handleApproveTool}
@@ -958,6 +964,7 @@ export function App() {
               onOpenFile={handleOpenFileByPath}
               onOpenBrowser={handleOpenBrowser}
               externalAttachment={attachmentRequest}
+              onClearExternalAttachment={handleClearAttachmentRequest}
               retryState={retryState}
               onAbortRetry={abortRetry}
               onRepairSession={repairSession}
@@ -1058,14 +1065,14 @@ export function App() {
                 activeToolCalls={activeToolCalls}
                 currentStreamText={currentStreamText}
                 status={status}
-                contextUsage={contextUsage}
-                engineStatuses={engineStatuses}
-                engineWidgets={engineWidgets}
+                contextUsage={hasWorkspace ? contextUsage : null}
+                engineStatuses={hasWorkspace ? engineStatuses : []}
+                engineWidgets={hasWorkspace ? engineWidgets : []}
                 workspaceFiles={files}
                 workspacePath={workspacePath || undefined}
                 availableCommands={availableCommands}
-                todoPhases={todoPhases}
-                todos={todos}
+                todoPhases={hasWorkspace ? todoPhases : []}
+                todos={hasWorkspace ? todos : []}
                 pendingToolApproval={isCurrentToolApproval ? activeUiRequest : null}
                 toolApprovalQueueLength={uiRequestQueue.length}
                 onApproveTool={handleApproveTool}
@@ -1080,6 +1087,7 @@ export function App() {
                 onOpenFile={handleOpenFileByPath}
                 onOpenBrowser={handleOpenBrowser}
                 externalAttachment={attachmentRequest}
+                onClearExternalAttachment={handleClearAttachmentRequest}
                 retryState={retryState}
                 onAbortRetry={abortRetry}
                 onRepairSession={repairSession}

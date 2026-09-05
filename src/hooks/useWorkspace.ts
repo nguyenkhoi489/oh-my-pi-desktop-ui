@@ -4,7 +4,7 @@ import { DEMO_WORKSPACE_FILES, DEMO_ARTIFACTS } from '../mock/demoData';
 import { discoverWorkspaceArtifacts } from '../utils/artifactDiscovery';
 
 interface UseWorkspaceOptions {
-  onProcessStarted?: () => void;
+  onProcessStarted?: () => void | Promise<void>;
 }
 
 export function useWorkspace(options?: UseWorkspaceOptions) {
@@ -140,7 +140,7 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
 
         const startRes = await startPromise;
         if (startRes?.success) {
-          options?.onProcessStarted?.();
+          await options?.onProcessStarted?.();
         } else {
           console.warn('[useWorkspace] OMP engine failed to start for workspace:', folderPath);
         }
