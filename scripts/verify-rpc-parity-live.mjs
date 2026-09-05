@@ -226,12 +226,24 @@ async function runLiveRpcParityVerification() {
 
   // 7. Model & Thinking Cycling
   console.log('\n[Section 7] Model & Thinking Cycling...');
+  const stateBeforeCycle = await sendCommand({ type: 'get_state', id: 'rpc-state-before-cycle' });
+  const originalModel = stateBeforeCycle.data?.model;
+
   const cycleModelRes = await sendCommand({ type: 'cycle_model', id: 'rpc-cycle-model-1' });
   assert(cycleModelRes.success === true && Boolean(cycleModelRes.data?.model), 'cycle_model returned new model info');
 
+  if (originalModel) {
+    await sendCommand({
+      type: 'set_model',
+      id: 'rpc-restore-model-1',
+      provider: originalModel.provider,
+      modelId: originalModel.id,
+      model: originalModel.id,
+    });
+  }
+
   const cycleThinkingRes = await sendCommand({ type: 'cycle_thinking_level', id: 'rpc-cycle-think-1' });
   assert(cycleThinkingRes.success === true && typeof cycleThinkingRes.data?.level === 'string', 'cycle_thinking_level returned thinking level');
-
   // 8. Live Turn: Steer, Follow-up, Abort & Prompt, and Assistant Text
   console.log('\n[Section 8] Live Turn: Steer, Follow-up, Abort & Prompt...');
   // Send active prompt

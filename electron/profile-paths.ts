@@ -9,12 +9,17 @@ export function sanitizeProfileName(name: string): string {
 }
 
 // Base OMP directory by profile
+function getOmpHome(): string {
+  return process.env.OMP_HOME && process.env.OMP_HOME.trim() ? process.env.OMP_HOME.trim() : os.homedir();
+}
+
 export function getOmpBaseDir(profile?: string | null): string {
   const cleanProfile = profile?.trim();
+  const baseDir = getOmpHome();
   if (!cleanProfile || cleanProfile === 'default') {
-    return path.join(os.homedir(), '.omp');
+    return path.join(baseDir, '.omp');
   }
-  return path.join(os.homedir(), '.omp', 'profiles', sanitizeProfileName(cleanProfile));
+  return path.join(baseDir, '.omp', 'profiles', sanitizeProfileName(cleanProfile));
 }
 
 // Profile session directory by profile and workspace
@@ -30,7 +35,7 @@ export function getProfileSessionDir(profile?: string | null, workspacePath?: st
 
 // List all profiles on system
 export async function listProfiles(): Promise<string[]> {
-  const profilesDir = path.join(os.homedir(), '.omp', 'profiles');
+  const profilesDir = path.join(getOmpHome(), '.omp', 'profiles');
   const profiles: string[] = ['default'];
 
   try {
@@ -54,7 +59,7 @@ export async function createProfile(name: string): Promise<{ success: boolean; p
     return { success: false, error: tm('electron.profile.invalidOrDuplicateName') };
   }
 
-  const profileDir = path.join(os.homedir(), '.omp', 'profiles', cleanName);
+  const profileDir = path.join(getOmpHome(), '.omp', 'profiles', cleanName);
   try {
     await fs.mkdir(profileDir, { recursive: true });
     await fs.mkdir(path.join(profileDir, 'agent', 'sessions'), { recursive: true });
@@ -71,7 +76,7 @@ export async function deleteProfile(name: string): Promise<{ success: boolean; e
     return { success: false, error: tm('electron.profile.cannotDeleteDefault') };
   }
 
-  const profileDir = path.join(os.homedir(), '.omp', 'profiles', cleanName);
+  const profileDir = path.join(getOmpHome(), '.omp', 'profiles', cleanName);
   try {
     await fs.rm(profileDir, { recursive: true, force: true });
     return { success: true };

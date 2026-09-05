@@ -36,6 +36,7 @@ import type {
   SshHostAddInput,
   GrievancesListOptions,
   GrievancesCleanOptions,
+  OmpEventEnvelope,
 } from './types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -630,5 +631,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: unknown, data: { text: string; id?: string }) => callback(data);
     ipcRenderer.on('omp:bash-output', handler);
     return () => ipcRenderer.removeListener('omp:bash-output', handler);
+  },
+  // Multi-Project & Runtime Management (Phase 1)
+  listProjects: () => ipcRenderer.invoke('projects:list'),
+  addProject: (projectPath: string, name?: string) => ipcRenderer.invoke('projects:add', projectPath, name),
+  removeProject: (id: string) => ipcRenderer.invoke('projects:remove', id),
+  togglePinProject: (id: string) => ipcRenderer.invoke('projects:pin', id),
+
+  listRuntimes: () => ipcRenderer.invoke('runtime:list'),
+  admitRuntime: (projectId: string, cwd: string, sessionPath?: string) =>
+    ipcRenderer.invoke('runtime:admit', projectId, cwd, sessionPath),
+  switchRuntime: (runtimeId: string) => ipcRenderer.invoke('runtime:switch', runtimeId),
+  stopRuntime: (runtimeId: string) => ipcRenderer.invoke('runtime:stop', runtimeId),
+
+  indexSessions: (projectId: string, projectPath: string, profile?: string) =>
+    ipcRenderer.invoke('runtime:index-sessions', projectId, projectPath, profile),
+
+  onOmpEvent: (callback: (envelope: OmpEventEnvelope) => void) => {
+    const handler = (_: unknown, envelope: OmpEventEnvelope) => callback(envelope);
+    ipcRenderer.on('omp:event', handler);
+    return () => ipcRenderer.removeListener('omp:event', handler);
   },
 });

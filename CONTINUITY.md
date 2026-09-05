@@ -1121,3 +1121,186 @@ Entry template:
   - Verification: Added Test 6 in `scripts/verify-sessions.mjs` and updated Test 8 in `scripts/verify-todos-panel.mjs`. Verified via `test:i18n` (3274 assertions), `test:todos-panel` (66 assertions), `test:sessions` (77 assertions), and `tsc` (renderer & electron).
 - **Refs:**
   - `plans/plan-260904-1145-api-error-recovery-ui.md`
+
+## 2026-09-04 — Phase 1: RuntimeManager & Async Session Indexer (True Concurrent Multi-Project)
+
+- **State:** Completed Phase 1 of `gooey-pi-workspace-and-multiproject` plan (`plans/260904-1723-gooey-pi-workspace-and-multiproject/phase-01-start.md`).
+  - `OmpBridge`: Refactored to typed `eventSink`. Centralized all emissions through `this.emit()` with backward compatibility fallback to `window.webContents.send`.
+  - `RuntimeManager` (`electron/runtime-manager.ts`): Manages `Map<runtimeId, ManagedRuntime>` for true concurrent execution across multiple projects.
+    - Enforces admission control (`MAX_CONCURRENT_RUNTIMES = 4`) with LRU idle runtime retirement.
+    - Guards non-idle runtime lifecycles (`awaiting_ready`, `spawning`, `negotiating`) and busy agent statuses from retirement.
+    - Dual-emitting envelope contract: active runtime emits flat channel events + `omp:event` envelope; background runtimes emit `omp:event` envelope only.
+    - Automatic `sessionPath` synchronization in event envelopes as bridge state transitions.
+    - Settings propagation: fans out `setThinkingLevel`, `setSteeringMode`, `setFollowUpMode`, `setInterruptMode`, and `setCustomBinaryPath` to all managed runtimes.
+  - `ProjectsStore` (`electron/projects-store.ts`): Fully async persistence with FIFO sequential promise queue (`runMutation`) preventing race conditions during concurrent project operations.
+  - `SessionIndexer` (`electron/session-indexer.ts`): 100% async chunked session indexer using `fs/promises`, resolving canonical paths via `realpath` and supporting custom OMP profiles. Indexes 50 sessions in ~3ms (< 100ms threshold).
+  - `Main` & `Preload`: Registered `projects:*` and `runtime:*` IPC handlers; updated preload bridge and contracts in `electron/types.ts` and `src/types/index.ts`.
+  - Tests: Added `scripts/verify-session-indexer.mjs` (`npm run test:session-indexer`) and `scripts/verify-runtime-manager.mjs` (`npm run test:runtime-manager`).
+  - Verification: 100% pass across `test:session-indexer`, `test:runtime-manager`, `test:bridge`, `test:i18n`, `test:preload`, `test:profiles`, and both renderer and electron typechecks (`tsc --noEmit`).
+- **Next:**
+  - Proceed to Phase 2: In-App Browser Component & Inspector Shell (`phase-02-in-app-browser-and-inspector.md`).
+- **Refs:**
+  - `plans/260904-1723-gooey-pi-workspace-and-multiproject/phase-01-start.md`
+  - `plans/260904-1723-gooey-pi-workspace-and-multiproject/plan.md`
+
+## 2026-09-04 — Phase 2: In-App Browser & Inspector Shell (GooeyPi Multi-Project Layout)
+- **State:** Completed Phase 2 of `gooey-pi-workspace-and-multiproject` plan (`plans/260904-1723-gooey-pi-workspace-and-multiproject/phase-02-in-app-browser-and-inspector.md`).
+  - `electron/webview-security.ts`: Hardened security controls for guest `<webview>` webcontents:
+    - Enabled `webviewTag: true` in Electron BrowserWindow `webPreferences`.
+    - Intercepts `will-attach-webview`: strips guest preload scripts, forces `sandbox = true`, forces `partition = 'persist:omp-agent-browser'`, forces `allowpopups = false`, and enforces isolation (`nodeIntegration: false`, `contextIsolation: true`, `webSecurity: true`, `allowRunningInsecureContent: false`).
+    - Installs strict session permission check/request handlers (`setPermissionCheckHandler`, `setPermissionRequestHandler`) on the guest webview session to deny all permission requests (camera, microphone, geolocation, notifications).
+    - Blocks dangerous protocols (`file:`, `javascript:`, `data:`, `vbscript:`) on initial attachment and `will-navigate`.
+    - Validates guest popup URLs before delegating to `shell.openExternal` and denies new window spawning in webview.
+  - `src/utils/urlHelper.ts`: Robust URL normalization (`normalizeUrl`, `isSafeUrl`):
+    - Automatically prepends `http://` for `localhost` and loopback IPs (`127.0.0.1`, `0.0.0.0`, `[::1]`).
+    - Prepends `https://` for valid domain strings.
+    - Routes arbitrary queries and dangerous schemes to Google search.
+    - Normalizes empty inputs to `about:blank`.
+  - `src/components/Inspector/BrowserPanel.tsx`: Full In-App Browser component:
+    - Sandboxed `<webview partition="persist:omp-agent-browser" allowpopups={false}>`.
+    - Omnibox address bar, history navigation (Back/Forward), reload/stop, localhost quick toggle, external open, DevTools toggle.
+    - Recovers cleanly from crashes (`render-process-gone`, `unresponsive`) with dedicated `handleRecoverReload` handler.
+    - "Send URL to Chat" button attaches active browser URL to PromptComposer.
+  - `src/components/Inspector/SummaryPanel.tsx`: Live context and token overview:
+    - Context window gauge and progress bar with threshold color-coding.
+    - Tokens used / context window capacity, tokens/second processing speed, active model, workspace.
+    - Fully localized token breakdown (Input, Output, Reasoning, Cache Read/Write) via `t()`.
+  - `src/components/Inspector/InspectorPanel.tsx`: Multi-tab Inspector shell:
+    - Tabs: `Summary` | `Changes (N)` | `Browser` | `Files`.
+    - Persistent DOM mounting (via `hidden` CSS) to preserve `<webview>` navigation and login sessions across tab switches.
+    - Supports both controlled and uncontrolled `activeTab` states.
+    - Global keyboard shortcut: `Cmd+Shift+B` (or `Ctrl+Shift+B`) immediately opens Browser tab.
+    - Integrated into `src/App.tsx` layout with full keyboard and URL dispatch wiring.
+  - `shared/i18n`: Registered all `inspector.*`, `browser.*`, and `summary.*` translation keys in `vi.ts` and `en.ts`.
+  - Tests: Created `scripts/verify-browser-panel.mjs` (`npm run test:browser-panel`), verified 100% pass across all test suites, zero Vietnamese in `src/` and `electron/`, and zero TypeScript diagnostics.
+- **Next:**
+  - Proceed to Phase 3: Center Chat, Event Routing & Layout Cutover (`phase-03-center-chat-and-layout-cutover.md`).
+- **Refs:**
+  - `plans/260904-1723-gooey-pi-workspace-and-multiproject/phase-02-in-app-browser-and-inspector.md`
+  - `plans/260904-1723-gooey-pi-workspace-and-multiproject/plan.md`
+
+## 2026-09-05 — Phase 3: Center Chat, Event Routing & Layout Cutover (GooeyPi Multi-Project Layout)
+- **State:** Completed Phase 3 of `gooey-pi-workspace-and-multiproject` plan (`plans/260904-1723-gooey-pi-workspace-and-multiproject/phase-03-center-chat-and-layout-cutover.md`).
+  - `src/utils/runtimeDemux.ts`: Pure event demultiplexer and session state cache:
+    - Demultiplexes `omp:event` stream across concurrent managed runtimes.
+    - Dual-emitting safety: background runtimes accumulate stream tokens, tool calls, and diffs without duplicate ingestion for active runtimes.
+    - Captures turn completion attention flags (`attention: true`) for background runtimes.
+    - `saveActiveSessionToMap` and `restoreSessionFromMap` preserve full turn history, streaming tokens, thinking blocks, and active tool calls across A -> B -> A switches.
+  - `src/components/Sidebar/ProjectGroupList.tsx`: Tree-structured project hierarchy in Sidebar:
+    - Groups sessions by project with collapse/expand toggles, pin states, and OMP sanitized `--` directory path resolution.
+    - Live status indicators: animated `LoaderCircle` spinner for background running runtimes and `attention` pulse for finished tasks.
+    - Action buttons for session export (`Download`) and deletion (`Trash2`).
+  - `src/components/AgentPanel/AgentPanel.tsx`: Center Stage Chat layout:
+    - Centered `max-w-4xl mx-auto` reading container.
+    - `FloatingChangesCard` floating card above composer displaying changed files, insertions, and deletions with 1-click Review button switching to Inspector Changes tab.
+    - Clean memoization for `onRetry` preventing ChatHistory re-render cascades.
+  - `src/components/HeaderBar.tsx`: View switcher between Center Chat and Canvas Workbench (`Chat` vs `Workbench`).
+  - `src/App.tsx`: 3-Column GooeyPi-inspired layout cutover:
+    - Sidebar (`ProjectGroupList`, `ProjectTree`, `SubagentHub`) -> Center Stage Chat (`AgentPanel` or `CanvasContainer`) -> Right Inspector (`InspectorPanel`).
+    - Restored `save-before-switch` guard in `handleSaveAndContinue` saving draft content before switching files.
+    - Guarded `handleOpenFileByPath` navigating to workbench with dirty state protection.
+    - Project workspace synchronization on session switch (`handleSelectSessionFromGroup`, `handleNewSessionForProject`).
+  - `shared/i18n`: Added all `projects.*`, `floatingChanges.*`, and `header.chat` / `header.workbench` translations in `vi.ts` and `en.ts`.
+  - Tests: Added `scripts/verify-center-chat-layout.mjs` (`npm run test:center-chat-layout`) and updated `scripts/verify-unsaved-guard.mjs`.
+  - Verification: 100% pass across all 7 relevant suites, zero TypeScript errors (`tsc --noEmit` & `tsc -p tsconfig.node.json --noEmit`), and zero untranslated UI strings.
+- **Next:**
+  - Proceed to Phase 4: City (thou agent-service daemon integration / host tools).
+- **Refs:**
+  - `plans/260904-1723-gooey-pi-workspace-and-multiproject/phase-03-center-chat-and-layout-cutover.md`
+  - `plans/260904-1723-gooey-pi-workspace-and-multiproject/plan.md`
+
+## 2026-09-05 — Phase 4: Concurrency Verification & Polish (GooeyPi Multi-Project Layout)
+- **State:** Completed Phase 4 of `gooey-pi-workspace-and-multiproject` plan (`plans/260904-1723-gooey-pi-workspace-and-multiproject/phase-04-verification-and-polish.md`).
+  - `scripts/verify-multi-runtime-ui.mjs`: Added comprehensive verification suite (10/10 checks passed):
+    - Verified `createEmptyRuntimeSession` defaults and parameter handling.
+    - Verified 4-runtime multi-tenant stream token isolation with zero cross-contamination.
+    - Verified thinking blocks capture and isolation across background runtimes.
+    - Verified tool call execution lifecycle demultiplexing across independent background runtimes.
+    - Verified diff generation containment in background sessions.
+    - Verified message completion resets accumulators and pushes to history in background sessions.
+    - Verified state machine transitions and attention flag lifecycle (busy -> idle = attention; user switch = clear attention).
+    - Verified rapid switching stress test across 4 runtimes with interleaved event envelopes.
+    - Verified immutability invariants on state reducers.
+    - Verified preload IPC contract exposure (`runtime:*`, `onOmpEvent`).
+  - `electron/main.ts`:
+    - Added `process.on('exit')` cleanup handler calling `disposeAll()` to ensure 100% child process termination on all exit paths, eliminating zombie `omp` processes.
+  - `package.json`:
+    - Registered `test:multi-runtime-ui` script.
+    - Integrated both `test:center-chat-layout` and `test:multi-runtime-ui` into the master `npm test` pipeline.
+  - `scripts/verify-rpc-parity-live.mjs`:
+    - Added model restoration step (`set_model`) after testing `cycle_model` to prevent subsequent live turn generation failures caused by cycling to models without active API quota.
+  - `docs/architecture-overview.html`:
+    - Updated architectural component documentation to reflect `RuntimeManager` (concurrency & admission control), `SessionIndexer`, `ProjectsStore`, and `WebviewSecurity`.
+  - Verification:
+    - 100% pass across all 5 multi-project / concurrency verify suites (`test:runtime-manager`, `test:session-indexer`, `test:browser-panel`, `test:center-chat-layout`, `test:multi-runtime-ui`).
+    - 100% pass across both halves of the ~60 test suites in `package.json`.
+    - 100% i18n key parity (3406 keys verified in `npm run test:i18n`).
+    - 0 TypeScript errors (`npx tsc --noEmit` and `npx tsc -p tsconfig.node.json --noEmit`).
+- **In-flight:** None.
+- **Next:** Ready for final packaging or subsequent roadmap features.
+- **Refs:**
+  - `plans/260904-1723-gooey-pi-workspace-and-multiproject/phase-04-verification-and-polish.md`
+  - `plans/260904-1723-gooey-pi-workspace-and-multiproject/plan.md`
+
+## 2026-09-05 — UI Ergonomics & PromptComposer Toolbar Polish
+- **State:** Completed UI refinement and ergonomics improvements per user feedback:
+  - `electron/projects-store.ts` & `src/types/index.ts`:
+    - Added `createdAt: number` timestamp to `ProjectItem`.
+    - `ProjectsStore.getProjects`: Sorts by `pinned` first, then `createdAt` (or initial addition order), preventing project order re-sorting when switching projects (`lastOpenedAt` no longer alters sidebar position).
+  - `src/components/Sidebar/ProjectGroupList.tsx`:
+    - Removed fallback "Phiên khác (Other Sessions)" block from sidebar, cleanly confining session lists to their owning projects.
+  - `src/components/Inspector/InspectorPanel.tsx` & `src/types/index.ts`:
+    - Removed obsolete `files` tab from `InspectorPanel` (simplified to `summary`, `changes`, `browser`), maintaining clean separation of concerns with Left Sidebar `ProjectTree`.
+    - `src/App.tsx`: Auto-opens Inspector when agent starts executing a task (`thinking`, `streaming`, `executing_tool`) or emits a diff, while respecting manual user dismissals via `userClosedInspectorRef`.
+  - `src/components/HeaderBar.tsx`:
+    - Removed `Terminal` icon from the top navbar.
+    - Relocated Model Selector, Approval Mode Selector, and Context Usage Meter from HeaderBar Center section, yielding a clean, uncluttered top bar that focuses exclusively on live agent status and stream speed.
+  - `src/components/AgentPanel/PromptComposer.tsx`:
+    - Integrated Model Selector Pill (model name with responsive truncation, thinking level badge, and dropdown popover), Approval Mode Pill (`write`, `always-ask`, `yolo`), and Context Usage Meter into the bottom toolbar directly adjacent to `Commands`.
+    - Rewrote Slash & Mention Token Scanning: Token detection in `handleInputChange` now scans backward from cursor to the preceding whitespace. Backspacing characters (or removing trailing space) preserves the active query token and keeps the Slash Commands & Skills menu open without losing context.
+  - `scripts/verify-headerbar-layout.mjs`:
+    - Updated verification suite (23/23 passed) to enforce HeaderBar center cleanliness, absence of Terminal button, and proper relocation of Model, Mode, and Context controls into PromptComposer.
+  - Verification:
+    - 100% pass across verify suites (`verify-headerbar-layout`, `verify-browser-panel`, `verify-center-chat-layout`, `verify-slash-commands`, `verify-composer-attach`, `verify-multi-runtime-ui`, `verify-i18n`).
+    - 0 TypeScript errors across both renderer and electron (`tsc --noEmit` & `tsc -p tsconfig.node.json --noEmit`).
+- **In-flight:** None.
+- **Refs:**
+  - `plans/260904-1723-gooey-pi-workspace-and-multiproject/phase-04-verification-and-polish.md`
+  - `plans/260904-1723-gooey-pi-workspace-and-multiproject/plan.md`
+
+## 2026-09-05 — Multi-Project Order Stability, Chat Reset & Composer Popovers
+- **State:** Resolved user-reported issues on multi-project switching and composer popover UX:
+  - `electron/projects-store.ts`:
+    - In `load()`, backfilled a permanent `createdAt` index for legacy projects in `projects.json` to lock project sequence.
+    - In `getProjects()`, enforced strict sorting by `pinned` then `createdAt`. Clicking or switching projects updates `lastOpenedAt` for auditing, but never shifts project position in the sidebar.
+  - `src/hooks/useOmpRpc.ts` & `src/App.tsx`:
+    - Added `resetChat(reloadHistory?: boolean)` to `useOmpRpc`.
+    - In `App.tsx:handleSelectProject`, calls `resetChat(false)` immediately when switching projects to wipe the old project's messages, streaming state, thinking, and todos.
+    - In `App.tsx:handleProcessStarted`, calls `resetChat(true)` to cleanly hydrate the active session history of the newly selected project.
+  - `src/components/AgentPanel/PromptComposer.tsx`:
+    - Removed redundant `Attach` and `Commands` buttons from toolbar bottom (since typing `@` and `/` or pressing `Cmd+/` natively invokes file picker and slash command menu).
+    - Removed `overflow-x-auto` from the toolbar container which was forcing `overflow-y: auto` per CSS spec and clipping the `Model` and `Approval Mode` popovers.
+    - Added `pointer-events-none` on button icons and elevated popovers to `z-50` so dropdown popovers display with full height and respond crisply to clicks.
+  - Verification:
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` passed with 0 errors.
+    - All verify scripts (`test:headerbar-layout`, `test:center-chat-layout`, `test:runtime-manager`, `test:multi-runtime-ui`, `test:browser-panel`, `test:i18n`) passed 100%.
+- **In-flight:** None.
+- **Next:** Ready for packaging and QA testing.
+
+## 2026-09-05 — Permanent Project Order Fix & Regression Verification
+- **State:** Resolved root cause of sidebar project list reversing positions when switching projects:
+  - `electron/projects-store.ts`:
+    - In `load()`, auto-saves migrated legacy projects immediately to disk when `hasMissingCreatedAt` is detected.
+    - In `addProject()`, computes `maxCreatedAt + 1000` to prevent timestamp collisions on existing projects.
+    - In `getProjects()`, enforces strict sort by `pinned` then `createdAt`, with `a.name.localeCompare(b.name)` as deterministic tie-breaker.
+  - `~/Library/Application Support/OMP Agent/projects.json`:
+    - Reordered and locked `cooling` as Project 1 (`createdAt: 1000000`) and `CLIProxy-API` as Project 2 (`createdAt: 1001000`).
+  - `scripts/verify-runtime-manager.mjs`:
+    - Added regression tests proving that selecting/touching projects preserves position order and that legacy unindexed catalogs migrate and persist safely.
+  - Verification:
+    - 7/7 tests passed in `npm run test:runtime-manager`.
+    - Rebuilt `dist-electron` and restarted live dev process with fresh main process bundle.
+- **In-flight:** None.
+- **Next:** Ready for packaging and QA testing.
+- **Refs:**
+  - `plans/reports/fix-260905-1355-project-order-swap.md`

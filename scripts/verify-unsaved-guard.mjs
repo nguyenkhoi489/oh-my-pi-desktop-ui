@@ -10,6 +10,8 @@
  * 6. i18n keys defined for modal and conflict banner in vi and en.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { vi } from '../shared/i18n/vi.ts';
 import { en } from '../shared/i18n/en.ts';
 
@@ -153,6 +155,31 @@ console.log('\n[Test 3] i18n keys for Unsaved Modal & Conflict Banner');
     assert(typeof vi[key] === 'string' && vi[key].length > 0, `vi dictionary has key "${key}"`);
     assert(typeof en[key] === 'string' && en[key].length > 0, `en dictionary has key "${key}"`);
   }
+}
+
+// Test 4: App.tsx implementation verification for handleSaveAndContinue
+console.log('\n[Test 4] App.tsx handleSaveAndContinue implementation');
+{
+  const appPath = path.resolve('src/App.tsx');
+  assert(fs.existsSync(appPath), 'src/App.tsx exists');
+  const appCode = fs.readFileSync(appPath, 'utf8');
+
+  assert(appCode.includes('handleSaveAndContinue'), 'App defines handleSaveAndContinue');
+  assert(
+    appCode.includes('saveFileContent(selectedFile.path, contentToSave)'),
+    'handleSaveAndContinue invokes saveFileContent with selectedFile.path and contentToSave'
+  );
+  assert(
+    appCode.includes('editorDraftContent ?? fileContent'),
+    'contentToSave resolves editorDraftContent ?? fileContent'
+  );
+
+  const saveIndex = appCode.indexOf('await saveFileContent(selectedFile.path, contentToSave)');
+  const selectIndex = appCode.indexOf('selectFile(pendingFileToSelect)', saveIndex);
+  assert(
+    saveIndex !== -1 && selectIndex !== -1 && saveIndex < selectIndex,
+    'saveFileContent executes strictly before switching to pendingFileToSelect'
+  );
 }
 
 console.log(`\n========================================`);

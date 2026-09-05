@@ -243,6 +243,43 @@ export interface OmpSessionInfo {
   timestamp: string;
   updatedAt?: string;
   active?: boolean;
+  projectId?: string;
+  projectPath?: string;
+}
+
+export interface ProjectItem {
+  id: string;
+  name: string;
+  path: string;
+  pinned?: boolean;
+  lastOpenedAt: number;
+  createdAt?: number;
+}
+
+export interface ManagedRuntimeSnapshot {
+  runtimeId: string;
+  projectId: string;
+  sessionPath?: string;
+  cwd: string;
+  status: OmpAgentStatus;
+  lastActiveAt: number;
+  isActive: boolean;
+}
+
+export interface OmpEventEnvelope {
+  runtimeId: string;
+  projectId: string;
+  sessionPath?: string;
+  channel: string;
+  payload: unknown;
+}
+export interface RuntimeStateSnapshot {
+  runtimeId: string;
+  projectId: string;
+  sessionPath?: string;
+  status: OmpAgentStatus;
+  attention?: boolean;
+  lastActiveAt?: number;
 }
 
 export interface OmpBranchEntry {
@@ -625,6 +662,8 @@ export interface GitStatusResult {
   branch?: string;
   filesCount?: number;
   files?: string[];
+  insertions?: number;
+  deletions?: number;
   error?: string;
 }
 export interface BrowserRelayInstallOptions {
@@ -1530,7 +1569,36 @@ export interface ElectronAPI {
   onOmpCommandOutput: (callback: (data: { text: string }) => void) => () => void;
   onOmpTodosUpdate?: (callback: (data: { phases: OmpTodoPhase[]; todos: OmpTodoItem[] }) => void) => () => void;
   onOmpRetryState: (callback: (state: OmpRetryState) => void) => () => void;
+  // Multi-Project & Runtime Management (Phase 1)
+  listProjects?: () => Promise<{ success: boolean; projects: ProjectItem[]; error?: string }>;
+  addProject?: (projectPath: string, name?: string) => Promise<{ success: boolean; project?: ProjectItem; error?: string }>;
+  removeProject?: (id: string) => Promise<{ success: boolean; error?: string }>;
+  togglePinProject?: (id: string) => Promise<{ success: boolean; error?: string }>;
+  listRuntimes?: () => Promise<{ success: boolean; runtimes: ManagedRuntimeSnapshot[] }>;
+  admitRuntime?: (projectId: string, cwd: string, sessionPath?: string) => Promise<{ success: boolean; runtimeId?: string; isNew?: boolean; error?: string }>;
+  switchRuntime?: (runtimeId: string) => Promise<{ success: boolean; error?: string }>;
+  stopRuntime?: (runtimeId: string) => Promise<{ success: boolean; error?: string }>;
+  indexSessions?: (projectId: string, projectPath: string, profile?: string) => Promise<{ success: boolean; sessions?: OmpSessionInfo[]; error?: string }>;
+  onOmpEvent?: (callback: (envelope: OmpEventEnvelope) => void) => () => void;
 }
+export type InspectorTab = 'summary' | 'changes' | 'browser';
+
+export interface ElectronWebviewElement extends HTMLElement {
+  loadURL(url: string, options?: Record<string, unknown>): Promise<void>;
+  getURL(): string;
+  getTitle(): string;
+  isLoading(): boolean;
+  canGoBack(): boolean;
+  canGoForward(): boolean;
+  goBack(): void;
+  goForward(): void;
+  reload(): void;
+  stop(): void;
+  openDevTools(): void;
+  closeDevTools(): void;
+  isDevToolsOpened(): boolean;
+}
+
 declare global {
   interface Window {
     electronAPI?: ElectronAPI;

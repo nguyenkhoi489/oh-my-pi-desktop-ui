@@ -70,6 +70,13 @@ import {
 import { reconcileFollowUpQueue, type FollowUpQueueItem } from '../utils/followUpQueue';
 import { DEMO_MESSAGES, DEMO_INITIAL_DIFF } from '../mock/demoData';
 import { stripAnsi } from '../../shared/text/strip-ansi';
+import {
+  handleRuntimeEnvelope,
+  saveActiveSessionToMap,
+  restoreSessionFromMap,
+  createEmptyRuntimeSession,
+  RuntimeSessionData,
+} from '../utils/runtimeDemux';
 export function useOmpRpc() {
   const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI);
   const [status, setStatus] = useState<OmpAgentStatus>('idle');
@@ -120,6 +127,19 @@ export function useOmpRpc() {
   const [todoPhases, setTodoPhases] = useState<OmpTodoPhase[]>([]);
   const [todos, setTodos] = useState<OmpTodoItem[]>([]);
   const [retryState, setRetryState] = useState<OmpRetryState>({ isRetrying: false });
+  // Multi-Runtime & Event Demultiplexing State (Phase 3)
+  const [activeRuntimeId, setActiveRuntimeId] = useState<string | null>(null);
+  const activeRuntimeIdRef = useRef<string | null>(null);
+  const [runtimeStates, setRuntimeStates] = useState<Record<string, RuntimeSessionData>>({});
+  const runtimeStatesRef = useRef<Record<string, RuntimeSessionData>>({});
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  messagesRef.current = messages;
+  const currentThinkingRef = useRef<ThinkingBlock | null>(currentThinking);
+  currentThinkingRef.current = currentThinking;
+  const currentStreamTextRef = useRef<string>(currentStreamText);
+  currentStreamTextRef.current = currentStreamText;
+  const activeDiffRef = useRef<FileDiffItem | null>(activeDiff);
+  activeDiffRef.current = activeDiff;
   // rAF token batching refs
   const tokenBufferRef = useRef<string>('');
   const rafIdRef = useRef<number | null>(null);
@@ -505,6 +525,38 @@ export function useOmpRpc() {
     },
     [status, refreshSessions, refreshEngineState]
   );
+  const resetChat = useCallback(
+    async (reloadHistory = false): Promise<void> => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      tokenBufferRef.current = '';
+      setMessages([]);
+      setCurrentStreamText('');
+      setCurrentThinking(null);
+      activeToolCallsRef.current = [];
+      setActiveToolCalls([]);
+      setActiveDiff(null);
+      setUiRequestQueue([]);
+      setFollowUpQueue([]);
+      uiRequestQueueRef.current = [];
+      setTodoPhases([]);
+      setTodos([]);
+      if (reloadHistory && window.electronAPI?.loadHistory) {
+        try {
+          const histRes = await window.electronAPI.loadHistory();
+          if (histRes?.success && Array.isArray(histRes.messages)) {
+            const correlated = await correlateBranchEntries(histRes.messages);
+            setMessages(correlated);
+          }
+        } catch (err) {
+          console.warn('[useOmpRpc] Failed to load history on resetChat:', err);
+        }
+      }
+    },
+    [correlateBranchEntries]
+  );
   const renameSession = useCallback(
     async (name: string): Promise<boolean> => {
       if (status !== 'idle') {
@@ -638,6 +690,84 @@ export function useOmpRpc() {
     },
     [status, correlateBranchEntries, refreshSessions, refreshEngineState]
   );
+  const switchRuntime = useCallback(
+    async (targetRuntimeId: string): Promise<boolean> => {
+      if (window.electronAPI?.switchRuntime) {
+        try {
+          const currentId = activeRuntimeIdRef.current;
+          let currentMap = runtimeStatesRef.current;
+          if (currentId) {
+            currentMap = saveActiveSessionToMap(currentMap, currentId, {
+              messages: messagesRef.current,
+              currentThinking: currentThinkingRef.current,
+              activeToolCalls: activeToolCallsRef.current,
+              currentStreamText: currentStreamTextRef.current,
+              activeDiff: activeDiffRef.current,
+              status: lastStatusRef.current,
+            });
+          }
+
+          const res = await window.electronAPI.switchRuntime(targetRuntimeId);
+          if (res.success) {
+            const restored = restoreSessionFromMap(currentMap, targetRuntimeId);
+            setMessages(restored.messages);
+            setCurrentStreamText(restored.currentStreamText);
+            setCurrentThinking(restored.currentThinking);
+            setActiveToolCalls(restored.activeToolCalls);
+            activeToolCallsRef.current = restored.activeToolCalls;
+            setActiveDiff(restored.activeDiff);
+            setStatus(restored.status);
+            lastStatusRef.current = restored.status;
+
+            const updatedMap = {
+              ...currentMap,
+              [targetRuntimeId]: {
+                ...(currentMap[targetRuntimeId] || createEmptyRuntimeSession(targetRuntimeId)),
+                attention: false,
+              },
+            };
+            setRuntimeStates(updatedMap);
+            runtimeStatesRef.current = updatedMap;
+            setActiveRuntimeId(targetRuntimeId);
+            activeRuntimeIdRef.current = targetRuntimeId;
+
+            if (window.electronAPI.loadHistory) {
+              const histRes = await window.electronAPI.loadHistory();
+              if (histRes.success && Array.isArray(histRes.messages)) {
+                const correlated = await correlateBranchEntries(histRes.messages);
+                if (restored.messages.length > 0) {
+                  const diskIds = new Set(correlated.map((m) => m.id));
+                  const unwritten = restored.messages.filter((m) => !diskIds.has(m.id));
+                  setMessages([...correlated, ...unwritten]);
+                } else {
+                  setMessages(correlated);
+                }
+              }
+            }
+
+            await refreshEngineState();
+            await refreshSessions();
+            return true;
+          }
+        } catch (err) {
+          console.error('[useOmpRpc] Failed to switch runtime:', err);
+        }
+      }
+      return false;
+    },
+    [refreshEngineState, refreshSessions, correlateBranchEntries]
+  );
+
+  const clearRuntimeAttention = useCallback((runtimeId: string) => {
+    setRuntimeStates((prev) => {
+      if (!prev[runtimeId]) return prev;
+      return {
+        ...prev,
+        [runtimeId]: { ...prev[runtimeId], attention: false },
+      };
+    });
+  }, []);
+
 
   // Check installation immediately on launch
   useEffect(() => {
@@ -670,6 +800,20 @@ export function useOmpRpc() {
       console.log('Running in browser preview mode (Electron API unavailable)');
       return;
     }
+
+    const unsubEvent = window.electronAPI.onOmpEvent
+      ? window.electronAPI.onOmpEvent((envelope) => {
+          if (!activeRuntimeIdRef.current) {
+            activeRuntimeIdRef.current = envelope.runtimeId;
+            setActiveRuntimeId(envelope.runtimeId);
+          }
+          setRuntimeStates((prev) => {
+            const next = handleRuntimeEnvelope(prev, envelope, activeRuntimeIdRef.current);
+            runtimeStatesRef.current = next;
+            return next;
+          });
+        })
+      : () => {};
 
     const unsubStatus = window.electronAPI.onOmpStatusChange((newStatus) => {
       const leftIdle = lastStatusRef.current === 'idle' && newStatus !== 'idle';
@@ -920,6 +1064,7 @@ export function useOmpRpc() {
       unsubTodos();
       unsubRetry();
       unsubSay();
+      unsubEvent();
     };
   }, [flushTokens, refreshEngineState, refreshCommands]);
 
@@ -2009,6 +2154,7 @@ export function useOmpRpc() {
     refreshSessions,
     switchSession,
     newSession,
+    resetChat,
     branchFromMessage,
     renameSession,
     deleteSession,
@@ -2085,5 +2231,9 @@ export function useOmpRpc() {
     isSpeaking,
     startSay,
     stopSay,
+    activeRuntimeId,
+    runtimeStates,
+    switchRuntime,
+    clearRuntimeAttention,
   };
 }

@@ -246,6 +246,35 @@ export interface OmpSessionInfo {
   timestamp: string;
   updatedAt?: string;
   active?: boolean;
+  projectId?: string;
+  projectPath?: string;
+}
+
+export interface ProjectItem {
+  id: string;
+  name: string;
+  path: string;
+  pinned?: boolean;
+  lastOpenedAt: number;
+  createdAt?: number;
+}
+
+export interface ManagedRuntimeSnapshot {
+  runtimeId: string;
+  projectId: string;
+  sessionPath?: string;
+  cwd: string;
+  status: OmpAgentStatus;
+  lastActiveAt: number;
+  isActive: boolean;
+}
+
+export interface OmpEventEnvelope {
+  runtimeId: string;
+  projectId: string;
+  sessionPath?: string;
+  channel: string;
+  payload: unknown;
 }
 
 export interface OmpBranchEntry {
@@ -1012,6 +1041,8 @@ export interface GitStatusResult {
   branch?: string;
   filesCount?: number;
   files?: string[];
+  insertions?: number;
+  deletions?: number;
   error?: string;
 }
 export interface BrowserRelayInstallOptions {

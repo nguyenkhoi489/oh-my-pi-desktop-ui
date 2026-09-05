@@ -30,6 +30,8 @@ export interface GitStatusResult {
   branch?: string;
   filesCount?: number;
   files?: string[];
+  insertions?: number;
+  deletions?: number;
   error?: string;
 }
 
@@ -61,6 +63,31 @@ export async function isGitDirty(cwd?: string): Promise<GitStatusResult> {
         changedFiles.push(line);
       }
     }
+    let insertions = 0;
+    let deletions = 0;
+    if (changedFiles.length > 0) {
+      try {
+        const { stdout: diffStat } = await execFileAsync('git', ['diff', 'HEAD', '--shortstat'], {
+          cwd,
+          env: { ...process.env, PATH: buildExtendedPath() },
+        });
+        const insMatch = diffStat.match(/(\d+)\s+insertion/);
+        const delMatch = diffStat.match(/(\d+)\s+deletion/);
+        if (insMatch) insertions = parseInt(insMatch[1], 10);
+        if (delMatch) deletions = parseInt(delMatch[1], 10);
+      } catch {
+        try {
+          const { stdout: diffStat } = await execFileAsync('git', ['diff', '--shortstat'], {
+            cwd,
+            env: { ...process.env, PATH: buildExtendedPath() },
+          });
+          const insMatch = diffStat.match(/(\d+)\s+insertion/);
+          const delMatch = diffStat.match(/(\d+)\s+deletion/);
+          if (insMatch) insertions = parseInt(insMatch[1], 10);
+          if (delMatch) deletions = parseInt(delMatch[1], 10);
+        } catch {}
+      }
+    }
 
     return {
       isGit: true,
@@ -68,6 +95,8 @@ export async function isGitDirty(cwd?: string): Promise<GitStatusResult> {
       branch,
       filesCount: changedFiles.length,
       files: changedFiles.slice(0, 100),
+      insertions,
+      deletions,
     };
   } catch (err: any) {
     return {

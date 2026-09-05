@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { HeaderBar } from './components/HeaderBar';
 import { ProjectTree } from './components/Sidebar/ProjectTree';
-import { ThreadList } from './components/Sidebar/ThreadList';
+import { ProjectGroupList } from './components/Sidebar/ProjectGroupList';
 import { SubagentHub } from './components/Sidebar/SubagentHub';
 import { CanvasContainer } from './components/Canvas/CanvasContainer';
 import { AgentPanel } from './components/AgentPanel/AgentPanel';
@@ -12,20 +12,43 @@ import { SettingsModal } from './components/Modals/SettingsModal';
 import { ToastStack } from './components/Notifications/ToastStack';
 import { useOmpRpc } from './hooks/useOmpRpc';
 import { useWorkspace } from './hooks/useWorkspace';
-import { ThemeMode, FileDiffItem, WorkspaceFile } from './types';
+import { ThemeMode, FileDiffItem, WorkspaceFile, InspectorTab, ProjectItem, GitStatusResult } from './types';
+import { InspectorPanel } from './components/Inspector/InspectorPanel';
 import { OpsModal } from './components/Modals/OpsModal';
 import { CommitModal } from './components/Modals/CommitModal';
 import { useI18n } from './i18n/I18nProvider';
 import { UnsavedChangesModal } from './components/Canvas/UnsavedChangesModal';
+import { SessionStatsPanel } from './components/HeaderBar/SessionStatsPanel';
 
 export function App() {
   const [theme, setTheme] = useState<ThemeMode>('light');
   const { t } = useI18n();
   const [isOmnibarOpen, setIsOmnibarOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
+  const [isStatsPanelOpen, setIsStatsPanelOpen] = useState<boolean>(false);
   const [isOmpModalOpen, setIsOmpModalOpen] = useState<boolean>(false);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(true);
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(true);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(false);
+  const userClosedInspectorRef = useRef<boolean>(false);
+  const [centerView, setCenterView] = useState<'chat' | 'workbench'>('chat');
+  const [rightSidebarView, setRightSidebarView] = useState<'agent' | 'inspector'>('inspector');
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('summary');
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [gitStatus, setGitStatus] = useState<GitStatusResult | null>(null);
+
+  // Keyboard shortcut: Cmd+Shift+B opens Browser tab in Inspector
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsRightSidebarOpen(true);
+        setRightSidebarView('inspector');
+        setInspectorTab('browser');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   // Sync theme class on HTML root element
   useEffect(() => {
     const root = document.documentElement;
@@ -98,12 +121,24 @@ export function App() {
   };
 
   const toggleRightSidebar = () => {
-    setIsRightSidebarOpen((prev) => !prev);
+    setIsRightSidebarOpen((prev) => {
+      const next = !prev;
+      if (!next) userClosedInspectorRef.current = true;
+      else userClosedInspectorRef.current = false;
+      return next;
+    });
   };
 
   // Stable callbacks to avoid breaking React.memo of ProjectTree/AgentPanel
   const collapseLeftSidebar = useCallback(() => setIsLeftSidebarOpen(false), []);
-  const collapseRightSidebar = useCallback(() => setIsRightSidebarOpen(false), []);
+  const collapseRightSidebar = useCallback(() => {
+    userClosedInspectorRef.current = true;
+    setIsRightSidebarOpen(false);
+  }, []);
+  const handleCloseInspector = useCallback(() => {
+    userClosedInspectorRef.current = true;
+    setIsRightSidebarOpen(false);
+  }, []);
 
   const {
     status,
@@ -191,6 +226,10 @@ export function App() {
     isSpeaking,
     startSay,
     stopSay,
+    activeRuntimeId,
+    runtimeStates,
+    switchRuntime,
+    resetChat,
   } = useOmpRpc();
 
   // Principle #1: When app loads, if OMP is not installed, open the Requirement Modal
@@ -202,11 +241,28 @@ export function App() {
     }
   }, [installStatus]);
 
-  const handleProcessStarted = useCallback(() => {
+  // Tu dong mo Inspector khi agent bat dau thuc thi task hoac co diff moi
+  const isEngineBusy = status === 'thinking' || status === 'streaming' || status === 'executing_tool';
+  useEffect(() => {
+    if (isEngineBusy || activeDiff) {
+      if (!userClosedInspectorRef.current) {
+        setIsRightSidebarOpen(true);
+        setRightSidebarView('inspector');
+        if (activeDiff) {
+          setInspectorTab('changes');
+        }
+      }
+    } else if (status === 'idle' && !activeDiff) {
+      userClosedInspectorRef.current = false;
+    }
+  }, [isEngineBusy, activeDiff, status]);
+
+  const handleProcessStarted = useCallback(async () => {
+    await resetChat(true);
     refreshEngineState();
     refreshModels();
     refreshSessions();
-  }, [refreshEngineState, refreshModels, refreshSessions]);
+  }, [resetChat, refreshEngineState, refreshModels, refreshSessions]);
   const handleSpeakLastAssistantText = useCallback(async () => {
     if (isSpeaking) {
       await stopSay();
@@ -272,13 +328,17 @@ export function App() {
       setIsUnsavedModalOpen(true);
     } else {
       selectFile(file);
+      setCenterView('workbench');
+      setActiveTab('editor');
     }
-  }, [isEditorDirty, selectedFile, selectFile]);
+  }, [isEditorDirty, selectedFile, selectFile, setActiveTab]);
 
   const handleSaveAndContinue = useCallback(async () => {
     if (selectedFile) {
-      const contentToSave = editorDraftContent !== null ? editorDraftContent : fileContent;
-      await saveFileContent(selectedFile.path, contentToSave);
+      const contentToSave = editorDraftContent ?? fileContent;
+      if (contentToSave !== null) {
+        await saveFileContent(selectedFile.path, contentToSave);
+      }
     }
     setIsEditorDirty(false);
     setEditorDraftContent(null);
@@ -286,8 +346,10 @@ export function App() {
     if (pendingFileToSelect) {
       selectFile(pendingFileToSelect);
       setPendingFileToSelect(null);
+      setCenterView('workbench');
+      setActiveTab('editor');
     }
-  }, [selectedFile, editorDraftContent, fileContent, saveFileContent, pendingFileToSelect, selectFile]);
+  }, [selectedFile, editorDraftContent, fileContent, saveFileContent, pendingFileToSelect, selectFile, setActiveTab]);
 
   const handleDiscardAndContinue = useCallback(() => {
     setIsEditorDirty(false);
@@ -296,6 +358,8 @@ export function App() {
     if (pendingFileToSelect) {
       selectFile(pendingFileToSelect);
       setPendingFileToSelect(null);
+      setCenterView('workbench');
+      setActiveTab('editor');
     }
   }, [pendingFileToSelect, selectFile]);
 
@@ -303,6 +367,137 @@ export function App() {
     setPendingFileToSelect(null);
     setIsUnsavedModalOpen(false);
   }, []);
+  const loadProjects = useCallback(async () => {
+    if (window.electronAPI?.listProjects) {
+      try {
+        const res = await window.electronAPI.listProjects();
+        if (res.success && res.projects) {
+          setProjects(res.projects);
+        }
+      } catch (err) {
+        console.warn('[App] Failed to load projects:', err);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  // Sync active workspace into projects catalog
+  useEffect(() => {
+    if (workspacePath && window.electronAPI?.addProject) {
+      window.electronAPI.addProject(workspacePath, workspaceName).then((res) => {
+        if (res.success) {
+          loadProjects();
+        }
+      }).catch(() => {});
+    }
+  }, [workspacePath, workspaceName, loadProjects]);
+
+  const refreshGitStatus = useCallback(async () => {
+    if (workspacePath && window.electronAPI?.getCommitStatus) {
+      try {
+        const res = await window.electronAPI.getCommitStatus(workspacePath);
+        setGitStatus(res);
+      } catch (err) {
+        console.warn('[App] Failed to fetch git status:', err);
+      }
+    } else {
+      setGitStatus(null);
+    }
+  }, [workspacePath]);
+
+  useEffect(() => {
+    refreshGitStatus();
+  }, [refreshGitStatus, status, activeDiff]);
+
+  const floatingChanges = useMemo(() => {
+    const count = gitStatus?.filesCount || (activeDiff ? 1 : 0);
+    const insertions = gitStatus?.insertions ?? (activeDiff?.additions || 0);
+    const deletions = gitStatus?.deletions ?? (activeDiff?.deletions || 0);
+
+    if (count <= 0 && insertions <= 0 && deletions <= 0) {
+      return null;
+    }
+
+    return {
+      filesChanged: count,
+      insertions,
+      deletions,
+      onReview: () => {
+        setIsRightSidebarOpen(true);
+        setRightSidebarView('inspector');
+        setInspectorTab('changes');
+      },
+    };
+  }, [gitStatus, activeDiff]);
+
+  const handleAddProject = useCallback(async () => {
+    if (window.electronAPI?.selectFolder) {
+      const selected = await window.electronAPI.selectFolder();
+      if (selected) {
+        if (window.electronAPI.addProject) {
+          await window.electronAPI.addProject(selected);
+          await loadProjects();
+        }
+        openFolderDialog(selected);
+      }
+    }
+  }, [openFolderDialog, loadProjects]);
+
+  const handleSelectProject = useCallback(async (project: ProjectItem) => {
+    if (project.path !== workspacePath) {
+      await resetChat(false);
+      openFolderDialog(project.path);
+    }
+  }, [workspacePath, resetChat, openFolderDialog]);
+
+  const handleRemoveProject = useCallback(async (id: string) => {
+    if (window.electronAPI?.removeProject) {
+      await window.electronAPI.removeProject(id);
+      await loadProjects();
+    }
+  }, [loadProjects]);
+
+  const handleTogglePinProject = useCallback(async (id: string) => {
+    if (window.electronAPI?.togglePinProject) {
+      await window.electronAPI.togglePinProject(id);
+      await loadProjects();
+    }
+  }, [loadProjects]);
+
+  const handleSelectSessionFromGroup = useCallback(
+    async (sessionPath: string, projectId?: string) => {
+      if (projectId) {
+        const project = projects.find((p) => p.id === projectId);
+        if (project && project.path !== workspacePath) {
+          await openFolderDialog(project.path);
+        }
+      }
+      const foundRuntime = Object.values(runtimeStates).find((rt) => rt.sessionPath === sessionPath);
+      if (foundRuntime && foundRuntime.runtimeId !== activeRuntimeId) {
+        await switchRuntime(foundRuntime.runtimeId);
+      } else {
+        await switchSession(sessionPath);
+      }
+    },
+    [projects, workspacePath, openFolderDialog, runtimeStates, activeRuntimeId, switchRuntime, switchSession]
+  );
+
+  const handleNewSessionForProject = useCallback(
+    async (projectId?: string) => {
+      if (projectId) {
+        const project = projects.find((p) => p.id === projectId);
+        if (project && project.path !== workspacePath) {
+          await openFolderDialog(project.path);
+        }
+      }
+      await newSession();
+    },
+    [projects, workspacePath, openFolderDialog, newSession]
+  );
+
 
   // Auto-switch Visual Diff tab when a new pending diff arrives
   const prevDiffIdRef = useRef<string | null>(activeDiff?.id ?? null);
@@ -387,20 +582,17 @@ export function App() {
       };
 
       const found = findInTree(files);
-      if (found) {
-        selectFile(found);
-      } else {
-        const isAbsolute = targetPath.startsWith('/');
-        const fullPath = !isAbsolute && workspacePath ? `${workspacePath}/${targetPath}` : targetPath;
-        selectFile({
-          path: fullPath,
-          relativePath: targetPath,
-          name: targetPath.split('/').pop() || targetPath,
-          isDirectory: false,
-        });
-      }
+      const isAbsolute = targetPath.startsWith('/');
+      const fullPath = !isAbsolute && workspacePath ? `${workspacePath}/${targetPath}` : targetPath;
+      const targetFile: WorkspaceFile = found || {
+        path: fullPath,
+        relativePath: targetPath,
+        name: targetPath.split('/').pop() || targetPath,
+        isDirectory: false,
+      };
+      handleSelectFileWithGuard(targetFile);
     },
-    [files, workspacePath, selectFile]
+    [files, workspacePath, handleSelectFileWithGuard]
   );
 
   const sessionsRef = useRef(sessions);
@@ -519,12 +711,13 @@ export function App() {
         onSetAutoCompaction={setAutoCompaction}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenOpsModal={() => setIsOpsModalOpen(true)}
-        onToggleTerminal={() => setActiveTab((prev) => (prev === 'terminal' ? 'diff' : 'terminal'))}
-        isTerminalActive={activeTab === 'terminal'}
+
         onCopyLastAssistantText={getLastAssistantText}
         isSpeaking={isSpeaking}
         onSpeakLastAssistantText={handleSpeakLastAssistantText}
         onStopSpeaking={handleStopSpeaking}
+        centerView={centerView}
+        onToggleCenterView={setCenterView}
       />
       {/* 2. Main 3-Column Layout */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
@@ -535,6 +728,25 @@ export function App() {
           }`}
         >
           <div className="w-60 h-full flex flex-col">
+            <ProjectGroupList
+              projects={projects}
+              activeProjectId={projects.find((p) => p.path === workspacePath)?.id}
+              activeProjectPath={workspacePath}
+              sessions={sessions}
+              activeSessionPath={activeSessionPath}
+              activeSessionName={engineState?.sessionName}
+              currentStatus={status}
+              runtimeStates={runtimeStates}
+              onSelectProject={handleSelectProject}
+              onAddProject={handleAddProject}
+              onRemoveProject={handleRemoveProject}
+              onTogglePinProject={handleTogglePinProject}
+              onSelectSession={handleSelectSessionFromGroup}
+              onNewSession={handleNewSessionForProject}
+              onDeleteSession={deleteSession}
+              onRenameSession={renameSession}
+              onExportSession={exportSession}
+            />
             <ProjectTree
               files={files}
               selectedFile={selectedFile}
@@ -543,56 +755,13 @@ export function App() {
               onAddToChat={handleAddToChat}
               onDeleteFile={handleDeleteFile}
             />
-            <ThreadList
-              sessions={sessions}
-              activeSessionPath={activeSessionPath}
-              activeSessionName={engineState?.sessionName}
-              status={status}
-              currentCwd={workspacePath}
-              onSelectSession={switchSession}
-              onNewThread={newSession}
-              onRenameSession={renameSession}
-              onDeleteSession={deleteSession}
-              onExportSession={exportSession}
-            />
             <SubagentHub subagents={subagents} />
           </div>
         </div>
 
-        {/* Center Canvas: Visual Diff / Editor / Artifacts / Terminal */}
-        <CanvasContainer
-          activeTab={activeTab}
-          onSelectTab={setActiveTab}
-          diff={activeDiff}
-          onAcceptDiff={acceptDiff}
-          onRejectDiff={rejectDiff}
-          selectedFile={selectedFile}
-          fileContent={fileContent}
-          onSaveFile={saveFileContent}
-          onDirtyChange={setIsEditorDirty}
-          onDraftChange={setEditorDraftContent}
-          theme={theme}
-          artifacts={artifacts}
-          selectedArtifactId={selectedArtifactId}
-          onSelectArtifact={selectArtifact}
-          onReloadArtifact={reloadArtifact}
-          workspacePath={workspacePath}
-          availableModels={availableModels}
-          selectedModel={selectedModel}
-          onCommitSuccess={async () => {
-            await refreshFiles();
-          }}
-          onOpenCommitModal={() => setIsCommitModalOpen(true)}
-          isCommitDisabled={!workspacePath}
-        />
-
-        {/* Right Copilot Panel: Reasoning Stepper, Tool Cards & Chat */}
-        <div
-          className={`bg-panel border-l border-border flex flex-col shrink-0 select-none transition-all duration-200 overflow-hidden ${
-            isRightSidebarOpen ? 'w-[420px] opacity-100' : 'w-0 opacity-0 border-l-0 pointer-events-none'
-          }`}
-        >
-          <div className="w-[420px] h-full flex flex-col">
+        {/* Center Stage: Chat or Workbench */}
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+          {centerView === 'chat' ? (
             <AgentPanel
               messages={messages}
               currentThinking={currentThinking}
@@ -604,6 +773,8 @@ export function App() {
               engineWidgets={engineWidgets}
               workspaceFiles={files}
               workspacePath={workspacePath || undefined}
+              projectName={workspaceName}
+              gitBranch={gitStatus?.branch}
               availableCommands={availableCommands}
               todoPhases={todoPhases}
               todos={todos}
@@ -617,13 +788,125 @@ export function App() {
               onFollowUpMessage={followUp}
               followUpQueue={followUpQueue}
               onBranchSession={branchFromMessage}
-              onCollapsePanel={collapseRightSidebar}
               onOpenFile={handleOpenFileByPath}
               externalAttachment={attachmentRequest}
               retryState={retryState}
               onAbortRetry={abortRetry}
               onRepairSession={repairSession}
+              floatingChanges={floatingChanges}
+              availableModels={availableModels}
+              selectedModel={selectedModel}
+              onSelectModel={changeModel}
+              thinkingLevel={thinkingLevel}
+              onSelectThinkingLevel={changeThinkingLevel}
+              approvalMode={approvalMode}
+              onSelectApprovalMode={setApprovalMode}
+              onOpenStatsPanel={() => setIsStatsPanelOpen(true)}
             />
+          ) : (
+            <CanvasContainer
+              activeTab={activeTab}
+              onSelectTab={setActiveTab}
+              diff={activeDiff}
+              onAcceptDiff={acceptDiff}
+              onRejectDiff={rejectDiff}
+              selectedFile={selectedFile}
+              fileContent={fileContent}
+              onSaveFile={saveFileContent}
+              onDirtyChange={setIsEditorDirty}
+              onDraftChange={setEditorDraftContent}
+              theme={theme}
+              artifacts={artifacts}
+              selectedArtifactId={selectedArtifactId}
+              onSelectArtifact={selectArtifact}
+              onReloadArtifact={reloadArtifact}
+              workspacePath={workspacePath}
+              availableModels={availableModels}
+              selectedModel={selectedModel}
+              onCommitSuccess={async () => {
+                await refreshFiles();
+              }}
+              onOpenCommitModal={() => setIsCommitModalOpen(true)}
+              isCommitDisabled={!workspacePath}
+            />
+          )}
+        </div>
+        {/* Right Copilot / Inspector Panel */}
+        <div
+          className={`bg-panel border-l border-border flex flex-col shrink-0 select-none transition-all duration-200 overflow-hidden ${
+            isRightSidebarOpen
+              ? rightSidebarView === 'inspector'
+                ? 'w-[480px] opacity-100'
+                : 'w-[420px] opacity-100'
+              : 'w-0 opacity-0 border-l-0 pointer-events-none'
+          }`}
+        >
+          <div className={`${rightSidebarView === 'inspector' ? 'w-[480px]' : 'w-[420px]'} h-full flex flex-col`}>
+            {rightSidebarView === 'inspector' ? (
+              <InspectorPanel
+                isOpen={isRightSidebarOpen}
+                onClose={handleCloseInspector}
+                onExpandCanvas={() => setCenterView((prev) => (prev === 'workbench' ? 'chat' : 'workbench'))}
+                activeTab={inspectorTab}
+                onTabChange={setInspectorTab}
+                diffFiles={activeDiff ? [activeDiff] : []}
+                onAcceptDiff={acceptDiff}
+                onRejectDiff={rejectDiff}
+                contextUsage={contextUsage}
+                tokensPerSecond={tokensPerSecond}
+                onRefreshStats={getSessionStats}
+                model={selectedModel ? selectedModel.name || selectedModel.id : undefined}
+                workspacePath={workspacePath || undefined}
+                onSendUrlToChat={(browserUrl) => {
+                  setCenterView('chat');
+                  setAttachmentRequest({
+                    path: browserUrl,
+                    nonce: Date.now(),
+                  });
+                }}
+                theme={theme}
+              />
+            ) : (
+              <AgentPanel
+                messages={messages}
+                currentThinking={currentThinking}
+                activeToolCalls={activeToolCalls}
+                currentStreamText={currentStreamText}
+                status={status}
+                contextUsage={contextUsage}
+                engineStatuses={engineStatuses}
+                engineWidgets={engineWidgets}
+                workspaceFiles={files}
+                workspacePath={workspacePath || undefined}
+                availableCommands={availableCommands}
+                todoPhases={todoPhases}
+                todos={todos}
+                pendingToolApproval={isCurrentToolApproval ? activeUiRequest : null}
+                toolApprovalQueueLength={uiRequestQueue.length}
+                onApproveTool={handleApproveTool}
+                onDenyTool={handleDenyTool}
+                onSendMessage={sendMessage}
+                onSteerMessage={steer}
+                onAbortAndPrompt={abortAndPrompt}
+                onFollowUpMessage={followUp}
+                followUpQueue={followUpQueue}
+                onBranchSession={branchFromMessage}
+                onCollapsePanel={collapseRightSidebar}
+                onOpenFile={handleOpenFileByPath}
+                externalAttachment={attachmentRequest}
+                retryState={retryState}
+                onAbortRetry={abortRetry}
+                onRepairSession={repairSession}
+                availableModels={availableModels}
+                selectedModel={selectedModel}
+                onSelectModel={changeModel}
+                thinkingLevel={thinkingLevel}
+                onSelectThinkingLevel={changeThinkingLevel}
+                approvalMode={approvalMode}
+                onSelectApprovalMode={setApprovalMode}
+                onOpenStatsPanel={() => setIsStatsPanelOpen(true)}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -696,6 +979,28 @@ export function App() {
         cleanGrievances={cleanGrievances}
         pushGrievances={pushGrievances}
       />
+      {/* 6. Session & Global Stats Panel */}
+      {isStatsPanelOpen && (
+        <SessionStatsPanel
+          isOpen={isStatsPanelOpen}
+          onClose={() => setIsStatsPanelOpen(false)}
+          onRefresh={getSessionStats}
+          contextUsage={contextUsage}
+          isCompacting={isCompacting}
+          autoCompactionEnabled={autoCompactionEnabled}
+          onCompact={compact}
+          onSetAutoCompaction={setAutoCompaction}
+          onGetGlobalUsage={getGlobalUsage}
+          onGetGlobalStats={getGlobalStats}
+          onGetUsageHistory={getUsageHistory}
+          onGetUsageClients={getUsageClients}
+          onInvalidateUsage={invalidateUsage}
+          onStartStatsDashboard={startStatsDashboard}
+          onStopStatsDashboard={stopStatsDashboard}
+          onGetStatsDashboardStatus={getStatsDashboardStatus}
+          onOpenExternal={openExternal}
+        />
+      )}
       {/* Commit Assistant Modal (Phase 14) */}
       <CommitModal
         isOpen={isCommitModalOpen}

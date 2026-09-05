@@ -211,10 +211,12 @@ export class ThinkingAccumulator {
     this.activeBlocks.clear();
   }
 }
+export type OmpEventSink = (channel: string, payload: unknown) => void;
 
 export class OmpBridge {
   private process: ChildProcess | null = null;
-  private window: BrowserWindow;
+  private window: BrowserWindow | null = null;
+  private eventSink?: OmpEventSink;
   private status: OmpAgentStatus = 'idle';
   private lifecycleState: BridgeLifecycleState = 'idle';
 
@@ -276,9 +278,10 @@ export class OmpBridge {
   } | null = null;
 
 
-  constructor(window: BrowserWindow, settingsStore?: SettingsStore) {
-    this.window = window;
-    this.settingsStore = settingsStore;
+  constructor(window?: BrowserWindow | null, settingsStore?: SettingsStore | null, eventSink?: OmpEventSink) {
+    this.window = window ?? null;
+    this.settingsStore = settingsStore ?? undefined;
+    this.eventSink = eventSink;
     if (this.settingsStore) {
       this.currentThinkingLevel = this.settingsStore.get().defaultThinkingLevel || 'off';
     }
@@ -291,6 +294,22 @@ export class OmpBridge {
         console.warn('[OMP FRAMER ERROR]:', err.message, raw.slice(0, 100));
       },
     });
+  }
+
+  public setEventSink(eventSink?: OmpEventSink) {
+    this.eventSink = eventSink;
+  }
+
+  public setWindow(window: BrowserWindow | null) {
+    this.window = window;
+  }
+
+  private emit(channel: string, payload: unknown) {
+    if (this.eventSink) {
+      this.eventSink(channel, payload);
+    } else if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send(channel, payload);
+    }
   }
 
   public setSettingsStore(settingsStore: SettingsStore) {
@@ -458,12 +477,10 @@ export class OmpBridge {
   }
 
   private emitTodosUpdate(): void {
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('omp:todos-update', {
-        phases: this.currentTodoPhases,
-        todos: this.currentTodos,
-      });
-    }
+    this.emit('omp:todos-update', {
+      phases: this.currentTodoPhases,
+      todos: this.currentTodos,
+    });
   }
 
   // Update progress immediately when agent calls "todo" tool, without waiting for end of turn
@@ -615,9 +632,7 @@ export class OmpBridge {
 
 
   private emitSubagentUpdate() {
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('omp:subagent-update', Array.from(this.activeSubagents.values()));
-    }
+    this.emit('omp:subagent-update', Array.from(this.activeSubagents.values()));
   }
 
   public setCustomBinaryPath(rawPath?: string | null) {
@@ -797,9 +812,7 @@ export class OmpBridge {
 
   public setStatus(newStatus: OmpAgentStatus) {
     this.status = newStatus;
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('omp:status-change', newStatus);
-    }
+    this.emit('omp:status-change', newStatus);
   }
 
   public async startProcess(
@@ -1205,9 +1218,7 @@ export class OmpBridge {
   }
 
   private emitCommandsUpdate() {
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('omp:commands-update', [...this.availableCommands]);
-    }
+    this.emit('omp:commands-update', [...this.availableCommands]);
   }
 
 
@@ -1402,9 +1413,7 @@ export class OmpBridge {
   }
 
   private emitAuthLoginEvent(event: AuthLoginEvent): void {
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('omp:auth-login-event', event);
-    }
+    this.emit('omp:auth-login-event', event);
   }
 
   public async getState(): Promise<{ success: boolean; state?: OmpEngineState; error?: string }> {
@@ -1428,13 +1437,11 @@ export class OmpBridge {
         if (res.data.sessionName) {
           this.sessionName = res.data.sessionName;
         }
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:context-usage', {
-            contextUsage: res.data.contextUsage ?? null,
-            tokensPerSecond: res.data.tokensPerSecond ?? null,
-            sessionName: res.data.sessionName,
-          });
-        }
+        this.emit('omp:context-usage', {
+          contextUsage: res.data.contextUsage ?? null,
+          tokensPerSecond: res.data.tokensPerSecond ?? null,
+          sessionName: res.data.sessionName,
+        });
         if (Array.isArray(res.data.todoPhases) || Array.isArray(res.data.todos)) {
           this.normalizeAndSetTodos(res.data.todoPhases, res.data.todos);
         }
@@ -1773,9 +1780,7 @@ export class OmpBridge {
   public async abortRetry(): Promise<{ success: boolean; error?: string }> {
     if (this.lifecycleState !== 'ready' || !this.process || !this.process.stdin?.writable) {
       this.retryState = { isRetrying: false };
-      if (this.window && !this.window.isDestroyed()) {
-        this.window.webContents.send('omp:retry-state', this.retryState);
-      }
+      this.emit('omp:retry-state', this.retryState);
       return { success: true };
     }
     try {
@@ -1786,9 +1791,7 @@ export class OmpBridge {
       const res = await this.sendCommand(cmd);
       if (res.success) {
         this.retryState = { isRetrying: false };
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:retry-state', this.retryState);
-        }
+        this.emit('omp:retry-state', this.retryState);
         return { success: true };
       }
       return { success: false, error: res.error || 'Failed to abort retry' };
@@ -2347,8 +2350,7 @@ export class OmpBridge {
 
   // Forward host open request from model to renderer, with source notification
   private emitHostOpenRequest(request: HostOpenRequest) {
-    if (!this.window || this.window.isDestroyed()) return;
-    this.window.webContents.send('omp:host-open-request', request);
+    this.emit('omp:host-open-request', request);
     const label = request.kind === 'session' ? 'session' : 'file';
     this.emitNotification(tm('electron.bridge.modelRequestedOpen', { kind: label, target: request.target }), 'info');
   }
@@ -2380,9 +2382,7 @@ export class OmpBridge {
       notifyType,
       timestamp: Date.now(),
     };
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('omp:notification', notif);
-    }
+    this.emit('omp:notification', notif);
   }
   public async loadHistory(): Promise<{
     success: boolean;
@@ -2794,9 +2794,7 @@ export class OmpBridge {
     this.activeToolCalls.clear();
     this.writeSnapshots.clear();
     for (const id of this.pendingUiRequests.keys()) {
-      if (this.window && !this.window.isDestroyed()) {
-        this.window.webContents.send('omp:ui-request-cancel', id);
-      }
+      this.emit('omp:ui-request-cancel', id);
     }
     this.pendingUiRequests.clear();
     this.clearEngineStatusesAndWidgets();
@@ -2808,10 +2806,8 @@ export class OmpBridge {
   private clearEngineStatusesAndWidgets() {
     this.engineStatuses.clear();
     this.engineWidgets.clear();
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('omp:engine-status', []);
-      this.window.webContents.send('omp:widget-update', []);
-    }
+    this.emit('omp:engine-status', []);
+    this.emit('omp:widget-update', []);
   }
 
   private handleStdoutData(data: string) {
@@ -3078,9 +3074,7 @@ export class OmpBridge {
         this.pendingUiRequests.set(reqId, uiReq);
         this.setStatus('waiting_permission');
 
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:ui-request', uiReq);
-        }
+        this.emit('omp:ui-request', uiReq);
         return;
       }
 
@@ -3096,9 +3090,7 @@ export class OmpBridge {
         if (this.pendingUiRequests.size === 0 && this.status === 'waiting_permission') {
           this.setStatus(this.currentTurnId ? 'thinking' : 'idle');
         }
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:ui-request-cancel', targetId);
-        }
+        this.emit('omp:ui-request-cancel', targetId);
         return;
       }
 
@@ -3114,9 +3106,7 @@ export class OmpBridge {
           dangerous: params.dangerous ?? true,
         };
         this.setStatus('waiting_permission');
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:permission-request', req);
-        }
+        this.emit('omp:permission-request', req);
         return;
       }
 
@@ -3130,9 +3120,7 @@ export class OmpBridge {
           notifyType: typeof raw.notifyType === 'string' ? raw.notifyType : typeof raw.level === 'string' ? raw.level : 'info',
           timestamp: Date.now(),
         };
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:notification', notif);
-        }
+        this.emit('omp:notification', notif);
         return;
       }
 
@@ -3144,9 +3132,7 @@ export class OmpBridge {
         } else {
           this.engineStatuses.set(statusKey, statusText);
         }
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:engine-status', this.getEngineStatuses());
-        }
+        this.emit('omp:engine-status', this.getEngineStatuses());
         return;
       }
 
@@ -3163,9 +3149,7 @@ export class OmpBridge {
         } else {
           this.engineWidgets.set(widgetKey, { lines: widgetLines, placement: widgetPlacement });
         }
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:widget-update', this.getEngineWidgets());
-        }
+        this.emit('omp:widget-update', this.getEngineWidgets());
         return;
       }
 
@@ -3207,10 +3191,7 @@ export class OmpBridge {
             ? (frame as any).timestamp
             : Date.now(),
       };
-
-      if (this.window && !this.window.isDestroyed()) {
-        this.window.webContents.send('omp:message-complete', chatMessage);
-      }
+      this.emit('omp:message-complete', chatMessage);
       return;
     }
 
@@ -3227,9 +3208,7 @@ export class OmpBridge {
         this.setStatus('thinking');
         if (this.retryState.isRetrying) {
           this.retryState = { isRetrying: false };
-          if (this.window && !this.window.isDestroyed()) {
-            this.window.webContents.send('omp:retry-state', this.retryState);
-          }
+          this.emit('omp:retry-state', this.retryState);
         }
         break;
 
@@ -3268,9 +3247,7 @@ export class OmpBridge {
           }
         }
 
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:tool-call', toolCall);
-        }
+        this.emit('omp:tool-call', toolCall);
         break;
       }
 
@@ -3299,9 +3276,7 @@ export class OmpBridge {
           this.applyTodosFromToolResult(updateFrame.toolName || toolCall.name, {
             details: updateFrame.partialResult.details,
           });
-          if (this.window && !this.window.isDestroyed()) {
-            this.window.webContents.send('omp:tool-call', toolCall);
-          }
+          this.emit('omp:tool-call', toolCall);
         }
         break;
       }
@@ -3336,18 +3311,14 @@ export class OmpBridge {
           this.applyTodosFromToolResult(endFrame.toolName || toolCall.name, endFrame.result);
         }
 
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:tool-call', toolCall);
-        }
+        this.emit('omp:tool-call', toolCall);
 
         this.setStatus('thinking');
 
         if (!endFrame.isError) {
           const diffItems = this.extractFileDiffs(endFrame, toolCall);
           for (const diffItem of diffItems) {
-            if (this.window && !this.window.isDestroyed()) {
-              this.window.webContents.send('omp:diff-generated', diffItem);
-            }
+            this.emit('omp:diff-generated', diffItem);
           }
         }
 
@@ -3370,9 +3341,7 @@ export class OmpBridge {
               this.setStatus('streaming');
             }
             if (ame.type === 'text_delta' && typeof ame.delta === 'string') {
-              if (this.window && !this.window.isDestroyed()) {
-                this.window.webContents.send('omp:stream-token', ame.delta);
-              }
+              this.emit('omp:stream-token', ame.delta);
             }
           } else if (
             ame.type === 'thinking_start' ||
@@ -3386,8 +3355,8 @@ export class OmpBridge {
               ame,
               this.currentTurnId || String(Date.now())
             );
-            if (res && this.window && !this.window.isDestroyed()) {
-              this.window.webContents.send('omp:thinking', res.block);
+            if (res) {
+              this.emit('omp:thinking', res.block);
             }
           }
         }
@@ -3426,9 +3395,7 @@ export class OmpBridge {
                 ? msg.timestamp
                 : Date.now(),
           };
-          if (this.window && !this.window.isDestroyed()) {
-            this.window.webContents.send('omp:message-complete', chatMessage);
-          }
+          this.emit('omp:message-complete', chatMessage);
         } else
         if (msg && msg.role === 'assistant') {
           const textParts: string[] = [];
@@ -3477,9 +3444,7 @@ export class OmpBridge {
               errorMessage,
               isError: Boolean(isError),
             };
-            if (this.window && !this.window.isDestroyed()) {
-              this.window.webContents.send('omp:message-complete', chatMessage);
-            }
+            this.emit('omp:message-complete', chatMessage);
           }
         }
         break;
@@ -3513,9 +3478,7 @@ export class OmpBridge {
               : Date.now(),
         };
 
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:message-complete', chatMessage);
-        }
+        this.emit('omp:message-complete', chatMessage);
         break;
       }
 
@@ -3525,16 +3488,12 @@ export class OmpBridge {
           if (tc.status === 'running') {
             tc.status = tc.error ? 'failed' : 'completed';
             tc.endTime = Date.now();
-            if (this.window && !this.window.isDestroyed()) {
-              this.window.webContents.send('omp:tool-call', tc);
-            }
+            this.emit('omp:tool-call', tc);
           }
         }
         if (this.retryState.isRetrying) {
           this.retryState = { isRetrying: false };
-          if (this.window && !this.window.isDestroyed()) {
-            this.window.webContents.send('omp:retry-state', this.retryState);
-          }
+            this.emit('omp:retry-state', this.retryState);
         }
         break;
 
@@ -3545,17 +3504,13 @@ export class OmpBridge {
           if (tc.status === 'running') {
             tc.status = tc.error ? 'failed' : 'completed';
             tc.endTime = Date.now();
-            if (this.window && !this.window.isDestroyed()) {
-              this.window.webContents.send('omp:tool-call', tc);
-            }
+            this.emit('omp:tool-call', tc);
           }
         }
         this.activeToolCalls.clear();
         this.writeSnapshots.clear();
         for (const id of this.pendingUiRequests.keys()) {
-          if (this.window && !this.window.isDestroyed()) {
-            this.window.webContents.send('omp:ui-request-cancel', id);
-          }
+            this.emit('omp:ui-request-cancel', id);
         }
         this.pendingUiRequests.clear();
         this.getState().catch(() => {});
@@ -3567,9 +3522,7 @@ export class OmpBridge {
         this.activeToolCalls.clear();
         this.writeSnapshots.clear();
         for (const id of this.pendingUiRequests.keys()) {
-          if (this.window && !this.window.isDestroyed()) {
-            this.window.webContents.send('omp:ui-request-cancel', id);
-          }
+          this.emit('omp:ui-request-cancel', id);
         }
         this.pendingUiRequests.clear();
         break;
@@ -3663,10 +3616,8 @@ export class OmpBridge {
         const outFrame = frame as CommandOutputEvent;
         const text = typeof outFrame.text === 'string' ? outFrame.text : (typeof (outFrame as any).output === 'string' ? (outFrame as any).output : '');
         const id = typeof outFrame.id === 'string' ? outFrame.id : (typeof (outFrame as any).commandId === 'string' ? (outFrame as any).commandId : undefined);
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:command-output', { text, id });
-          this.window.webContents.send('omp:bash-output', { text, id });
-        }
+        this.emit('omp:command-output', { text, id });
+        this.emit('omp:bash-output', { text, id });
         break;
       }
 
@@ -3680,13 +3631,11 @@ export class OmpBridge {
         if (sessionId) {
           this.currentSessionId = sessionId;
         }
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:context-usage', {
-            contextUsage: this.lastContextUsage,
-            tokensPerSecond: this.lastTokensPerSecond,
-            sessionName: this.sessionName,
-          });
-        }
+        this.emit('omp:context-usage', {
+          contextUsage: this.lastContextUsage,
+          tokensPerSecond: this.lastTokensPerSecond,
+          sessionName: this.sessionName,
+        });
         this.getState().catch(() => {});
         break;
       }
@@ -3726,9 +3675,7 @@ export class OmpBridge {
           delayMs,
           error,
         };
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:retry-state', this.retryState);
-        }
+        this.emit('omp:retry-state', this.retryState);
         break;
       }
 
@@ -3740,9 +3687,7 @@ export class OmpBridge {
           attempt: retryEndFrame.attempt,
           error: retryEndFrame.error,
         };
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:retry-state', this.retryState);
-        }
+        this.emit('omp:retry-state', this.retryState);
         break;
       }
     }
@@ -3980,9 +3925,7 @@ export class OmpBridge {
     this.activeHostUriRequests.clear();
     this.writeSnapshots.clear();
     for (const id of this.pendingUiRequests.keys()) {
-      if (this.window && !this.window.isDestroyed()) {
-        this.window.webContents.send('omp:ui-request-cancel', id);
-      }
+      this.emit('omp:ui-request-cancel', id);
     }
     this.pendingUiRequests.clear();
     if (this.activeAuthLogin) {
@@ -4001,22 +3944,18 @@ export class OmpBridge {
     this.lastContextUsage = null;
     this.lastTokensPerSecond = null;
     this.clearEngineStatusesAndWidgets();
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('omp:context-usage', {
-        contextUsage: null,
-        tokensPerSecond: null,
-        sessionName: undefined,
-      });
-    }
+    this.emit('omp:context-usage', {
+      contextUsage: null,
+      tokensPerSecond: null,
+      sessionName: undefined,
+    });
     this.currentSessionFile = null;
     this.currentSessionId = null;
     this.workspacePath = null;
     this.currentTurnId = null;
     this.framer.reset();
     this.retryState = { isRetrying: false };
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('omp:retry-state', this.retryState);
-    }
+    this.emit('omp:retry-state', this.retryState);
   }
 
   private rejectAllPending(reason: string) {
@@ -4043,9 +3982,7 @@ export class OmpBridge {
         timestamp: Date.now(),
         completed: true,
       };
-      if (this.window && !this.window.isDestroyed()) {
-        this.window.webContents.send('omp:thinking', thinking);
-      }
+      this.emit('omp:thinking', thinking);
 
       this.setStatus('executing_tool');
       const tool1: ToolCall = {
@@ -4055,17 +3992,13 @@ export class OmpBridge {
         status: 'running',
         startTime: Date.now(),
       };
-      if (this.window && !this.window.isDestroyed()) {
-        this.window.webContents.send('omp:tool-call', tool1);
-      }
+      this.emit('omp:tool-call', tool1);
 
       setTimeout(() => {
         tool1.status = 'completed';
         tool1.result = { matchedNodes: 3, rootSymbol: 'AuthService' };
         tool1.endTime = Date.now();
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:tool-call', tool1);
-        }
+        this.emit('omp:tool-call', tool1);
 
         const mockOriginal = `export class AuthService {
   private secret: string;
@@ -4112,9 +4045,7 @@ export class OmpBridge {
           additions: 12,
           deletions: 2,
         };
-        if (this.window && !this.window.isDestroyed()) {
-          this.window.webContents.send('omp:diff-generated', diff);
-        }
+        this.emit('omp:diff-generated', diff);
 
         this.setStatus('streaming');
         const text = tm('electron.bridge.mockText');
@@ -4122,21 +4053,17 @@ export class OmpBridge {
         let index = 0;
         const interval = setInterval(() => {
           if (index < text.length) {
-            if (this.window && !this.window.isDestroyed()) {
-              this.window.webContents.send('omp:stream-token', text.slice(index, index + 4));
-            }
+            this.emit('omp:stream-token', text.slice(index, index + 4));
             index += 4;
           } else {
             clearInterval(interval);
             this.setStatus('idle');
-            if (this.window && !this.window.isDestroyed()) {
-              this.window.webContents.send('omp:message-complete', {
-                id: 'msg-' + Date.now(),
-                role: 'assistant',
-                content: text,
-                timestamp: Date.now(),
-              });
-            }
+            this.emit('omp:message-complete', {
+              id: 'msg-' + Date.now(),
+              role: 'assistant',
+              content: text,
+              timestamp: Date.now(),
+            });
           }
         }, 30);
       }, 900);

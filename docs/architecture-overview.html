@@ -403,22 +403,29 @@
           </div>
           <div class="components-grid">
             <div class="comp-box">
+              <div class="comp-name">RuntimeManager (<code>runtime-manager.ts</code>)</div>
+              <div class="comp-desc">Quản lý đa tiến trình song song (True Multi-Runtime Concurrency, tối đa 4 runtimes LRU), điều phối Event Envelope, định tuyến command và quản lý vòng đời độc lập theo dự án.</div>
+            </div>
+            <div class="comp-box">
               <div class="comp-name">OmpBridge (<code>omp-bridge.ts</code>)</div>
-              <div class="comp-desc">Quản lý vòng đời tiến trình con <code>omp --mode rpc</code>, bộ đệm NDJSON (<code>ndjson-framer.ts</code>), log frame, bảo đảm atomic process lifecycle.</div>
+              <div class="comp-desc">Cầu nối tiến trình <code>omp --mode rpc</code>, NDJSON framing, logger frame, thinking accumulator và atomic lifecycle management.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Session Indexer & Projects (<code>session-indexer.ts</code>, <code>projects-store.ts</code>)</div>
+              <div class="comp-desc">Quét session bất đồng bộ 100% (fs/promises), khử symlink qua realpath, profile session dir resolution, và hàng đợi promise FIFO an toàn.</div>
+            </div>
+            <div class="comp-box">
+              <div class="comp-name">Webview Security & Browser Panel (<code>webview-security.ts</code>)</div>
+              <div class="comp-desc">Thiết lập sandbox webview an toàn, cô lập partition, chặn các scheme nguy hiểm và hỗ trợ In-App Browser preview.</div>
             </div>
             <div class="comp-box">
               <div class="comp-name">Main Process (<code>main.ts</code>)</div>
-              <div class="comp-desc">Đăng ký toàn bộ IPC handlers: <code>omp:*</code>, <code>fs:*</code>, <code>settings:*</code>, native dialogs, window lifecycle.</div>
-            </div>
-            <div class="comp-box">
-              <div class="comp-name">Supporting Modules</div>
-              <div class="comp-desc"><code>settings-store.ts</code>, <code>host-tools.ts</code>, <code>extension-manager.ts</code>, <code>roles-config.ts</code>, <code>usage-stats.ts</code>.</div>
+              <div class="comp-desc">Đăng ký toàn bộ IPC handlers: <code>runtime:*</code>, <code>projects:*</code>, <code>omp:*</code>, <code>fs:*</code>, <code>settings:*</code>, native dialogs, và dọn dẹp tiến trình con khi thoát app.</div>
             </div>
             <div class="comp-box">
               <div class="comp-name">Preload Bridge (<code>preload.ts</code>)</div>
               <div class="comp-desc">Expose typed methods an toàn qua <code>contextBridge</code>, đảm bảo renderer không truy cập trực tiếp Node runtime.</div>
             </div>
-          </div>
         </div>
 
         <div class="connector-flow">

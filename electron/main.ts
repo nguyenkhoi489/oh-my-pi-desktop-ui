@@ -68,13 +68,34 @@ import type { SshHostAddInput } from './types.ts';
 import { listGrievances, cleanGrievances, pushGrievances } from './grievances.ts';
 import type { GrievancesListOptions, GrievancesCleanOptions } from './types.ts';
 import type { ImageBackendsAction, ImageBackendsOptions } from './types.ts';
+import { RuntimeManager } from './runtime-manager.ts';
+import { ProjectsStore } from './projects-store.ts';
+import { indexProjectSessions } from './session-indexer.ts';
+import { configureWebviewSecurity } from './webview-security.ts';
 import { setCurrentLocale, tm } from '../shared/i18n/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
-let ompBridge: OmpBridge | null = null;
+let runtimeManager: RuntimeManager | null = null;
+const projectsStore = new ProjectsStore();
+
+const ompBridge = new Proxy({} as unknown as OmpBridge, {
+  get(_target, prop) {
+    const active = runtimeManager ? runtimeManager.getActiveBridge() : null;
+    if (!active) return undefined;
+    const value = (active as unknown as Record<string, unknown>)[prop as string];
+    if (typeof value === 'function') {
+      return (value as Function).bind(active);
+    }
+    return value;
+  },
+  has(_target, prop) {
+    const active = runtimeManager ? runtimeManager.getActiveBridge() : null;
+    return active ? prop in active : false;
+  },
+});
 const authLoginManager = new AuthLoginManager((url) => shell.openExternal(url));
 const engineMaintenanceManager = new EngineMaintenanceManager();
 const opsManager = new OpsManager();
@@ -113,6 +134,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       devTools: isDev,
+      webviewTag: true,
     },
   });
 
@@ -133,9 +155,9 @@ function createWindow() {
   }
 
   const settingsStore = getSettingsStore();
-  ompBridge = new OmpBridge(mainWindow, settingsStore);
-  ompBridge.setOpenUrlHandler((url) => shell.openExternal(url));
-  ompBridge.setInteractiveFallback(async (providerId) => {
+  runtimeManager = new RuntimeManager(mainWindow, settingsStore);
+  runtimeManager.setOpenUrlHandler((url) => shell.openExternal(url));
+  runtimeManager.setInteractiveFallback(async (providerId) => {
     const binPath = await resolveOmpBinaryPath();
     if (!binPath || !mainWindow) return { success: false, error: 'Cannot launch fallback CLI' };
     return authLoginManager.start(binPath, providerId, mainWindow);
@@ -145,7 +167,7 @@ function createWindow() {
     setCurrentLocale(initialSettings.language);
   }
   if (initialSettings.customBinaryPath) {
-    ompBridge.setCustomBinaryPath(initialSettings.customBinaryPath);
+    runtimeManager.setCustomBinaryPath(initialSettings.customBinaryPath);
   }
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
@@ -169,8 +191,8 @@ function disposeAll() {
   cleanseRunnerManager.dispose();
   browserRelayManager.dispose();
   sayManager.dispose();
-  if (ompBridge) {
-    ompBridge.stopProcess();
+  if (runtimeManager) {
+    runtimeManager.stopAll().catch(() => {});
   }
 }
 // IPC Handlers: OMP Discovery & Process
@@ -198,8 +220,75 @@ ipcMain.handle('fs:select-binary', async () => {
 });
 
 ipcMain.handle('omp:start-process', async (_, workspacePath: string, model?: string, options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode }) => {
-  if (!ompBridge) return { success: false };
-  return ompBridge.startProcess(workspacePath, model, options);
+  if (!runtimeManager) return { success: false };
+  const project = await projectsStore.addProject(workspacePath);
+  const admitRes = await runtimeManager.admitRuntime(project.id, workspacePath);
+  if (!admitRes.success) {
+    return { success: false, error: admitRes.error };
+  }
+  const bridge = runtimeManager.getActiveBridge();
+  if (!admitRes.isNew && bridge.isRunning()) {
+    return { success: true };
+  }
+  return bridge.startProcess(workspacePath, model, options);
+});
+
+// IPC Handlers: Multi-Project & Runtime Management (Phase 1)
+ipcMain.handle('projects:list', async () => {
+  return { success: true, projects: await projectsStore.getProjects() };
+});
+
+ipcMain.handle('projects:add', async (_, projectPath: string, name?: string) => {
+  if (!projectPath || typeof projectPath !== 'string' || !projectPath.trim()) {
+    return { success: false, error: tm('electron.runtime.projectPathRequired') };
+  }
+  const project = await projectsStore.addProject(projectPath, name);
+  return { success: true, project };
+});
+
+ipcMain.handle('projects:remove', async (_, id: string) => {
+  const success = await projectsStore.removeProject(id);
+  return { success };
+});
+
+ipcMain.handle('projects:pin', async (_, id: string) => {
+  const success = await projectsStore.togglePin(id);
+  return { success };
+});
+
+ipcMain.handle('runtime:list', async () => {
+  return { success: true, runtimes: runtimeManager ? runtimeManager.listRuntimes() : [] };
+});
+
+ipcMain.handle('runtime:admit', async (_, projectId: string, cwd: string, sessionPath?: string) => {
+  if (!runtimeManager) return { success: false, error: 'RuntimeManager uninitialized' };
+  const res = await runtimeManager.admitRuntime(projectId, cwd, sessionPath);
+  return {
+    ...res,
+    runtimeId: res.runtime?.runtimeId,
+  };
+});
+
+ipcMain.handle('runtime:switch', async (_, runtimeId: string) => {
+  if (!runtimeManager) return { success: false, error: 'RuntimeManager uninitialized' };
+  const ok = runtimeManager.setActiveRuntime(runtimeId);
+  return { success: ok };
+});
+
+ipcMain.handle('runtime:stop', async (_, runtimeId: string) => {
+  if (!runtimeManager) return { success: false, error: 'RuntimeManager uninitialized' };
+  const ok = await runtimeManager.stopRuntime(runtimeId);
+  return { success: ok };
+});
+
+ipcMain.handle('runtime:index-sessions', async (_, projectId: string, projectPath: string, profile?: string) => {
+  try {
+    const sessions = await indexProjectSessions(projectId, projectPath, profile);
+    return { success: true, sessions };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
+  }
 });
 
 ipcMain.handle('omp:stop-process', async () => {
@@ -266,21 +355,21 @@ ipcMain.handle('settings:get', async () => {
 ipcMain.handle('settings:set', async (_, partial: Partial<AppSettings>) => {
   const store = getSettingsStore();
   const updated = store.set(partial);
-  if (ompBridge) {
+  if (runtimeManager) {
     if ('customBinaryPath' in partial) {
-      ompBridge.setCustomBinaryPath(updated.customBinaryPath);
+      runtimeManager.setCustomBinaryPath(updated.customBinaryPath);
     }
     if ('defaultThinkingLevel' in partial && partial.defaultThinkingLevel) {
-      ompBridge.setThinkingLevel(partial.defaultThinkingLevel).catch(() => {});
+      runtimeManager.setThinkingLevel(partial.defaultThinkingLevel);
     }
     if ('steeringMode' in partial && partial.steeringMode) {
-      ompBridge.setSteeringMode(partial.steeringMode).catch(() => {});
+      runtimeManager.setSteeringMode(partial.steeringMode);
     }
     if ('followUpMode' in partial && partial.followUpMode) {
-      ompBridge.setFollowUpMode(partial.followUpMode).catch(() => {});
+      runtimeManager.setFollowUpMode(partial.followUpMode);
     }
     if ('interruptMode' in partial && partial.interruptMode) {
-      ompBridge.setInterruptMode(partial.interruptMode).catch(() => {});
+      runtimeManager.setInterruptMode(partial.interruptMode);
     }
   }
   if ('language' in partial && updated.language) {
@@ -1371,6 +1460,7 @@ ipcMain.handle('git:file-at-commit', async (_, commitHash: string, filePath: str
     return { success: false, content: null, error: err?.message };
   }
 });
+configureWebviewSecurity(app, (url) => shell.openExternal(url));
 
 app.whenReady().then(() => {
   createWindow();
@@ -1383,6 +1473,10 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', () => {
+  disposeAll();
+});
+
+process.on('exit', () => {
   disposeAll();
 });
 

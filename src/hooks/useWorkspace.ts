@@ -111,9 +111,9 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
     markArtifactStale((art) => art.path === filePath);
   }, [markArtifactStale]);
 
-  const openFolderDialog = useCallback(async () => {
+  const openFolderDialog = useCallback(async (customPath?: string) => {
     if (window.electronAPI) {
-      const folderPath = await window.electronAPI.selectFolder();
+      const folderPath = customPath || (await window.electronAPI.selectFolder());
       if (folderPath) {
         setWorkspacePath(folderPath);
         const name = folderPath.split('/').filter(Boolean).pop() || 'workspace';

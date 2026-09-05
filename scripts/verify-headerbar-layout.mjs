@@ -28,7 +28,9 @@ console.log('=== Starting HeaderBar Layout & Overflow Protection Verification ==
 const headerBarPath = path.resolve('src/components/HeaderBar.tsx');
 assert(fs.existsSync(headerBarPath), 'src/components/HeaderBar.tsx exists');
 const headerCode = fs.readFileSync(headerBarPath, 'utf8');
-
+const promptComposerPath = path.resolve('src/components/AgentPanel/PromptComposer.tsx');
+assert(fs.existsSync(promptComposerPath), 'src/components/AgentPanel/PromptComposer.tsx exists');
+const composerCode = fs.readFileSync(promptComposerPath, 'utf8');
 // ----------------------------------------------------
 // Test 1: Header Container Layout & Dropdown Elevation
 // ----------------------------------------------------
@@ -57,6 +59,7 @@ console.log('[Test 2] Right section controls have shrink-0 protection and icon-o
   assert(headerCode.includes('onToggleTheme'), 'Right section includes theme toggle');
   assert(headerCode.includes('onOpenOmnibar'), 'Right section includes Omnibar ⌘K button');
   assert(headerCode.includes('onOpenSettingsModal'), 'Right section includes settings button');
+  assert(!headerCode.includes('onToggleTerminal'), 'Terminal button is removed from HeaderBar per user request');
 
   // Verify Copilot button does not render redundant text label (icon only)
   const copilotBtnRegex = /<button[^>]*onClick=\{onToggleRightSidebar\}[^>]*>([\s\S]*?)<\/button>/;
@@ -66,9 +69,9 @@ console.log('[Test 2] Right section controls have shrink-0 protection and icon-o
 }
 
 // ----------------------------------------------------
-// Test 3: Center Section Flexible Shrink & Truncation
+// Test 3: Center Section Cleanliness & Model/Mode Relocation to PromptComposer
 // ----------------------------------------------------
-console.log('[Test 3] Center section has min-w-0, flex-1, and bounded items');
+console.log('[Test 3] Center section is clean; Model and Mode controls moved to PromptComposer');
 {
   assert(
     headerCode.includes('flex-1 flex items-center justify-center') &&
@@ -76,12 +79,12 @@ console.log('[Test 3] Center section has min-w-0, flex-1, and bounded items');
     'Center section flex container is configured with flex-1 and min-w-0 to prevent overlapping'
   );
   assert(
-    headerCode.includes('max-w-[90px] sm:max-w-[130px] lg:max-w-[160px] truncate'),
-    'Active model name has responsive truncation'
+    composerCode.includes('activeModelName') && composerCode.includes('truncate'),
+    'Active model selector moved to PromptComposer toolbar with responsive truncation'
   );
   assert(
-    headerCode.includes('max-w-[70px] sm:max-w-[90px] lg:max-w-[120px]'),
-    'Approval mode label has responsive truncation'
+    composerCode.includes('approvalMode') && composerCode.includes('Shield'),
+    'Approval mode selector moved to PromptComposer toolbar next to Commands'
   );
 }
 
@@ -111,17 +114,17 @@ console.log('[Test 4] Status badges show active states only; Idle badge removed'
 }
 
 // ----------------------------------------------------
-// Test 5: Context Meter & Tok/s Responsive Layout
+// Test 5: Tok/s in HeaderBar & Context Meter in PromptComposer
 // ----------------------------------------------------
-console.log('[Test 5] Context usage meter & tokens/s display cleanly');
+console.log('[Test 5] Tok/s displays cleanly in HeaderBar; Context Meter relocated to PromptComposer');
 {
   assert(
     headerCode.includes('tok/s') && headerCode.includes('/s'),
     'Tokens per second badge adapts to tight horizontal spacing'
   );
   assert(
-    headerCode.includes('xl:inline') && headerCode.includes('sm:inline xl:hidden'),
-    'Context usage meter uses tiered responsive widths'
+    composerCode.includes('hasContextUsage') && composerCode.includes('formatCompactTokens'),
+    'Context usage meter relocated to PromptComposer toolbar'
   );
 }
 

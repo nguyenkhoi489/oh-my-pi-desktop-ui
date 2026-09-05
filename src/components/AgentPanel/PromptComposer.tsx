@@ -3,18 +3,29 @@ import {
   AtSign,
   CornerDownLeft,
   X,
-  Paperclip,
   FileCode,
   Search,
-  Terminal,
   UploadCloud,
   ZoomIn,
   ChevronDown,
   Radio,
   Square,
   Clock,
+  Cpu,
+  Brain,
+  Shield,
+  Database,
+  Check,
 } from 'lucide-react';
-import { OmpAgentStatus, WorkspaceFile, OmpCommandInfo } from '../../types';
+import {
+  OmpAgentStatus,
+  WorkspaceFile,
+  OmpCommandInfo,
+  OmpModelInfo,
+  OmpThinkingLevel,
+  OmpApprovalMode,
+  OmpContextUsage,
+} from '../../types';
 import { DEMO_WORKSPACE_FILES } from '../../mock/demoData';
 import { CommandMenu } from './CommandMenu';
 import { useCommandCatalog } from '../../hooks/useCommandCatalog';
@@ -48,9 +59,34 @@ interface PromptComposerProps {
   availableCommands?: OmpCommandInfo[];
   isToolApprovalPending?: boolean;
   externalAttachment?: { path: string; nonce: number } | null;
+  // Model, Thinking Level, Approval Mode & Context
+  availableModels?: OmpModelInfo[];
+  selectedModel?: OmpModelInfo | string | null;
+  onSelectModel?: (provider: string, modelId: string) => void;
+  thinkingLevel?: OmpThinkingLevel;
+  onSelectThinkingLevel?: (level: OmpThinkingLevel) => void;
+  approvalMode?: OmpApprovalMode;
+  onSelectApprovalMode?: (mode: OmpApprovalMode) => void;
+  contextUsage?: OmpContextUsage | null;
+  onOpenStatsPanel?: () => void;
 }
 // Limit rendered files count in picker to prevent lag (Rule 4)
 const MAX_PICKER_FILES = 100;
+const FALLBACK_MODELS: OmpModelInfo[] = [
+  { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', provider: 'anthropic', reasoning: true },
+  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', reasoning: false },
+  { id: 'pi-deepseek-r1', name: 'DeepSeek R1', provider: 'deepseek', reasoning: true },
+  { id: 'qwen-2.5-coder-32b', name: 'Qwen 2.5 Coder 32B', provider: 'lmstudio', reasoning: false },
+];
+
+const THINKING_LEVELS: OmpThinkingLevel[] = ['off', 'low', 'medium', 'high'];
+
+interface ApprovalOption {
+  id: OmpApprovalMode;
+  label: string;
+  description: string;
+}
+
 
 const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   onSendMessage,
@@ -64,6 +100,15 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   availableCommands,
   isToolApprovalPending = false,
   externalAttachment,
+  availableModels,
+  selectedModel,
+  onSelectModel,
+  thinkingLevel,
+  onSelectThinkingLevel,
+  approvalMode,
+  onSelectApprovalMode,
+  contextUsage,
+  onOpenStatsPanel,
 }) => {
   const { t } = useI18n();
   const [input, setInput] = useState<string>('');
@@ -81,6 +126,74 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   // Split-button menu state when agent is running
   const [isSplitMenuOpen, setIsSplitMenuOpen] = useState<boolean>(false);
   const splitMenuRef = useRef<HTMLDivElement>(null);
+
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState<boolean>(false);
+  const [isApprovalMenuOpen, setIsApprovalMenuOpen] = useState<boolean>(false);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
+  const approvalMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
+        setIsModelMenuOpen(false);
+      }
+      if (approvalMenuRef.current && !approvalMenuRef.current.contains(e.target as Node)) {
+        setIsApprovalMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const modelsToUse = availableModels && availableModels.length > 0 ? availableModels : FALLBACK_MODELS;
+  const activeModelId = typeof selectedModel === 'string'
+    ? selectedModel
+    : (selectedModel?.id || modelsToUse[0]?.id);
+  const activeModelName = typeof selectedModel === 'string'
+    ? selectedModel
+    : (selectedModel?.name || selectedModel?.id || modelsToUse[0]?.name || 'Select Model');
+  const activeProvider = typeof selectedModel === 'object' && selectedModel
+    ? selectedModel.provider
+    : modelsToUse.find((m) => m.id === activeModelId)?.provider;
+
+  const approvalOptions: ApprovalOption[] = React.useMemo(() => [
+    { id: 'write', label: t('header.approval.write'), description: t('header.approval.writeDesc') },
+    { id: 'always-ask', label: t('header.approval.alwaysAsk'), description: t('header.approval.alwaysAskDesc') },
+    { id: 'yolo', label: t('header.approval.yolo'), description: t('header.approval.yoloDesc') },
+  ], [t]);
+
+  const formatCompactTokens = (tokens?: number | null): string => {
+    if (tokens == null || isNaN(tokens)) return '';
+    if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+    if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
+    return String(tokens);
+  };
+
+  const hasContextUsage =
+    contextUsage?.percent != null &&
+    typeof contextUsage.percent === 'number' &&
+    !isNaN(contextUsage.percent);
+
+  const percent = hasContextUsage
+    ? Math.round((contextUsage!.percent as number) * 10) / 10
+    : null;
+
+  const formattedTokens = contextUsage?.tokens != null ? formatCompactTokens(contextUsage.tokens) : null;
+  const formattedWindow = contextUsage?.contextWindow != null ? formatCompactTokens(contextUsage.contextWindow) : null;
+
+  const meterColorClass = percent != null
+    ? percent >= 90
+      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+      : percent >= 70
+      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+    : 'bg-surface text-slate-500 dark:text-zinc-400 border-border';
+
+  const contextTooltip = hasContextUsage
+    ? contextUsage!.tokens != null && contextUsage!.contextWindow != null
+      ? t('header.contextUsageDetail', { tokens: (contextUsage!.tokens as number).toLocaleString(), window: (contextUsage!.contextWindow as number).toLocaleString(), percent: percent ?? 0 })
+      : t('header.contextUsageSimple', { percent: percent ?? 0 })
+    : undefined;
 
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
@@ -490,49 +603,42 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
       }
     }
 
-    // Command menu: '/' at start of input or after whitespace
+    // Smart Command menu token detection (ho tro Backspace va go giua chung):
+    // Tim tu truoc con tro (tu dau dong hoac sau khoang trang / xuong dong)
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const lastWhitespaceIdx = Math.max(
+      textBeforeCursor.lastIndexOf(' '),
+      textBeforeCursor.lastIndexOf('\t'),
+      textBeforeCursor.lastIndexOf('\n')
+    );
+    const slashCandidatePos = lastWhitespaceIdx === -1 ? 0 : lastWhitespaceIdx + 1;
+
     if (
-      cursorPos > 0 &&
-      val[cursorPos - 1] === '/' &&
-      (cursorPos === 1 || /\s/.test(val[cursorPos - 2]))
+      cursorPos > slashCandidatePos &&
+      val[slashCandidatePos] === '/'
     ) {
-      setSlashIndex(cursorPos - 1);
-      setCommandQuery('');
+      const query = val.slice(slashCandidatePos + 1, cursorPos);
+      setSlashIndex(slashCandidatePos);
+      setCommandQuery(query);
       setIsCommandMenuOpen(true);
-    } else if (slashIndex !== null) {
-      if (cursorPos <= slashIndex || val[slashIndex] !== '/') {
-        setSlashIndex(null);
-        setIsCommandMenuOpen(false);
-      } else {
-        const query = val.slice(slashIndex + 1, cursorPos);
-        if (query.includes(' ') || query.includes('\n')) {
-          setSlashIndex(null);
-          setIsCommandMenuOpen(false);
-        } else {
-          setCommandQuery(query);
-          setIsCommandMenuOpen(true);
-        }
-      }
+    } else {
+      setSlashIndex(null);
+      setIsCommandMenuOpen(false);
     }
 
-    if (cursorPos > 0 && val[cursorPos - 1] === '@') {
-      setAtCursorIndex(cursorPos - 1);
-      setPickerQuery('');
+    // Smart @ File mention detection
+    const atCandidatePos = lastWhitespaceIdx === -1 ? 0 : lastWhitespaceIdx + 1;
+    if (
+      cursorPos > atCandidatePos &&
+      val[atCandidatePos] === '@'
+    ) {
+      const query = val.slice(atCandidatePos + 1, cursorPos);
+      setAtCursorIndex(atCandidatePos);
+      setPickerQuery(query);
       setIsPickerOpen(true);
-    } else if (atCursorIndex !== null) {
-      if (cursorPos <= atCursorIndex) {
-        setAtCursorIndex(null);
-        setIsPickerOpen(false);
-      } else {
-        const query = val.slice(atCursorIndex + 1, cursorPos);
-        if (query.includes(' ') || query.includes('\n')) {
-          setAtCursorIndex(null);
-          setIsPickerOpen(false);
-        } else {
-          setPickerQuery(query);
-          setIsPickerOpen(true);
-        }
-      }
+    } else {
+      setAtCursorIndex(null);
+      setIsPickerOpen(false);
     }
   };
 
@@ -685,7 +791,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="p-3.5 bg-panel border-t border-border flex flex-col gap-2.5 relative"
+      className="p-3.5 bg-panel border-t border-border flex flex-col gap-2.5 relative z-20"
     >
       {/* Follow-up queue above composer */}
       {followUpQueue && followUpQueue.length > 0 && (
@@ -919,46 +1025,197 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
           className="w-full bg-transparent text-[13.5px] text-slate-900 dark:text-zinc-100 placeholder-slate-400 dark:placeholder-zinc-500 resize-none outline-none font-sans leading-relaxed"
         />
         {/* Toolbar Bottom */}
-        <div className="flex items-center justify-between pt-2 border-t border-border/50 mt-1">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setAtCursorIndex(null);
-                setPickerQuery('');
-                setIsPickerOpen(!isPickerOpen);
-              }}
-              className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors font-medium cursor-pointer ${
-                isPickerOpen
-                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-surface-highlight'
-              }`}
-              title={t('composer.attachWorkspaceFile')}
-            >
-              <Paperclip className="w-3.5 h-3.5" />
-              <span>Attach</span>
-            </button>
+        <div className="flex items-center justify-between pt-2 border-t border-border/50 mt-1 relative z-20">
+          <div className="flex items-center gap-1.5 py-0.5 relative">
+            {/* Model Selector Pill & Popover */}
+            <div className="relative" ref={modelMenuRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsModelMenuOpen((prev) => !prev);
+                  setIsApprovalMenuOpen(false);
+                }}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-colors font-medium cursor-pointer border border-border/50 shrink-0 ${
+                  isModelMenuOpen
+                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 shadow-xs'
+                    : 'bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300'
+                }`}
+                title={t('header.selectModelAndThinking')}
+              >
+                <Cpu className="w-3.5 h-3.5 text-blue-500 shrink-0 pointer-events-none" />
+                <span className="font-mono text-[11.5px] max-w-[100px] sm:max-w-[140px] lg:max-w-[180px] truncate pointer-events-none">
+                  {activeModelName}
+                </span>
+                {thinkingLevel && thinkingLevel !== 'off' && (
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/15 text-blue-500 font-semibold uppercase shrink-0 pointer-events-none">
+                    {thinkingLevel}
+                  </span>
+                )}
+                <ChevronDown className="w-3 h-3 text-slate-400 dark:text-zinc-500 shrink-0 pointer-events-none" />
+              </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                if (isCommandMenuOpen) {
-                  setIsCommandMenuOpen(false);
-                  setSlashIndex(null);
-                } else {
-                  openCommandMenuAtCursor();
-                }
-              }}
-              className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors font-medium cursor-pointer ${
-                isCommandMenuOpen
-                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-surface-highlight'
-              }`}
-              title={t('composer.openSlashCommands')}
-            >
-              <Terminal className="w-3.5 h-3.5" />
-              <span>Commands</span>
-            </button>
+              {isModelMenuOpen && (
+                <div className="absolute bottom-full mb-2 left-0 w-80 max-w-[90vw] bg-surface dark:bg-[#181a24] border border-border rounded-xl shadow-2xl py-2 z-50 animate-fade-in divide-y divide-border">
+                  {/* Section 1: Model Selection */}
+                  <div className="pb-2">
+                    <div className="flex items-center justify-between px-3 py-1 text-[10px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                      <span>Available Models</span>
+                      {modelsToUse.length > 0 && (
+                        <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-mono">Live</span>
+                      )}
+                    </div>
+                    <div className="max-h-52 overflow-y-auto mt-1 space-y-0.5 px-1">
+                      {modelsToUse.map((m) => {
+                        const isSelected = m.id === activeModelId && (!activeProvider || m.provider === activeProvider);
+                        return (
+                          <button
+                            key={`${m.provider}/${m.id}`}
+                            type="button"
+                            onClick={() => {
+                              onSelectModel?.(m.provider, m.id);
+                              setIsModelMenuOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-left transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold'
+                                : 'text-slate-700 dark:text-zinc-300 hover:bg-surface-highlight'
+                            }`}
+                          >
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-[11px] truncate">{m.name || m.id}</span>
+                                {m.reasoning && (
+                                  <span title={t('header.reasoningModel')}>
+                                    <Brain className="w-3 h-3 text-amber-500 shrink-0" />
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[9.5px] text-slate-400 dark:text-zinc-500 truncate">{m.provider}</span>
+                            </div>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Section 2: Thinking Level */}
+                  <div className="pt-2 px-3">
+                    <div className="flex items-center justify-between py-1 text-[10px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                      <span className="flex items-center gap-1.5">
+                        <Brain className="w-3 h-3 text-blue-500" />
+                        Thinking Level
+                      </span>
+                      <span className="text-[9.5px] text-blue-500 font-mono capitalize">
+                        {thinkingLevel || 'off'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1 mt-1.5">
+                      {THINKING_LEVELS.map((lvl) => {
+                        const isSelected = (thinkingLevel || 'off') === lvl;
+                        return (
+                          <button
+                            key={lvl}
+                            type="button"
+                            onClick={() => {
+                              onSelectThinkingLevel?.(lvl);
+                            }}
+                            className={`px-2 py-1 rounded-md text-[10.5px] font-mono text-center transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                                : 'bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300 border border-border/50'
+                            }`}
+                          >
+                            {lvl}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Approval Mode Pill & Popover */}
+            <div className="relative" ref={approvalMenuRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsApprovalMenuOpen((prev) => !prev);
+                  setIsModelMenuOpen(false);
+                }}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-colors font-medium cursor-pointer border border-border/50 shrink-0 ${
+                  isApprovalMenuOpen
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 shadow-xs'
+                    : 'bg-surface hover:bg-surface-highlight text-slate-700 dark:text-zinc-300'
+                }`}
+                title={t('header.approvalModeTooltip')}
+              >
+                <Shield className="w-3.5 h-3.5 text-emerald-500 shrink-0 pointer-events-none" />
+                <span className="text-[11.5px] truncate max-w-[80px] sm:max-w-[120px] pointer-events-none">
+                  {approvalMode === 'always-ask'
+                    ? t('header.approval.alwaysAsk')
+                    : approvalMode === 'yolo'
+                    ? t('header.approval.yolo')
+                    : t('header.approval.write')}
+                </span>
+                <ChevronDown className="w-3 h-3 text-slate-400 dark:text-zinc-500 shrink-0 pointer-events-none" />
+              </button>
+
+              {isApprovalMenuOpen && (
+                <div className="absolute bottom-full mb-2 left-0 w-64 max-w-[90vw] bg-surface dark:bg-[#181a24] border border-border rounded-xl shadow-2xl py-2 z-50 animate-fade-in">
+                  <div className="px-3 py-1 text-[10px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                    Approval Mode
+                  </div>
+                  <div className="pt-1 space-y-0.5 px-1">
+                    {approvalOptions.map((opt) => {
+                      const isSelected = approvalMode === opt.id || (!approvalMode && opt.id === 'write');
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            onSelectApprovalMode?.(opt.id);
+                            setIsApprovalMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold'
+                              : 'text-slate-700 dark:text-zinc-300 hover:bg-surface-highlight'
+                          }`}
+                        >
+                          <div className="flex flex-col min-w-0 pr-2">
+                            <span className="text-[11px] font-medium">{opt.label}</span>
+                            <span className="text-[9.5px] text-slate-400 dark:text-zinc-500 leading-tight mt-0.5">
+                              {opt.description}
+                            </span>
+                          </div>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Context Usage Meter Pill */}
+            {hasContextUsage && percent != null && (
+              <button
+                type="button"
+                onClick={onOpenStatsPanel}
+                className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors font-mono cursor-pointer border shrink-0 ${meterColorClass}`}
+                title={contextTooltip}
+              >
+                <Database className="w-3.5 h-3.5 shrink-0 text-blue-500" />
+                <span className="text-[11px] hidden sm:inline">
+                  {formattedTokens && formattedWindow ? `${formattedTokens}/${formattedWindow} (${percent}%)` : `${percent}%`}
+                </span>
+                <span className="text-[11px] sm:hidden">
+                  {percent}%
+                </span>
+              </button>
+            )}
           </div>
 
           {status === 'idle' ? (
