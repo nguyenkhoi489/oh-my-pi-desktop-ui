@@ -14,6 +14,36 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-07 — Feature: ChatGPT-Style Fast Session Switching & Pagination
+- **State:**
+  - **Root Cause & Behavior:** Khi chuyển đổi giữa các session (cùng project hoặc khác project), giao diện bị giật lag và đơ (freeze) do gọi tuần tự nhiều lệnh IPC qua stdio CLI (`switch_session` -> `get_messages_page` theo vòng lặp phân trang), quét lại ổ đĩa toàn bộ project trong `list-sessions`, và render đồng loạt toàn bộ tin nhắn Markdown/ToolCalls mà không có phân trang.
+  - **Implementation:**
+    - `electron/omp-bridge.ts`: Bổ sung `readSessionMessagesFromDiskAsync` (dùng `fs.promises.readFile` không chặn event loop) và `fastLoadSession(sessionPath)`.
+    - `electron/main.ts`: Bổ sung IPC handler `omp:fast-load-session`; cài đặt In-Memory Cache `projectSessionsCache` với TTL 60s cho `omp:list-sessions`, loại bỏ việc quét lại toàn bộ ổ đĩa của mọi project mỗi lần đổi session; invalidate cache khi có `new-session`, `rename-session`, `delete-session`.
+    - `electron/preload.ts`, `electron/types.ts`, `src/types/index.ts`: Phơi bày API `fastLoadSession`.
+    - `src/hooks/useOmpRpc.ts`: Cài đặt `sessionLruCacheRef` (tối đa 10 sessions gần nhất) và `currentSwitchIdRef` chống race-condition. `switchSession` nạp ngay lập tức nếu cache hit (0ms), hoặc chạy song song `switchSession` và `fastLoadSession` (hoàn tất trong ~30ms thay vì 2.5s).
+    - `src/components/AgentPanel/ChatHistory.tsx`: Bổ sung phân trang lazy load (`PAGE_SIZE = 25`), thanh nút `LoadMore` ("Tải thêm tin nhắn cũ"), thuật toán giữ nguyên vị trí cuộn `scrollTop`, và sửa lỗi lookup mảng bằng `globalIndex = messages.length - visibleMessages.length + index` cho retry/rollback và deduplicate file attachments.
+    - `src/components/Modals/SettingsModal.tsx`: Tăng chiều rộng modal từ `max-w-3xl` lên `max-w-4xl` và thêm `whitespace-nowrap shrink-0` cho các tab navigation, chống hiện tượng rớt dòng tiêu đề tab.
+    - `src/components/Modals/settings/McpServersSection.tsx`: Bổ sung banner lệnh cấp quyền ghi Terminal `sudo chown $(whoami) "<filePath>" && chmod u+w "<filePath>"` (thu hồi quyền sở hữu từ root và cấp quyền ghi) kèm nút sao chép khi file cấu hình MCP chỉ đọc (`!configData.isWritable`).
+    - `shared/i18n/vi.ts` & `shared/i18n/en.ts`: Bổ sung key `chatHistory.loadMoreMessages` và `settings.mcp.permissionFixHint`, `settings.mcp.copyCommand`, `settings.mcp.copiedCommand`.
+    - `package.json` & `scripts/verify-fast-session-switching.mjs`: Test suite benchmark đo lường đọc đĩa (< 50ms, thực tế 1.5ms), LRU cache (< 1ms), pagination windowing, race-condition guard, session cache invariants và globalIndex mapping (60 passed, 0 failed).
+    - `scripts/verify-mcp-config.mjs`: Thêm kiểm thử Test 9 xác thực lệnh chmod và i18n keys cho MCP permission repair (94 passed, 0 failed).
+    - `electron/main.ts`: Quét và lưu cache `indexProjectSessions` cho toàn bộ projects trong `omp:list-sessions` (loại bỏ việc loại trừ activeProject khiến danh sách session của project active bị rỗng khi engine đang khởi động).
+    - `src/App.tsx` & `src/hooks/useWorkspace.ts`: Tách rời việc nạp Chat khỏi tiến trình khởi động Engine; kích hoạt `switchSession` tức thì (< 20ms) và truyền `isSessionSwitch: true` cho `openFolderDialog` để không gọi `resetChat(false)` làm mất tin nhắn; `switchSession` render optimistic từ cache/đĩa ngay lập tức mà không chờ IPC CLI.
+  - **Verification:**
+    - `npm run test:fast-session-switching`: 66 passed, 0 failed (bổ sung Test 6 bảo vệ bất biến cross-project session switching).
+    - `npm run test:mcp-config`: 94 passed, 0 failed.
+    - `npm run test:renderer-sessions`: 51 passed, 0 failed.
+    - `npm run test:clean-slate`: 57 passed, 0 failed.
+    - `npm run test:session-indexer`: 6 passed, 0 failed.
+    - `npm run test:session-import`: 8 passed, 0 failed.
+    - `npm run test:session-control`: 58 passed, 0 failed.
+    - `npm run test:i18n`: 3574 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng trải nghiệm chuyển đổi session siêu mượt mà.
+- **Refs:** `plans/reports/advise-260907-session-switching-latency.md`, `plans/260907-1143-fast-session-switching/`, `scripts/verify-fast-session-switching.mjs`
+
 ## 2026-09-06 — Fix: Stale Task History and Context Tokens Leaking on Refresh Without Selected Project
 - **State:**
   - **Root Cause Identified & Fixed:**
@@ -1556,5 +1586,33 @@ Entry template:
     - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` passed with 0 errors.
 - **In-flight:** None.
 - **Next:** Ready for packaging and QA testing.
+
+## 2026-09-07 — Dedicated MCP Servers Management UI & Engine Integration
+- **State:** Implemented complete graphical MCP management UI for OMP-Agent per `plans/plan-260907-1630-mcp-management-ui.md`:
+  - `electron/mcp-servers.ts`:
+    - Manages User (`~/.omp/agent/mcp.json`) and Project (`.omp/mcp.json`) scope files with atomic writes (`.tmp` + `rename`) and directory creation.
+    - Implemented `testMcpConnection` supporting both stdio JSON-RPC handshake (`initialize` -> `initialized` -> `tools/list`) and HTTP/SSE endpoint probe with 10s timeout, EPIPE suppression on stdin, and clean termination fallback to SIGKILL.
+  - `electron/main.ts` & `electron/preload.ts`:
+    - Registered IPC handlers: `omp:mcp-list`, `omp:mcp-save`, `omp:mcp-delete`, `omp:mcp-toggle`, `omp:mcp-test`.
+    - Exposed `window.electronAPI.{listMcpServers, saveMcpServer, deleteMcpServer, toggleMcpServer, testMcpConnection}`.
+  - `electron/types.ts` & `src/types/index.ts`:
+    - Added `McpScope`, `McpTransportType`, `McpServerConfig`, `McpConfigFile`, `McpConfigReadResult`, `McpMutationResult`, `McpTestResult`, and `ElectronAPI` methods.
+  - `src/utils/mcpPresets.ts`:
+    - Built Preset Catalog for GitHub, Filesystem, Memory, Fetch, Postgres, Puppeteer with field schemas.
+    - Implemented `textToArgs` (supporting whitespace and quoted arguments), `argsToText`, `envToRows`, `rowsToEnv`, and `validateServerName`.
+  - `src/components/Modals/settings/McpServerModal.tsx`:
+    - Modal for adding/editing servers with Presets tab, Custom tab, folder browser, secrets eye-toggle, and live Test Connection runner.
+  - `src/components/Modals/settings/McpServersSection.tsx`:
+    - Dedicated settings section with User/Project scope toggle, config path bar, read-only status detection, server cards/table, enable/disable switches, test status badge, and delete confirmation.
+  - `src/components/Modals/SettingsModal.tsx` & `src/App.tsx`:
+    - Integrated 'mcp' tab (icon `Boxes`) positioned between `providers` and `engine-config`, hooked up to restart engine alert banner.
+  - `shared/i18n/vi.ts` & `shared/i18n/en.ts`:
+    - Added full parity keys for `electron.mcp.*` and `settings.mcp.*`.
+  - Verification:
+    - Added `scripts/verify-mcp-config.mjs` and `npm run test:mcp-config` with 64 checks passing.
+    - Ran `npm run test:i18n` (3572 passed, 0 failed, zero Vietnamese characters in `src/` and `electron/`).
+    - Ran `npx tsc --noEmit` and `npx tsc -p tsconfig.node.json --noEmit` (0 errors).
+- **In-flight:** None.
+- **Next:** Ready for packaging and user testing.
 - **Refs:**
-  - `plans/260905-1815-context-driven-right-sidebar/plan.md`
+  - `plans/plan-260907-1630-mcp-management-ui.md`

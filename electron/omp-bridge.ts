@@ -2516,6 +2516,43 @@ export class OmpBridge {
     }
     return rawMessages;
   }
+  public async readSessionMessagesFromDiskAsync(filePath: string): Promise<AgentMessage[]> {
+    const rawMessages: AgentMessage[] = [];
+    try {
+      const fileContent = await fs.promises.readFile(filePath, 'utf-8');
+      const lines = fileContent.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed.type === 'message' && parsed.message) {
+            rawMessages.push(parsed.message);
+          } else if (parsed.role || parsed.type === 'custom_message' || parsed.customType || parsed.type === 'compaction') {
+            rawMessages.push(parsed.message || parsed);
+          }
+        } catch {}
+      }
+    } catch (err) {
+      console.warn('[OmpBridge] Failed to read session messages from disk async:', err);
+    }
+    return rawMessages;
+  }
+
+  public async fastLoadSession(sessionPath: string): Promise<{
+    success: boolean;
+    messages?: ChatMessage[];
+    error?: string;
+  }> {
+    try {
+      const rawMessages = await this.readSessionMessagesFromDiskAsync(sessionPath);
+      const messages = this.translateHistoryMessages(rawMessages);
+      return { success: true, messages };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Failed to fast load session' };
+    }
+  }
 
   public translateHistoryMessages(rawMessages: AgentMessage[]): ChatMessage[] {
     const result: ChatMessage[] = [];

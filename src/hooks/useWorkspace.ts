@@ -111,7 +111,7 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
     markArtifactStale((art) => art.path === filePath);
   }, [markArtifactStale]);
 
-  const openFolderDialog = useCallback(async (customPath?: string) => {
+  const openFolderDialog = useCallback(async (customPath?: string, opts?: { isSessionSwitch?: boolean }) => {
     if (window.electronAPI) {
       const folderPath = customPath || (await window.electronAPI.selectFolder());
       if (folderPath) {
@@ -140,7 +140,9 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
 
         const startRes = await startPromise;
         if (startRes?.success) {
-          await options?.onProcessStarted?.();
+          if (!opts?.isSessionSwitch) {
+            await options?.onProcessStarted?.();
+          }
         } else {
           console.warn('[useWorkspace] OMP engine failed to start for workspace:', folderPath);
         }

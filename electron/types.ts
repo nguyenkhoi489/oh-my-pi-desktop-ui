@@ -1243,6 +1243,48 @@ export interface ModelRolesReadResult {
   error?: string;
 }
 
+export type McpScope = 'user' | 'project';
+export type McpTransportType = 'stdio' | 'sse' | 'http';
+
+export interface McpServerConfig {
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  type?: McpTransportType;
+  url?: string;
+  headers?: Record<string, string>;
+  disabled?: boolean;
+}
+
+export interface McpConfigFile {
+  $schema?: string;
+  mcpServers: Record<string, McpServerConfig>;
+  [key: string]: unknown;
+}
+
+export interface McpConfigReadResult {
+  success: boolean;
+  scope: McpScope;
+  filePath: string;
+  servers: Record<string, McpServerConfig>;
+  isWritable: boolean;
+  error?: string;
+}
+
+export interface McpMutationResult {
+  success: boolean;
+  filePath?: string;
+  error?: string;
+}
+
+export interface McpTestResult {
+  success: boolean;
+  serverInfo?: { name: string; version: string };
+  tools?: Array<{ name: string; description?: string }>;
+  latencyMs: number;
+  error?: string;
+}
+
 export interface OmpFoundModel {
   provider: string;
   id: string;
@@ -1380,6 +1422,7 @@ export interface ElectronAPI {
   switchSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
   branchSession: (entryId: string) => Promise<{ success: boolean; error?: string }>;
   loadHistory: (sessionPath?: string) => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
+  fastLoadSession?: (sessionPath: string) => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
   getBranchEntries: () => Promise<{ success: boolean; entries?: OmpBranchEntry[]; error?: string }>;
   renameSession: (name: string) => Promise<{ success: boolean; error?: string }>;
   deleteSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
@@ -1534,6 +1577,12 @@ export interface ElectronAPI {
   setEngineConfigValue: (key: string, value: string, options?: SetEngineConfigOptions) => Promise<EngineConfigMutationResult>;
   resetEngineConfigValue: (key: string, options?: ResetEngineConfigOptions) => Promise<EngineConfigMutationResult>;
   getEngineConfigPath: (options?: EngineConfigPathOptions) => Promise<EngineConfigPathResult>;
+  // MCP Management
+  listMcpServers: (scope: McpScope, projectPath?: string) => Promise<McpConfigReadResult>;
+  saveMcpServer: (scope: McpScope, name: string, server: McpServerConfig, projectPath?: string) => Promise<McpMutationResult>;
+  deleteMcpServer: (scope: McpScope, name: string, projectPath?: string) => Promise<McpMutationResult>;
+  toggleMcpServer: (scope: McpScope, name: string, enabled: boolean, projectPath?: string) => Promise<McpMutationResult>;
+  testMcpConnection: (config: McpServerConfig) => Promise<McpTestResult>;
   // Event listeners from Main to Renderer
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => () => void;
   onOmpStreamToken: (callback: (token: string) => void) => () => void;

@@ -37,8 +37,9 @@ import type {
   GrievancesListOptions,
   GrievancesCleanOptions,
   OmpEventEnvelope,
+  McpScope,
+  McpServerConfig,
 } from './types';
-
 contextBridge.exposeInMainWorld('electronAPI', {
   // OMP Process & Discovery Actions
   checkOmpInstallation: () =>
@@ -186,6 +187,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   loadHistory: (sessionPath?: string) =>
     ipcRenderer.invoke('omp:load-history', sessionPath),
+  fastLoadSession: (sessionPath: string) =>
+    ipcRenderer.invoke('omp:fast-load-session', sessionPath),
   getBranchEntries: () =>
     ipcRenderer.invoke('omp:branch-entries'),
 
@@ -491,6 +494,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('omp:auth-login-event', handler);
     return () => ipcRenderer.removeListener('omp:auth-login-event', handler);
   },
+
+  // MCP Management
+  listMcpServers: (scope: McpScope, projectPath?: string) =>
+    ipcRenderer.invoke('omp:mcp-list', scope, projectPath),
+
+  saveMcpServer: (scope: McpScope, name: string, server: McpServerConfig, projectPath?: string) =>
+    ipcRenderer.invoke('omp:mcp-save', scope, name, server, projectPath),
+
+  deleteMcpServer: (scope: McpScope, name: string, projectPath?: string) =>
+    ipcRenderer.invoke('omp:mcp-delete', scope, name, projectPath),
+
+  toggleMcpServer: (scope: McpScope, name: string, enabled: boolean, projectPath?: string) =>
+    ipcRenderer.invoke('omp:mcp-toggle', scope, name, enabled, projectPath),
+
+  testMcpConnection: (config: McpServerConfig) =>
+    ipcRenderer.invoke('omp:mcp-test', config),
 
   // IPC Event Listeners
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => {

@@ -73,6 +73,14 @@ import { RuntimeManager } from './runtime-manager.ts';
 import { ProjectsStore } from './projects-store.ts';
 import { indexProjectSessions } from './session-indexer.ts';
 import { configureWebviewSecurity } from './webview-security.ts';
+import {
+  readMcpConfig,
+  saveMcpServer,
+  deleteMcpServer,
+  toggleMcpServer,
+  testMcpConnection,
+} from './mcp-servers.ts';
+import type { McpScope, McpServerConfig } from './types.ts';
 import { setCurrentLocale, tm } from '../shared/i18n/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -438,6 +446,35 @@ ipcMain.handle('omp:model-roles-write', async (_, payload: { roles: Record<strin
   return writeModelRolesConfig(payload?.roles || {});
 });
 
+// IPC Handlers: MCP Servers Management
+ipcMain.handle('omp:mcp-list', async (_, scope: McpScope, projectPath?: string) => {
+  const profile = getSettingsStore().get().profile;
+  const activeWs = projectPath || (ompBridge ? ompBridge.getWorkspacePath() : undefined) || undefined;
+  return readMcpConfig(scope, activeWs, profile);
+});
+
+ipcMain.handle('omp:mcp-save', async (_, scope: McpScope, name: string, server: McpServerConfig, projectPath?: string) => {
+  const profile = getSettingsStore().get().profile;
+  const activeWs = projectPath || (ompBridge ? ompBridge.getWorkspacePath() : undefined) || undefined;
+  return saveMcpServer(scope, name, server, activeWs, profile);
+});
+
+ipcMain.handle('omp:mcp-delete', async (_, scope: McpScope, name: string, projectPath?: string) => {
+  const profile = getSettingsStore().get().profile;
+  const activeWs = projectPath || (ompBridge ? ompBridge.getWorkspacePath() : undefined) || undefined;
+  return deleteMcpServer(scope, name, activeWs, profile);
+});
+
+ipcMain.handle('omp:mcp-toggle', async (_, scope: McpScope, name: string, enabled: boolean, projectPath?: string) => {
+  const profile = getSettingsStore().get().profile;
+  const activeWs = projectPath || (ompBridge ? ompBridge.getWorkspacePath() : undefined) || undefined;
+  return toggleMcpServer(scope, name, enabled, activeWs, profile);
+});
+
+ipcMain.handle('omp:mcp-test', async (_, config: McpServerConfig) => {
+  return testMcpConnection(config);
+});
+
 async function resolveOmpBinaryPath(): Promise<string | undefined> {
   if (ompBridge) {
     const installStatus = await ompBridge.checkInstallation();
@@ -723,6 +760,13 @@ ipcMain.handle('omp:set-todos', async (_, phases: OmpTodoPhase[]) => {
   return ompBridge.setTodos(phases);
 });
 // IPC Handlers: Sessions & Subagent Hub (Phase 1 Additions)
+interface ProjectSessionsCacheEntry {
+  sessions: OmpSessionInfo[];
+  timestamp: number;
+}
+const projectSessionsCache = new Map<string, ProjectSessionsCacheEntry>();
+const PROJECT_SESSIONS_TTL_MS = 60_000;
+
 ipcMain.handle('omp:list-sessions', async () => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
   try {
@@ -744,26 +788,38 @@ ipcMain.handle('omp:list-sessions', async () => {
       }
     }
 
-    // Index sessions for all other projects
-    const otherProjects = projects.filter((p) => !activeProject || p.id !== activeProject.id);
-    const otherSessionsNested = await Promise.all(
-      otherProjects.map(async (p) => {
+    // Index sessions for all projects with In-Memory Caching (60s TTL)
+    const now = Date.now();
+    const allSessionsNested = await Promise.all(
+      projects.map(async (p) => {
+        const cached = projectSessionsCache.get(p.id);
+        if (cached && now - cached.timestamp < PROJECT_SESSIONS_TTL_MS) {
+          return cached.sessions;
+        }
         try {
-          return await indexProjectSessions(p.id, p.path);
+          const sessions = await indexProjectSessions(p.id, p.path);
+          projectSessionsCache.set(p.id, { sessions, timestamp: now });
+          return sessions;
         } catch {
-          return [];
+          return cached ? cached.sessions : [];
         }
       })
     );
 
     const sessionMap = new Map<string, OmpSessionInfo>();
-    for (const s of otherSessionsNested.flat()) {
+    for (const s of allSessionsNested.flat()) {
       sessionMap.set(s.path, s);
     }
+    // Overlay active sessions from current bridge (updates active flag, live title, etc.)
     for (const s of activeSessions) {
-      sessionMap.set(s.path, s);
+      const existing = sessionMap.get(s.path);
+      sessionMap.set(s.path, {
+        ...existing,
+        ...s,
+        projectId: s.projectId || existing?.projectId || activeProject?.id,
+        projectPath: s.projectPath || existing?.projectPath || activeProject?.path,
+      });
     }
-
     return {
       success: true,
       sessions: Array.from(sessionMap.values()),
@@ -776,6 +832,7 @@ ipcMain.handle('omp:list-sessions', async () => {
 
 ipcMain.handle('omp:new-session', async (_, parentSession?: string) => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  projectSessionsCache.clear();
   return ompBridge.newSession(parentSession);
 });
 
@@ -794,6 +851,11 @@ ipcMain.handle('omp:load-history', async (_, sessionPath?: string) => {
   return ompBridge.loadHistory(sessionPath);
 });
 
+ipcMain.handle('omp:fast-load-session', async (_, sessionPath: string) => {
+  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  return ompBridge.fastLoadSession(sessionPath);
+});
+
 ipcMain.handle('omp:branch-entries', async () => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
   return ompBridge.getBranchEntries();
@@ -801,11 +863,13 @@ ipcMain.handle('omp:branch-entries', async () => {
 
 ipcMain.handle('omp:rename-session', async (_, name: string) => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  projectSessionsCache.clear();
   return ompBridge.renameSession(name);
 });
 
 ipcMain.handle('omp:delete-session', async (_, sessionPath: string) => {
   if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+  projectSessionsCache.clear();
   return ompBridge.deleteSession(sessionPath);
 });
 

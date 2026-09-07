@@ -636,22 +636,23 @@ export function App() {
 
   const handleSelectSessionFromGroup = useCallback(
     async (sessionPath: string, projectId?: string) => {
-      if (projectId) {
-        const project = projects.find((p) => p.id === projectId);
-        if (project && project.path !== workspacePath) {
-          await openFolderDialog(project.path);
-        }
-      }
       const foundRuntime = Object.values(runtimeStates).find((rt) => rt.sessionPath === sessionPath);
       if (foundRuntime && foundRuntime.runtimeId !== activeRuntimeId) {
         await switchRuntime(foundRuntime.runtimeId);
-      } else {
-        await switchSession(sessionPath);
+        return;
       }
+
+      if (projectId) {
+        const project = projects.find((p) => p.id === projectId);
+        if (project && project.path !== workspacePath) {
+          await openFolderDialog(project.path, { isSessionSwitch: true });
+        }
+      }
+
+      await switchSession(sessionPath);
     },
     [projects, workspacePath, openFolderDialog, runtimeStates, activeRuntimeId, switchRuntime, switchSession]
   );
-
   const handleNewSessionForProject = useCallback(
     async (projectId?: string) => {
       if (projectId) {
@@ -1156,6 +1157,8 @@ export function App() {
         setEngineConfigValue={setEngineConfigValue}
         resetEngineConfigValue={resetEngineConfigValue}
         getEngineConfigPath={getEngineConfigPath}
+        projectPath={workspacePath || undefined}
+        onSelectFolder={window.electronAPI?.selectFolder}
       />
 
 

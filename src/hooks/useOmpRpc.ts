@@ -140,6 +140,37 @@ export function useOmpRpc() {
   currentStreamTextRef.current = currentStreamText;
   const activeDiffRef = useRef<FileDiffItem | null>(activeDiff);
   activeDiffRef.current = activeDiff;
+  const activeSessionPathRef = useRef<string | null>(activeSessionPath);
+  activeSessionPathRef.current = activeSessionPath;
+  const sessionLruCacheRef = useRef<Map<string, ChatMessage[]>>(new Map());
+  const currentSwitchIdRef = useRef<number>(0);
+
+  const MAX_SESSION_CACHE = 10;
+  const getCachedSession = useCallback((path: string): ChatMessage[] | undefined => {
+    const cache = sessionLruCacheRef.current;
+    if (!cache.has(path)) return undefined;
+    const msgs = cache.get(path)!;
+    cache.delete(path);
+    cache.set(path, msgs);
+    return msgs;
+  }, []);
+
+  const setCachedSession = useCallback((path: string, msgs: ChatMessage[]) => {
+    const cache = sessionLruCacheRef.current;
+    if (cache.has(path)) {
+      cache.delete(path);
+    } else if (cache.size >= MAX_SESSION_CACHE) {
+      const oldest = cache.keys().next().value;
+      if (oldest) cache.delete(oldest);
+    }
+    cache.set(path, msgs);
+  }, []);
+
+  useEffect(() => {
+    if (activeSessionPath && messages.length > 0) {
+      setCachedSession(activeSessionPath, messages);
+    }
+  }, [activeSessionPath, messages, setCachedSession]);
   // rAF token batching refs
   const tokenBufferRef = useRef<string>('');
   const rafIdRef = useRef<number | null>(null);
@@ -431,37 +462,96 @@ export function useOmpRpc() {
         return false;
       }
 
+      if (sessionPath === activeSessionPathRef.current) {
+        return true;
+      }
+
       if (window.electronAPI) {
         try {
-          const res = await window.electronAPI.switchSession(sessionPath);
-          if (res.success) {
-            const histRes = await window.electronAPI.loadHistory(sessionPath);
-            if (histRes.success && Array.isArray(histRes.messages)) {
-              if (rafIdRef.current !== null) {
-                cancelAnimationFrame(rafIdRef.current);
-                rafIdRef.current = null;
-              }
-              tokenBufferRef.current = '';
-              setCurrentStreamText('');
-              setCurrentThinking(null);
-              activeToolCallsRef.current = [];
-              setActiveToolCalls([]);
-              setActiveDiff(null);
-              setUiRequestQueue([]);
-              uiRequestQueueRef.current = [];
-              setNotifications([]);
-              setEngineStatuses([]);
-              setEngineWidgets([]);
+          const switchId = ++currentSwitchIdRef.current;
+          const cached = getCachedSession(sessionPath);
 
-              setTodoPhases([]);
-              setTodos([]);
-              const correlated = await correlateBranchEntries(histRes.messages);
+          // Reset transient streaming state immediately
+          if (rafIdRef.current !== null) {
+            cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = null;
+          }
+          tokenBufferRef.current = '';
+          setCurrentStreamText('');
+          currentStreamTextRef.current = '';
+          setCurrentThinking(null);
+          currentThinkingRef.current = null;
+          activeToolCallsRef.current = [];
+          setActiveToolCalls([]);
+          setActiveDiff(null);
+          activeDiffRef.current = null;
+          setUiRequestQueue([]);
+          uiRequestQueueRef.current = [];
+          setNotifications([]);
+          setEngineStatuses([]);
+          setEngineWidgets([]);
+          setTodoPhases([]);
+          setTodos([]);
+
+          // 1. Optimistic render from in-memory LRU cache (< 1ms)
+          if (cached) {
+            const correlated = await correlateBranchEntries(cached);
+            if (currentSwitchIdRef.current === switchId) {
               setMessages(correlated);
+              messagesRef.current = correlated;
               setActiveSessionPath(sessionPath);
-              await refreshSessions();
-              await refreshEngineState();
-              return true;
+              activeSessionPathRef.current = sessionPath;
             }
+          }
+
+          // 2. Direct JSONL load in parallel (< 20ms)
+          const fastLoadPromise = !cached && window.electronAPI.fastLoadSession
+            ? window.electronAPI.fastLoadSession(sessionPath).catch(() => null)
+            : null;
+
+          if (fastLoadPromise) {
+            fastLoadPromise.then(async (fastRes) => {
+              if (currentSwitchIdRef.current !== switchId) return;
+              if (fastRes && fastRes.success && Array.isArray(fastRes.messages)) {
+                const correlated = await correlateBranchEntries(fastRes.messages);
+                if (currentSwitchIdRef.current === switchId) {
+                  setMessages(correlated);
+                  messagesRef.current = correlated;
+                  setActiveSessionPath(sessionPath);
+                  activeSessionPathRef.current = sessionPath;
+                  setCachedSession(sessionPath, correlated);
+                }
+              }
+            });
+          }
+
+          // 3. Engine CLI sync in background
+          const switchPromise = window.electronAPI.switchSession(sessionPath);
+          const res = await switchPromise;
+          if (currentSwitchIdRef.current !== switchId) {
+            return false;
+          }
+
+          if (res.success) {
+            // If neither cached nor fastLoad succeeded, fallback to loadHistory
+            if (!cached && !fastLoadPromise) {
+              const histRes = await window.electronAPI.loadHistory(sessionPath);
+              if (currentSwitchIdRef.current !== switchId) return false;
+              if (histRes.success && Array.isArray(histRes.messages)) {
+                const correlated = await correlateBranchEntries(histRes.messages);
+                if (currentSwitchIdRef.current === switchId) {
+                  setMessages(correlated);
+                  messagesRef.current = correlated;
+                  setActiveSessionPath(sessionPath);
+                  activeSessionPathRef.current = sessionPath;
+                  setCachedSession(sessionPath, correlated);
+                }
+              }
+            }
+
+            await refreshSessions();
+            await refreshEngineState();
+            return true;
           } else if (res.error === 'session_busy') {
             console.warn('[useOmpRpc] Session switch rejected: engine is busy');
           }
@@ -471,10 +561,11 @@ export function useOmpRpc() {
         return false;
       } else {
         setActiveSessionPath(sessionPath);
+        activeSessionPathRef.current = sessionPath;
         return true;
       }
     },
-    [status, correlateBranchEntries, refreshSessions, refreshEngineState]
+    [status, getCachedSession, setCachedSession, correlateBranchEntries, refreshSessions, refreshEngineState]
   );
 
   const newSession = useCallback(

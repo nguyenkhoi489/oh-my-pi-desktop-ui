@@ -39,6 +39,7 @@ import {
 import { ModelsCatalogSection } from './settings/ModelsCatalogSection.tsx';
 import { LaunchOptionsSection } from './settings/LaunchOptionsSection.tsx';
 import { EngineConfigEditor } from './settings/EngineConfigEditor.tsx';
+import { McpServersSection } from './settings/McpServersSection.tsx';
 import {
   ThemeMode,
   OmpInstallStatus,
@@ -133,6 +134,8 @@ interface SettingsModalProps {
     options?: ResetEngineConfigOptions,
   ) => Promise<EngineConfigMutationResult>;
   getEngineConfigPath?: (options?: EngineConfigPathOptions) => Promise<EngineConfigPathResult>;
+  projectPath?: string;
+  onSelectFolder?: () => Promise<string | null>;
 }
 
 const THINKING_LEVELS: { id: OmpThinkingLevel; labelKey: I18nKey; descKey: I18nKey }[] = [
@@ -248,9 +251,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   setEngineConfigValue,
   resetEngineConfigValue,
   getEngineConfigPath,
+  projectPath,
+  onSelectFolder,
 }) => {
   const { locale, setLocale, t } = useI18n();
-  const [activeTab, setActiveTab] = useState<'general' | 'engine' | 'providers' | 'engine-config'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'engine' | 'providers' | 'mcp' | 'engine-config'>('general');
   const [settings, setSettings] = useState<AppSettings>({
     theme: 'light',
     approvalMode: 'always-ask',
@@ -966,7 +971,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4 select-none">
-      <div className="w-full max-w-3xl bg-panel border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-4xl bg-panel border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface">
           <div className="flex items-center gap-2.5">
@@ -996,13 +1001,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-border bg-surface/50 px-6 gap-2">
+        <div className="flex border-b border-border bg-surface/50 px-6 gap-2 overflow-x-auto">
           <button
             onClick={() => {
               setActiveTab('general');
               setIsEditingProvider(false);
             }}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
+            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'general'
                 ? 'border-codex-accent text-codex-accent'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
@@ -1016,7 +1021,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               setActiveTab('engine');
               setIsEditingProvider(false);
             }}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
+            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'engine'
                 ? 'border-codex-accent text-codex-accent'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
@@ -1027,7 +1032,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('providers')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
+            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'providers'
                 ? 'border-codex-accent text-codex-accent'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
@@ -1038,10 +1043,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
           <button
             onClick={() => {
+              setActiveTab('mcp');
+              setIsEditingProvider(false);
+            }}
+            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              activeTab === 'mcp'
+                ? 'border-codex-accent text-codex-accent'
+                : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
+            }`}
+          >
+            <Boxes className="w-3.5 h-3.5" />
+            {t('settings.mcp.title')}
+          </button>
+          <button
+            onClick={() => {
               setActiveTab('engine-config');
               setIsEditingProvider(false);
             }}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
+            className={`flex items-center gap-2 py-3 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'engine-config'
                 ? 'border-codex-accent text-codex-accent'
                 : 'border-transparent text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
@@ -2621,6 +2640,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* TAB 4: MCP Servers */}
+          {activeTab === 'mcp' && (
+            <McpServersSection
+              projectPath={projectPath}
+              onConfigChanged={() => setHasEngineChanged(true)}
+              onSelectFolder={onSelectFolder || window.electronAPI?.selectFolder}
+            />
           )}
 
           {/* TAB 4: Engine Configuration Editor (Phase 3) */}

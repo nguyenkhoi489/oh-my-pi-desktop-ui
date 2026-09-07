@@ -238,6 +238,37 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
     setCopiedMsgId(msgId);
     setTimeout(() => setCopiedMsgId(null), 2000);
   };
+  const PAGE_SIZE = 25;
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+
+  const firstMsgId = messages[0]?.id;
+  const prevFirstMsgIdRef = useRef<string | undefined>(firstMsgId);
+  useEffect(() => {
+    if (firstMsgId !== prevFirstMsgIdRef.current) {
+      prevFirstMsgIdRef.current = firstMsgId;
+      setVisibleCount(PAGE_SIZE);
+    }
+  }, [firstMsgId]);
+
+  const hasMore = messages.length > visibleCount;
+  const visibleMessages = useMemo(() => {
+    if (!hasMore) return messages;
+    return messages.slice(-visibleCount);
+  }, [messages, visibleCount, hasMore]);
+
+  const handleLoadMore = () => {
+    const el = containerRef.current;
+    const prevScrollHeight = el ? el.scrollHeight : 0;
+    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, messages.length));
+    requestAnimationFrame(() => {
+      if (el) {
+        const heightDiff = el.scrollHeight - prevScrollHeight;
+        if (heightDiff > 0) {
+          el.scrollTop += heightDiff;
+        }
+      }
+    });
+  };
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef<boolean>(true);
@@ -257,11 +288,24 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
 
   return (
     <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-5">
-      {messages.map((msg, index) => {
+      {hasMore && (
+        <div className="flex justify-center pt-1 pb-2">
+          <button
+            type="button"
+            onClick={handleLoadMore}
+            className="px-3 py-1 text-xs font-medium rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700/60 shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>{t('chatHistory.loadMoreMessages')}</span>
+            <span className="text-[10.5px] opacity-70 font-mono">({messages.length - visibleCount})</span>
+          </button>
+        </div>
+      )}
+      {visibleMessages.map((msg, index) => {
+        const globalIndex = messages.length - visibleMessages.length + index;
         if (msg.role === 'fileMention') {
           // Skip duplicate fileMention card adjacent to user message or previous card
-          const nextMsg = messages[index + 1];
-          const afterNextMsg = messages[index + 2];
+          const nextMsg = messages[globalIndex + 1];
+          const afterNextMsg = messages[globalIndex + 2];
           if (nextMsg && nextMsg.role === 'user' && afterNextMsg && afterNextMsg.role === 'fileMention') {
             const curPaths = (msg.files || []).map((f) => f.path).sort().join('|');
             const targetPaths = (afterNextMsg.files || []).map((f) => f.path).sort().join('|');
@@ -269,7 +313,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
               return null;
             }
           }
-          const prevMsg = messages[index - 1];
+          const prevMsg = messages[globalIndex - 1];
           if (prevMsg && prevMsg.role === 'fileMention') {
             const curPaths = (msg.files || []).map((f) => f.path).sort().join('|');
             const prevPaths = (prevMsg.files || []).map((f) => f.path).sort().join('|');
@@ -458,7 +502,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                 onRetry={
                   onRetry
                     ? () => {
-                        const prevUserMsg = messages.slice(0, index).reverse().find((m) => m.role === 'user');
+                        const prevUserMsg = messages.slice(0, globalIndex).reverse().find((m) => m.role === 'user');
                         onRetry(prevUserMsg?.content);
                       }
                     : undefined
@@ -467,7 +511,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                 onRollback={
                   onBranchSession
                     ? () => {
-                        const prevEntryId = messages.slice(0, index).reverse().find((m) => m.entryId)?.entryId || msg.entryId;
+                        const prevEntryId = messages.slice(0, globalIndex).reverse().find((m) => m.entryId)?.entryId || msg.entryId;
                         if (prevEntryId) {
                           onBranchSession(prevEntryId);
                         }
