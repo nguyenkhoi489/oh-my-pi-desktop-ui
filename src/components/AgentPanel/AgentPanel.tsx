@@ -45,6 +45,7 @@ export interface AgentPanelProps {
   onSendMessage: (prompt: string, contextFiles?: string[]) => void;
   onSteerMessage?: (prompt: string, contextFiles?: string[]) => void;
   onAbortAndPrompt?: (prompt: string, contextFiles?: string[]) => void;
+  onAbort?: () => void;
   onFollowUpMessage?: (prompt: string, contextFiles?: string[]) => void;
   followUpQueue?: Array<{ id: string; content: string; files?: string[]; timestamp: number }>;
   onBranchSession?: (entryId: string) => void;
@@ -96,6 +97,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   onSendMessage,
   onSteerMessage,
   onAbortAndPrompt,
+  onAbort,
   onBranchSession,
   onCollapsePanel,
   onOpenFile,
@@ -241,6 +243,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
             onSendMessage={onSendMessage}
             onSteerMessage={onSteerMessage}
             onAbortAndPrompt={onAbortAndPrompt}
+            onAbort={onAbort}
             status={status}
             workspaceFiles={workspaceFiles}
             workspacePath={workspacePath}

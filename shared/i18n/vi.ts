@@ -1128,6 +1128,7 @@ export const vi = {
   'composer.openSlashCommands': 'Danh sách lệnh Slash & Skills (/)',
   'composer.steerNowTooltip': 'Lái hướng agent ngay lập tức (Enter)',
   'composer.runningSendOptionsTooltip': 'Tùy chọn gửi khi đang chạy',
+  'composer.stopTooltip': 'Dừng thực thi agent (Escape / Ctrl+C)',
   'composer.steerOptionDesc': 'Lái hướng lượt đang stream',
   'composer.abortOptionDesc': 'Dừng turn và gửi prompt mới',
   'composer.followUpOptionDesc': 'Chờ turn xong rồi tự gửi',

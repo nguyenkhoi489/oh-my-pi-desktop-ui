@@ -256,6 +256,7 @@ export function App() {
     sendMessage,
     steer,
     abortAndPrompt,
+    abort,
     followUpQueue,
     followUp,
     acceptDiff,
@@ -819,6 +820,23 @@ export function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeDiff, acceptDiff]);
+  // Global abort shortcut (Escape or Cmd+.) when agent is busy and no modal is open
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (status === 'idle') return;
+      if (isSettingsModalOpen || isOmnibarOpen || isOmpModalOpen || isOpsModalOpen || isCommitModalOpen || isUnsavedModalOpen) return;
+      if (e.key === 'Escape' || (e.metaKey && e.key === '.')) {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') {
+          return;
+        }
+        e.preventDefault();
+        abort();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [status, isSettingsModalOpen, isOmnibarOpen, isOmpModalOpen, isOpsModalOpen, isCommitModalOpen, isUnsavedModalOpen, abort]);
   const isCurrentToolApproval = activeUiRequest
     ? activeUiRequest.isToolApproval ||
       (activeUiRequest.method === 'select' &&
@@ -959,6 +977,7 @@ export function App() {
               onSendMessage={sendMessage}
               onSteerMessage={steer}
               onAbortAndPrompt={abortAndPrompt}
+              onAbort={abort}
               onFollowUpMessage={followUp}
               followUpQueue={followUpQueue}
               onBranchSession={branchFromMessage}
@@ -1081,6 +1100,7 @@ export function App() {
                 onSendMessage={sendMessage}
                 onSteerMessage={steer}
                 onAbortAndPrompt={abortAndPrompt}
+                onAbort={abort}
                 onFollowUpMessage={followUp}
                 followUpQueue={followUpQueue}
                 onBranchSession={branchFromMessage}

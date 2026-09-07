@@ -14,6 +14,30 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-07 — Feature: Instant Stop & Abort Execution with Esc/Ctrl+C Shortcuts
+- **State:**
+  - **Context:** Người dùng cần khả năng ngắt ngang lượt chạy của Agent (tương tự `Ctrl + C` trong Terminal) khi Agent đang stream văn bản, suy nghĩ hoặc gọi công cụ, mà không bị ép phải gõ thêm tin nhắn.
+  - **Implementation:**
+    - `src/hooks/useOmpRpc.ts`: Củng cố hàm `abort()`: hủy animation frame `cancelAnimationFrame`, xả nốt batch token dở dang vào stream text, reset trạng thái thinking (`setCurrentThinking(null)` & `currentThinkingRef.current = null`), chấm dứt các tool calls đang chạy ở client (`status: 'failed'`), gọi IPC `abortOmp()`, và chuyển trạng thái về `idle` ngay tức thì.
+    - `src/App.tsx`: Destructure `abort` từ `useOmpRpc()`, truyền qua prop `onAbort` vào cả 2 thể hiện của `AgentPanel`; bổ sung global keyboard shortcut (`Escape` và `Cmd + .`) khi Agent đang bận và không có modal nào đang mở.
+    - `src/components/AgentPanel/AgentPanel.tsx`: Tiếp nhận `onAbort?: () => void` và chuyển tiếp vào `PromptComposer`.
+    - `src/components/AgentPanel/PromptComposer.tsx`:
+      - Khi `status !== 'idle'` và ô nhập trống: Biến nút gửi thành nút **Stop** chuyên dụng (màu đỏ nổi bật, biểu tượng `Square`, kèm nhãn phím tắt `Esc`), luôn bấm được ngay lập tức (`disabled={false}`).
+      - Khi `status !== 'idle'` và đã có nội dung: Giữ nút Steer split menu, đồng thời hiển thị thêm nút Stop icon nhỏ cạnh bên và thêm tùy chọn Stop trong dropdown menu.
+      - Phím tắt ngắt ngang: `Escape` (khi không mở menu), `Ctrl + C` (chuẩn terminal, khi không bôi đen chữ), và `Cmd + .` (chuẩn macOS) trong ô nhập liệu.
+    - `shared/i18n/vi.ts` & `shared/i18n/en.ts`: Bổ sung key `composer.stopTooltip`.
+    - `scripts/verify-steering.mjs`: Bổ sung Test 12 khóa bất biến hợp đồng UI của nút Stop, phím tắt ngắt ngang, và dọn dẹp thinking state (93 passed, 0 failed).
+  - **Verification:**
+    - `npm run test:steering`: 93 passed, 0 failed.
+    - `npm run test:fast-session-switching`: 66 passed, 0 failed.
+    - `npm run test:center-chat-layout`: 106 passed, 0 failed.
+    - `npm run test:clean-slate`: 57 passed, 0 failed.
+    - `npm run test:i18n`: 3582 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi TypeCheck.
+- **In-flight:** Không có.
+- **Next:** Tính năng dừng ngang đã sẵn sàng và được kiểm thử hoàn tất.
+- **Refs:** `plans/reports/advise-260907-1245-stop-and-abort-execution.md`, `scripts/verify-steering.mjs`
+
 ## 2026-09-07 — Feature: ChatGPT-Style Fast Session Switching & Pagination
 - **State:**
   - **Root Cause & Behavior:** Khi chuyển đổi giữa các session (cùng project hoặc khác project), giao diện bị giật lag và đơ (freeze) do gọi tuần tự nhiều lệnh IPC qua stdio CLI (`switch_session` -> `get_messages_page` theo vòng lặp phân trang), quét lại ổ đĩa toàn bộ project trong `list-sessions`, và render đồng loạt toàn bộ tin nhắn Markdown/ToolCalls mà không có phân trang.

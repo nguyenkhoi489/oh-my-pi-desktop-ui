@@ -1430,6 +1430,27 @@ export function useOmpRpc() {
   );
 
   const abort = useCallback(async () => {
+    // Flush any pending token batch and cancel animation frame
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+    if (tokenBufferRef.current) {
+      const chunk = tokenBufferRef.current;
+      tokenBufferRef.current = '';
+      setCurrentStreamText((prev) => prev + chunk);
+    }
+    // Reset in-progress thinking block
+    setCurrentThinking(null);
+    currentThinkingRef.current = null;
+
+    // Terminate running tool calls locally
+    setActiveToolCalls((prev) =>
+      prev.map((tc) => (tc.status === 'running' ? { ...tc, status: 'failed' as const, endTime: Date.now() } : tc))
+    );
+    activeToolCallsRef.current = activeToolCallsRef.current.map((tc) =>
+      tc.status === 'running' ? { ...tc, status: 'failed' as const, endTime: Date.now() } : tc
+    );
     if (window.electronAPI) {
       try {
         await window.electronAPI.abortOmp();
@@ -1438,6 +1459,7 @@ export function useOmpRpc() {
       }
     }
     setStatus('idle');
+    lastStatusRef.current = 'idle';
   }, []);
 
   const respondPermission = useCallback(

@@ -51,6 +51,7 @@ interface PromptComposerProps {
   onSendMessage: (prompt: string, contextFiles?: string[]) => void;
   onSteerMessage?: (prompt: string, contextFiles?: string[]) => void;
   onAbortAndPrompt?: (prompt: string, contextFiles?: string[]) => void;
+  onAbort?: () => void;
   onFollowUpMessage?: (prompt: string, contextFiles?: string[]) => void;
   followUpQueue?: Array<{ id: string; content: string; files?: string[]; timestamp: number }>;
   status: OmpAgentStatus;
@@ -93,6 +94,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
   onSendMessage,
   onSteerMessage,
   onAbortAndPrompt,
+  onAbort,
   onFollowUpMessage,
   followUpQueue,
   status,
@@ -758,6 +760,32 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
       }
       return;
     }
+    // Keyboard shortcuts for aborting execution while running
+    if (status !== 'idle') {
+      // Escape: abort execution when menus and pickers are closed
+      if (e.key === 'Escape' && !isPickerOpen && !isCommandMenuOpen && !isSplitMenuOpen) {
+        e.preventDefault();
+        onAbort?.();
+        return;
+      }
+
+      // Ctrl+C: standard terminal abort (when there is no text selection or input is empty)
+      if (e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === 'c' || e.key === 'C')) {
+        const hasSelection = textareaRef.current && textareaRef.current.selectionStart !== textareaRef.current.selectionEnd;
+        if (!hasSelection) {
+          e.preventDefault();
+          onAbort?.();
+          return;
+        }
+      }
+
+      // Cmd+.: standard macOS abort shortcut
+      if (e.metaKey && e.key === '.') {
+        e.preventDefault();
+        onAbort?.();
+        return;
+      }
+    }
 
     if (e.key === 'Escape') {
       if (isSplitMenuOpen) {
@@ -1243,92 +1271,137 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
               </button>
             </div>
           ) : (
-            <div className="relative flex items-center gap-2" ref={splitMenuRef}>
-              {/* Split Button Group */}
-              <div className="flex items-center rounded-xl overflow-hidden shadow-sm">
+            !input.trim() && attachedFiles.length === 0 ? (
+              /* Dedicated Stop button when no direction is typed */
+              <button
+                type="button"
+                onClick={onAbort}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                title={t('composer.stopTooltip')}
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span>{t('composer.stop')}</span>
+                <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-rose-700/80 text-rose-100 ml-1">Esc</kbd>
+              </button>
+            ) : (
+              /* When direction is typed, offer instant stop alongside Steer split menu */
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={handleSteer}
-                  disabled={isSendDisabled}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                    !isSendDisabled
-                      ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                      : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 cursor-not-allowed'
-                  }`}
-                  title={t('composer.steerNowTooltip')}
+                  onClick={onAbort}
+                  className="flex items-center justify-center p-1.5 rounded-xl text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-600 dark:text-rose-400 transition-all cursor-pointer shadow-sm active:scale-95"
+                  title={t('composer.stopTooltip')}
                 >
-                  <Radio className="w-3.5 h-3.5 animate-pulse" />
-                  <span>Steer</span>
+                  <Square className="w-3.5 h-3.5 fill-current" />
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setIsSplitMenuOpen((prev) => !prev)}
-                  disabled={isSendDisabled}
-                  className={`px-1.5 py-1.5 border-l text-xs transition-all cursor-pointer ${
-                    !isSendDisabled
-                      ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700/50'
-                      : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 border-border/60 cursor-not-allowed'
-                  }`}
-                  title={t('composer.runningSendOptionsTooltip')}
-                >
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSplitMenuOpen ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
+                <div className="relative flex items-center gap-2" ref={splitMenuRef}>
+                  {/* Split Button Group */}
+                  <div className="flex items-center rounded-xl overflow-hidden shadow-sm">
+                    <button
+                      type="button"
+                      onClick={handleSteer}
+                      disabled={isSendDisabled}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                        !isSendDisabled
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                          : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 cursor-not-allowed'
+                      }`}
+                      title={t('composer.steerNowTooltip')}
+                    >
+                      <Radio className="w-3.5 h-3.5 animate-pulse" />
+                      <span>Steer</span>
+                    </button>
 
-              {/* Split Menu Dropdown */}
-              {isSplitMenuOpen && (
-                <div className="absolute bottom-full right-0 mb-2 w-72 bg-surface dark:bg-[#181a24] border border-border rounded-xl shadow-xl z-50 p-1 flex flex-col gap-0.5 animate-fade-in">
-                  {/* 1. Steer Action */}
-                  <button
-                    type="button"
-                    onClick={handleSteer}
-                    className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between hover:bg-amber-500/10 text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Radio className="w-4 h-4 text-amber-500 shrink-0" />
-                      <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Steer</span>
-                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.steerOptionDesc')}</span>
-                      </div>
-                    </div>
-                    <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">↵</kbd>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsSplitMenuOpen((prev) => !prev)}
+                      disabled={isSendDisabled}
+                      className={`px-1.5 py-1.5 border-l text-xs transition-all cursor-pointer ${
+                        !isSendDisabled
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700/50'
+                          : 'bg-surface-highlight text-slate-400 dark:text-zinc-500 border-border/60 cursor-not-allowed'
+                      }`}
+                      title={t('composer.runningSendOptionsTooltip')}
+                    >
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSplitMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
 
-                  {/* 2. Stop & Send Action */}
-                  <button
-                    type="button"
-                    onClick={handleAbortAndPrompt}
-                    className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between hover:bg-rose-500/10 text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Square className="w-4 h-4 text-rose-500 shrink-0" />
-                      <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">Stop & send</span>
-                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.abortOptionDesc')}</span>
-                      </div>
-                    </div>
-                    <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">⌘⇧↵</kbd>
-                  </button>
+                  {/* Split Menu Dropdown */}
+                  {isSplitMenuOpen && (
+                    <div className="absolute bottom-full right-0 mb-2 w-72 bg-surface dark:bg-[#181a24] border border-border rounded-xl shadow-xl z-50 p-1 flex flex-col gap-0.5 animate-fade-in">
+                      {/* 1. Steer Action */}
+                      <button
+                        type="button"
+                        onClick={handleSteer}
+                        className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between hover:bg-amber-500/10 text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Radio className="w-4 h-4 text-amber-500 shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Steer</span>
+                            <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.steerOptionDesc')}</span>
+                          </div>
+                        </div>
+                        <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">↵</kbd>
+                      </button>
 
-                  {/* 3. Queue Follow-up Action */}
-                  <button
-                    type="button"
-                    onClick={handleFollowUp}
-                    className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between hover:bg-blue-500/10 text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Clock className="w-4 h-4 text-blue-500 shrink-0" />
-                      <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{t('composer.queueFollowUp')}</span>
-                        <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.followUpOptionDesc')}</span>
-                      </div>
+                      {/* 2. Stop & Send Action */}
+                      <button
+                        type="button"
+                        onClick={handleAbortAndPrompt}
+                        className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between hover:bg-rose-500/10 text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Square className="w-4 h-4 text-rose-500 shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">Stop & send</span>
+                            <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.abortOptionDesc')}</span>
+                          </div>
+                        </div>
+                        <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">⌘⇧↵</kbd>
+                      </button>
+
+                      {/* 3. Queue Follow-up Action */}
+                      <button
+                        type="button"
+                        onClick={handleFollowUp}
+                        className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between hover:bg-blue-500/10 text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Clock className="w-4 h-4 text-blue-500 shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{t('composer.queueFollowUp')}</span>
+                            <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.followUpOptionDesc')}</span>
+                          </div>
+                        </div>
+                        <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">⌘↵</kbd>
+                      </button>
+
+                      {/* 4. Instant Stop Action */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSplitMenuOpen(false);
+                          onAbort?.();
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between hover:bg-rose-500/10 text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Square className="w-4 h-4 text-rose-500 shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">{t('composer.stop')}</span>
+                            <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.stopTooltip')}</span>
+                          </div>
+                        </div>
+                        <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">Esc</kbd>
+                      </button>
                     </div>
-                    <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">⌘↵</kbd>
-                  </button>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )
           )}
         </div>
       </div>

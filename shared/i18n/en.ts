@@ -1130,6 +1130,7 @@ export const en: Record<I18nKey, string> = {
   'composer.openSlashCommands': 'Slash Commands & Skills list (/)',
   'composer.steerNowTooltip': 'Steer agent immediately (Enter)',
   'composer.runningSendOptionsTooltip': 'Sending options while running',
+  'composer.stopTooltip': 'Stop agent execution (Escape / Ctrl+C)',
   'composer.steerOptionDesc': 'Steer streaming turn',
   'composer.abortOptionDesc': 'Stop turn and send new prompt',
   'composer.followUpOptionDesc': 'Queue to send after turn finishes',
