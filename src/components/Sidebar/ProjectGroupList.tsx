@@ -64,10 +64,11 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
   onExportSession,
 }) => {
   const { t } = useI18n();
-  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
+  // Projects are collapsed by default
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
 
   const toggleCollapse = (projectId: string) => {
-    setCollapsedProjects((prev) => ({
+    setExpandedProjects((prev) => ({
       ...prev,
       [projectId]: !prev[projectId],
     }));
@@ -180,7 +181,7 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
       {/* Project Trees */}
       <div className="space-y-1">
         {projects.map((project) => {
-          const isCollapsed = Boolean(collapsedProjects[project.id]);
+          const isCollapsed = !expandedProjects[project.id];
           const projectSessions = groupedSessions.map.get(project.id) || [];
           const isActiveProject = activeProjectId === project.id || activeProjectPath === project.path;
 

@@ -30,8 +30,10 @@ Entry template:
     - `scripts/verify-mcp-config.mjs`: Thêm kiểm thử Test 9 xác thực lệnh chmod và i18n keys cho MCP permission repair (94 passed, 0 failed).
     - `electron/main.ts`: Quét và lưu cache `indexProjectSessions` cho toàn bộ projects trong `omp:list-sessions` (loại bỏ việc loại trừ activeProject khiến danh sách session của project active bị rỗng khi engine đang khởi động).
     - `src/App.tsx` & `src/hooks/useWorkspace.ts`: Tách rời việc nạp Chat khỏi tiến trình khởi động Engine; kích hoạt `switchSession` tức thì (< 20ms) và truyền `isSessionSwitch: true` cho `openFolderDialog` để không gọi `resetChat(false)` làm mất tin nhắn; `switchSession` render optimistic từ cache/đĩa ngay lập tức mà không chờ IPC CLI.
+    - `src/components/Sidebar/ProjectGroupList.tsx`: Mặc định đóng tất cả các nhóm dự án (collapsed by default `>`), người dùng tự nhấn chevron mở ra khi cần để tránh tràn danh sách dài.
   - **Verification:**
     - `npm run test:fast-session-switching`: 66 passed, 0 failed (bổ sung Test 6 bảo vệ bất biến cross-project session switching).
+    - `npm run test:center-chat-layout`: 106 passed, 0 failed.
     - `npm run test:mcp-config`: 94 passed, 0 failed.
     - `npm run test:renderer-sessions`: 51 passed, 0 failed.
     - `npm run test:clean-slate`: 57 passed, 0 failed.

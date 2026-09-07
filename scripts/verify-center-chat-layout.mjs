@@ -83,6 +83,8 @@ console.log('\n[Test 2] ProjectGroupList Component & Live Runtime Status');
   assert(code.includes('LoaderCircle') && code.includes('animate-spin'), 'Renders animated spinner for running sessions in background runtimes');
   assert(code.includes('attention') && code.includes('animate-pulse'), 'Renders attention badge for completed background sessions');
   assert(code.includes('formatRelativeTime'), 'Uses relative timestamp helper');
+  assert(code.includes('const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});'), 'Project groups default to collapsed to prevent vertical overflow');
+  assert(code.includes('const isCollapsed = !expandedProjects[project.id];'), 'Computes isCollapsed from expandedProjects map');
 }
 
 // ----------------------------------------------------
