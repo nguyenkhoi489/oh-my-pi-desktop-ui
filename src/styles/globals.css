@@ -132,14 +132,29 @@ pre {
 .markdown-content h4,
 .markdown-content h5,
 .markdown-content h6 {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   word-break: break-word;
 }
 
 .markdown-content code:not(pre code) {
-  word-break: break-all;
-  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-wrap: break-word;
   white-space: normal;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.markdown-content.is-streaming > div > *:last-child {
+  display: inline;
+}
+
+.markdown-content ul:has(> li > input.task-list-item-checkbox) {
+  list-style-type: none;
+  padding-left: 0.25rem;
+}
+
+.markdown-content li:has(> input.task-list-item-checkbox) {
+  list-style-type: none;
 }
 
 .markdown-content > *:first-child {

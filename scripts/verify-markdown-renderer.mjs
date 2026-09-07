@@ -250,6 +250,9 @@ console.log('[Test 11] Mermaid Sanitization & Theme Synchronization');
   assert(rendererSource.includes('handleMouseDown'), 'MarkdownRenderer enables drag-to-pan on viewport');
   assert(rendererSource.includes('handleDoubleClick'), 'MarkdownRenderer supports double-click to reset view');
   assert(rendererSource.includes('wheel'), 'MarkdownRenderer supports Ctrl/Cmd + wheel zoom');
+  assert(rendererSource.includes('suppressErrorRendering: true'), 'MarkdownRenderer enables suppressErrorRendering to prevent error SVGs in document.body');
+  assert(rendererSource.includes('document.getElementById(`d${uniqueId}`)?.remove()'), 'MarkdownRenderer defensively removes temp error divs from document.body');
+  assert(rendererSource.includes('withQuotedNodes'), 'MarkdownRenderer auto-quotes unquoted flowchart node labels containing special characters');
   const canvasRendererSource = fs.readFileSync('src/components/Canvas/MarkdownRenderer.tsx', 'utf-8');
   assert(canvasRendererSource.includes('theme={theme}'), 'Canvas MarkdownRenderer forwards theme prop to CommonMarkdownRenderer');
 
@@ -279,6 +282,45 @@ console.log('[Test 12] In-App Browser Link Routing & Tooltip');
   assert(rendererSource.includes('onOpenUrl'), 'MarkdownRenderer supports onOpenUrl prop');
   assert(rendererSource.includes('isModifierClick'), 'MarkdownRenderer checks for modifier click (Cmd/Ctrl)');
 }
+
+// ----------------------------------------------------
+// Test 13: Inline Code Word-Break, Box-Decoration-Clone & HTML Escaping
+// ----------------------------------------------------
+console.log('[Test 13] Inline Code Word-Break, Box-Decoration & HTML Escaping');
+{
+  const sample = 'Use `FormRequest -> DTO -> Service -> Action/Repository -> Model` and `Promise<User>` with `<FormRequest>` and `x < 5 && y > 2`.';
+  const html = defaultMarkedInstance.parse(sample);
+
+  assert(!html.includes('break-all'), 'Inline code does NOT use break-all (prevents mid-word hyphenation/chopping)');
+  assert(html.includes('break-words'), 'Inline code uses break-words for word boundary wrapping');
+  assert(html.includes('box-decoration-clone'), 'Inline code uses box-decoration-clone for clean multi-line pill borders');
+  assert(html.includes('&lt;FormRequest&gt;'), 'HTML tag in inline code is escaped to &lt;FormRequest&gt;');
+  assert(html.includes('Promise&lt;User&gt;'), 'Generic type in inline code is escaped to Promise&lt;User&gt;');
+  assert(html.includes('x &lt; 5 &amp;&amp; y &gt; 2'), 'Comparison operators in inline code are properly escaped');
+
+  const cssSource = fs.readFileSync('src/styles/globals.css', 'utf-8');
+  assert(!cssSource.includes('.markdown-content code:not(pre code) {\n  word-break: break-all;'), 'CSS does not force word-break: break-all on inline code');
+  assert(cssSource.includes('box-decoration-break: clone;'), 'CSS specifies box-decoration-break: clone for inline code');
+}
+console.log();
+
+// ----------------------------------------------------
+// Test 14: KaTeX Math vs Currency Disambiguation
+// ----------------------------------------------------
+console.log('[Test 14] KaTeX Math vs Currency Disambiguation');
+{
+  const currencySample = 'The price is $10 to $50 per item, discount range $10,$20, $10-$20, $10/$20 and single $5.';
+  const currencyHtml = defaultMarkedInstance.parse(currencySample);
+  assert(!currencyHtml.includes('class="katex"'), 'Currency strings like "$10 to $50", "$10,$20", "$10-$20", "$10/$20" are NOT converted to KaTeX math');
+  assert(currencyHtml.includes('$10 to $50'), 'Currency text "$10 to $50" is preserved verbatim');
+  assert(currencyHtml.includes('$10,$20'), 'Currency range "$10,$20" is preserved verbatim');
+  assert(currencyHtml.includes('$10-$20'), 'Currency range "$10-$20" is preserved verbatim');
+  assert(currencyHtml.includes('$10/$20'), 'Currency range "$10/$20" is preserved verbatim');
+  const mathSample = 'Equation: $E = mc^2$ and $x + y = z$.';
+  const mathHtml = defaultMarkedInstance.parse(mathSample);
+  assert(mathHtml.includes('class="katex"'), 'True math equation $E = mc^2$ is rendered as KaTeX');
+}
+console.log();
 console.log();
 
 

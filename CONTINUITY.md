@@ -14,6 +14,39 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-08 — Fix: Mermaid Diagram Syntax Error & DOM Body Leak Prevention
+- **State:**
+  - **Root Cause Identified & Fixed:**
+    - **DOM Body Leak on Syntax Error:** Khi Mermaid v11 gặp lỗi cú pháp (như Diagram 9 trong `docs/System_Architecture_Presentation.md`), Mermaid tự chèn một thẻ container tạm `<div id="d${id}"><svg>...Syntax error in text...</svg></div>` vào `document.body` rồi ném exception trước khi gọi `removeTempElements()`. Hậu quả là khối lỗi SVG thô bị bỏ rơi vĩnh viễn ở đáy cửa sổ ứng dụng (bên dưới `<div id="root">`). Mỗi lần re-render sẽ gắn thêm một khối lỗi mới vào đáy màn hình.
+    - Đã bật `suppressErrorRendering: true` trong `mermaid.initialize()`, ngăn chặn Mermaid tự tiện chèn SVG lỗi vào `document.body`.
+    - Bổ sung khối `finally` dọn dẹp triệt để bất kỳ thẻ DOM mồ côi nào (`d${uniqueId}`, `${uniqueId}`, `i${uniqueId}`) gắn trên `document.body`.
+    - Cải tiến `sanitizeMermaidSource()` trong `src/components/Common/MarkdownRenderer.tsx` để tự động bọc ngoặc kép (`"..."`) cho các nhãn node chưa bọc quote có chứa ký tự đặc biệt (`{}`, `->`, `:`, `<br`, `-`), đồng thời chuyển `- ` thành bullet `• ` tránh lỗi parse markdown list của Mermaid.
+    - Sửa triệt để cú pháp tại Diagram 9 trong `docs/System_Architecture_Presentation.md` của `Nadestore` (`SEO["..."]`, `Permalink["..."]`, `Mapping["..."]`).
+  - **Verification:**
+    - `scripts/verify-markdown-renderer.mjs`: Bổ sung kiểm tra `suppressErrorRendering: true`, dọn dẹp DOM `finally`, và auto-quoting (`withQuotedNodes`) -> **95/95 passed**.
+    - `npm run test:i18n`: **3582/3582 passed**.
+    - Cả 10 sơ đồ Mermaid trong `System_Architecture_Presentation.md` đều pass 100% khi parse bằng Mermaid 11.17.2.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi TypeCheck.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng kiểm tra giao diện trực tiếp trên OMP Agent.
+- **Refs:** `plans/reports/debug-260908-0045-mermaid-syntax-error-dom-leak.md`, `src/components/Common/MarkdownRenderer.tsx`, `scripts/verify-markdown-renderer.mjs`
+
+## 2026-09-07 — Fix: Markdown Inline Code Wrapping, Box-Decoration & Preview Formatting
+- **State:**
+  - **Root Cause Identified & Fixed:**
+    - **Mid-Word Splitting in Inline Code:** `src/utils/markdownParser.ts` và `src/styles/globals.css` cấu hình `word-break: break-all` trên thẻ `<code>`, khiến các chuỗi code dài (như `FormRequest -> DTO -> Service...`) bị chém đứt giữa chừng (`FormReques` trên dòng 1 và `t` trên dòng 2). Đã thay thế bằng `break-words [overflow-wrap:break-word] [word-break:break-word]` kết hợp `box-decoration-clone [-webkit-box-decoration-break:clone]` để bảo toàn trọn vẹn ranh giới từ và bo tròn viền badge đa dòng.
+    - **Missing HTML Escaping in Codespan:** `codespan({ text })` nhúng trực tiếp `${text}` chưa escape vào DOM, khiến các thẻ như `<FormRequest>`, `<script>`, hoặc so sánh `<` bị DOMPurify nuốt chửng/phá vỡ DOM. Đã bọc `escapeHtml(text)`.
+    - **Dangling Streaming Cursor:** Con trỏ streaming nằm ngoài thẻ block HTML nên luôn bị rớt dòng đơn độc ở margin trái. Đã gắn class `is-streaming` và style `display: inline` cho phần tử cuối cùng để con trỏ bám sát đuôi văn bản.
+    - **KaTeX False Currency Triggers:** Regex `inlineRule` bắt nhầm ký hiệu tiền tệ `$10 to $50` thành công thức toán học. Đã cập nhật regex siết chặt không có khoảng trắng quanh dấu `$`.
+    - **Invalid Blockquote Border & Task List Bullets:** Sửa `border-l-3` thành `border-l-[3px]`, loại bỏ bullet `disc` thừa cho các dòng task list checkbox qua CSS `:has()`.
+  - **Verification:**
+    - `npm run test:markdown`: 89 passed, 0 failed (bổ sung Test 13 & 14).
+    - `npm run test:clean-slate`: 57 passed, 0 failed; `test:file-preview-links`: 18 passed; `test:center-chat-layout`: 106 passed; `test:i18n`: 3582 passed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi TypeCheck.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng trải nghiệm hiển thị Markdown mượt mà trên ứng dụng.
+- **Refs:** `plans/reports/fix-260907-1835-markdown-codespan-wrapping-and-preview.md`, `scripts/verify-markdown-renderer.mjs`, `src/utils/markdownParser.ts`, `src/styles/globals.css`
+
 ## 2026-09-07 — Feature: Instant Stop & Abort Execution with Esc/Ctrl+C Shortcuts
 - **State:**
   - **Context:** Người dùng cần khả năng ngắt ngang lượt chạy của Agent (tương tự `Ctrl + C` trong Terminal) khi Agent đang stream văn bản, suy nghĩ hoặc gọi công cụ, mà không bị ép phải gõ thêm tin nhắn.

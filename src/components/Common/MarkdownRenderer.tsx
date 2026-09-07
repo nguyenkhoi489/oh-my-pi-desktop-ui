@@ -16,9 +16,19 @@ interface MarkdownRendererProps {
   onOpenFile?: (filePath: string) => void;
 }
 
-// Prevent Mermaid v11 unsupported markdown list errors on quoted labels
+// Prevent Mermaid v11 unsupported markdown list errors and auto-quote flowchart node labels
 const sanitizeMermaidSource = (source: string): string => {
-  return source.replace(/"([^"]*)"/g, (_, inner: string) => {
+  // 1. Auto-quote unquoted square-bracket node labels containing special characters ({}, ->, <br>, -, :)
+  const withQuotedNodes = source.replace(/\b([a-zA-Z0-9_-]+)\[([^"\]\n][^\]\n]*)\]/g, (match, id, inner) => {
+    if (/[\{\}\->]/.test(inner) || inner.includes('<br') || inner.includes(':')) {
+      const escaped = inner.replace(/"/g, "'");
+      return `${id}["${escaped}"]`;
+    }
+    return match;
+  });
+
+  // 2. Prevent Mermaid v11 unsupported markdown list errors on quoted labels
+  return withQuotedNodes.replace(/"([^"]*)"/g, (_, inner: string) => {
     const fixedNumbered = inner.replace(/(^|\n|<br\s*\/?>)\s*(\d+)\.\s+/g, '$1$2.\u00A0');
     return `"${fixedNumbered.replace(/(^|\n|<br\s*\/?>)\s*-\s+/g, '$1• ')}"`;
   });
@@ -93,6 +103,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = React.memo(({
 
         mermaid.initialize({
           startOnLoad: false,
+          suppressErrorRendering: true,
           theme: 'base',
           securityLevel: 'strict',
           fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
@@ -167,6 +178,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = React.memo(({
               const wrapper = el.closest('.mermaid-block-wrapper');
               wrapper?.querySelector('.mermaid-source-code')?.classList.remove('hidden');
             }
+          } finally {
+            // Clean up any stray DOM elements Mermaid may have injected into document.body
+            document.getElementById(`d${uniqueId}`)?.remove();
+            document.getElementById(uniqueId)?.remove();
+            document.getElementById(`i${uniqueId}`)?.remove();
           }
         });
       })
@@ -447,11 +463,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = React.memo(({
       onClick={handleClick}
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
-      className={`markdown-content select-text leading-relaxed font-sans min-w-0 max-w-full break-words [overflow-wrap:anywhere] ${className}`}
+      className={`markdown-content select-text leading-relaxed font-sans min-w-0 max-w-full break-words [overflow-wrap:break-word] ${isStreaming ? 'is-streaming' : ''} ${className}`}
     >
       <div
         dangerouslySetInnerHTML={{ __html: htmlContent }}
-        className="min-w-0 max-w-full block"
+        className={`min-w-0 max-w-full ${isStreaming ? 'inline' : 'block'}`}
       />
       {isStreaming && (
         <span className="inline-block w-1.5 h-4 ml-1 bg-blue-500 dark:bg-blue-400 animate-pulse align-middle" />

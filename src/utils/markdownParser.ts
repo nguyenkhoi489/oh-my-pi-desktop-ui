@@ -95,7 +95,7 @@ interface KatexToken extends Tokens.Generic {
 
 // Built-in resilient KaTeX extension for Marked
 export function createKatexExtension(options: KatexOptions = { throwOnError: false }): MarkedExtension {
-  const inlineRule = /^(\$)(?!\$)((?:\\.|[^\\\n])*?(?:\\.|[^\\\n\$]))\1/;
+  const inlineRule = /^\$(?!\s)((?:\\.|[^\s\\\$])|(?:\\.|[^\s\\\$])(?:\\.|[^\\\n\$])*?(?:\\.|[^\s\\\$]))\$(?!\d)/;
   const blockRule = /^\$\$\n?([\s\S]*?)\n?\$\$/;
 
   return {
@@ -122,7 +122,7 @@ export function createKatexExtension(options: KatexOptions = { throwOnError: fal
             return {
               type: 'inlineKatex',
               raw: match[0],
-              text: match[2].trim(),
+              text: match[1].trim(),
               displayMode: false,
             };
           }
@@ -247,7 +247,7 @@ export function createMarkedInstance(translateFn?: (key: I18nKey) => string): Ma
 
         return `<div class="code-block-wrapper my-3 rounded-xl overflow-hidden border border-border bg-[#f6f8fa] dark:bg-[#14161d] shadow-xs">
           <div class="flex items-center justify-between px-3.5 py-1.5 bg-slate-100 dark:bg-[#1a1d26] border-b border-border text-[11px] font-mono text-slate-500 dark:text-zinc-400">
-            <span class="font-semibold uppercase tracking-wider text-[10px] text-slate-600 dark:text-zinc-300">${language}</span>
+            <span class="font-semibold uppercase tracking-wider text-[10px] text-slate-600 dark:text-zinc-300">${escapeHtml(language)}</span>
             <button type="button" class="copy-code-btn flex items-center gap-1 text-[11px] text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 px-2 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer" data-code="${encodeURIComponent(text)}">
               <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
               <span class="copy-text">${t('markdown.copy')}</span>
@@ -258,7 +258,7 @@ export function createMarkedInstance(translateFn?: (key: I18nKey) => string): Ma
       },
 
       codespan({ text }) {
-        return `<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800/80 text-slate-800 dark:text-zinc-200 font-mono text-[12px] border border-slate-200/80 dark:border-zinc-700/60 font-medium break-all [overflow-wrap:anywhere] whitespace-normal">${text}</code>`;
+        return `<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800/80 text-slate-800 dark:text-zinc-200 font-mono text-[12px] border border-slate-200/80 dark:border-zinc-700/60 font-medium break-words [overflow-wrap:break-word] [word-break:break-word] box-decoration-clone [-webkit-box-decoration-break:clone] whitespace-normal">${escapeHtml(text)}</code>`;
       },
 
       checkbox({ checked }) {
@@ -270,7 +270,7 @@ export function createMarkedInstance(translateFn?: (key: I18nKey) => string): Ma
         const isFile = isLocalFileTarget(href);
         const resolvedHref = isFile ? toFileUrl(href) : href;
         const defaultTitle = isFile ? t('markdown.openFileInEditor') : t('markdown.openInSidebarBrowser');
-        const titleAttr = title ? `title="${title}"` : `title="${defaultTitle}"`;
+        const titleAttr = title ? `title="${escapeHtml(title)}"` : `title="${defaultTitle}"`;
         const dataFileAttr = isFile ? ` data-file-path="${encodeURIComponent(extractFilePath(href) || href)}"` : '';
         const iconSvg = isFile
           ? `<svg class="w-3 h-3 inline opacity-70 ml-0.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`
@@ -297,7 +297,7 @@ export function createMarkedInstance(translateFn?: (key: I18nKey) => string): Ma
             <div class="text-slate-800 dark:text-zinc-200">${body}</div>
           </div>`;
         }
-        return `<blockquote class="my-2.5 border-l-3 border-slate-300 dark:border-zinc-700 pl-3.5 py-0.5 italic text-slate-600 dark:text-zinc-400">${text}</blockquote>`;
+        return `<blockquote class="my-2.5 border-l-[3px] border-slate-300 dark:border-zinc-700 pl-3.5 py-0.5 italic text-slate-600 dark:text-zinc-400">${text}</blockquote>`;
       },
 
       table(token) {
@@ -334,7 +334,7 @@ export function createMarkedInstance(translateFn?: (key: I18nKey) => string): Ma
         const padCls = token.header
           ? 'px-3.5 py-2.5 font-semibold text-slate-900 dark:text-zinc-100 border border-border'
           : 'px-3.5 py-2 text-slate-700 dark:text-zinc-300 border border-border';
-        const content = token.tokens ? this.parser.parseInline(token.tokens) : (token.text || '');
+        const content = token.tokens ? this.parser.parseInline(token.tokens) : escapeHtml(token.text || '');
         return `<${tag} class="${padCls}${alignCls}">${content}</${tag}>`;
       },
 
