@@ -97,14 +97,11 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
           const sanitizedDoubleDash = project.path.replace(/^[\\/]/, '').replace(/[\\/]/g, '--');
           const sanitizedSingleDash = project.path.replace(/[\\/]/g, '-');
           const homeRelativeDash = project.path.replace(/^(\/Users\/[^/]+|\/home\/[^/]+)/, '').replace(/[\\/]/g, '-');
-          const projectName = project.path.split(/[\\/]/).filter(Boolean).pop();
-
           if (
             session.path.includes(project.path) ||
             session.path.includes(sanitizedDoubleDash) ||
             session.path.includes(sanitizedSingleDash) ||
-            (homeRelativeDash && session.path.includes(homeRelativeDash)) ||
-            (projectName && session.path.includes(`-${projectName}`))
+            (homeRelativeDash && session.path.includes(homeRelativeDash))
           ) {
             matchedProjectId = project.id;
             break;
@@ -112,14 +109,14 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
         }
       }
 
-      if (!matchedProjectId && (session.active || activeSessionPath === session.path) && activeProjectId) {
-        matchedProjectId = activeProjectId;
-      } else if (!matchedProjectId && activeProjectPath) {
-        const sanitizedActive = activeProjectPath.replace(/^[\\/]/, '').replace(/[\\/]/g, '--');
+      if (!matchedProjectId && activeProjectPath) {
+        const sanitizedActiveDouble = activeProjectPath.replace(/^[\\/]/, '').replace(/[\\/]/g, '--');
+        const sanitizedActiveSingle = activeProjectPath.replace(/[\\/]/g, '-');
         const homeRelativeActive = activeProjectPath.replace(/^(\/Users\/[^/]+|\/home\/[^/]+)/, '').replace(/[\\/]/g, '-');
         if (
           session.path.includes(activeProjectPath) ||
-          session.path.includes(sanitizedActive) ||
+          session.path.includes(sanitizedActiveDouble) ||
+          session.path.includes(sanitizedActiveSingle) ||
           (homeRelativeActive && session.path.includes(homeRelativeActive))
         ) {
           matchedProjectId = activeProjectId || undefined;

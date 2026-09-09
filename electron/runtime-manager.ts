@@ -142,6 +142,12 @@ export class RuntimeManager {
       this.window.webContents.send(channel, payload);
     }
   }
+  private emitActiveRuntimeChanged(runtimeId: string | null): void {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send('runtime:active-changed', runtimeId);
+    }
+  }
+
 
   private toSnapshot(runtime: ManagedRuntime): ManagedRuntimeSnapshot {
     return {
@@ -175,6 +181,7 @@ export class RuntimeManager {
       if (matchProject && matchCwd && matchSession) {
         runtime.lastActiveAt = Date.now();
         this.activeRuntimeId = runtime.runtimeId;
+        this.emitActiveRuntimeChanged(runtime.runtimeId);
         return { success: true, runtime: this.toSnapshot(runtime), isNew: false };
       }
     }
@@ -224,6 +231,7 @@ export class RuntimeManager {
 
     this.runtimes.set(runtimeId, managed);
     this.activeRuntimeId = runtimeId;
+    this.emitActiveRuntimeChanged(runtimeId);
 
     return { success: true, runtime: this.toSnapshot(managed), isNew: true };
   }
@@ -231,6 +239,7 @@ export class RuntimeManager {
   public setActiveRuntime(runtimeId: string | null): boolean {
     if (!runtimeId) {
       this.activeRuntimeId = null;
+      this.emitActiveRuntimeChanged(null);
       return true;
     }
     const runtime = this.runtimes.get(runtimeId);
@@ -238,6 +247,7 @@ export class RuntimeManager {
       return false;
     }
     this.activeRuntimeId = runtimeId;
+    this.emitActiveRuntimeChanged(runtimeId);
     runtime.lastActiveAt = Date.now();
     return true;
   }
@@ -282,6 +292,7 @@ export class RuntimeManager {
     if (this.activeRuntimeId === runtimeId) {
       const remaining = Array.from(this.runtimes.keys());
       this.activeRuntimeId = remaining.length > 0 ? remaining[0] : null;
+      this.emitActiveRuntimeChanged(this.activeRuntimeId);
     }
     return true;
   }
@@ -293,5 +304,6 @@ export class RuntimeManager {
     this.defaultBridge.stopProcess();
     this.runtimes.clear();
     this.activeRuntimeId = null;
+    this.emitActiveRuntimeChanged(null);
   }
 }

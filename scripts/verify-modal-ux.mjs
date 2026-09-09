@@ -315,6 +315,59 @@ console.log('\n[Test 7] Mock Preview Data Shape');
 }
 
 // ----------------------------------------------------
+// Test 8: Modal Navigation & Flex Shrink Layout Protection
+// ----------------------------------------------------
+console.log('\n[Test 8] Modal Navigation & Flex Shrink Layout Protection');
+{
+  const settingsModalSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/Modals/SettingsModal.tsx'),
+    'utf-8'
+  );
+  const mcpModalSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/Modals/settings/McpServerModal.tsx'),
+    'utf-8'
+  );
+
+  // SettingsModal layout protection
+  assert(
+    settingsModalSource.includes('px-6 py-4 border-b border-border bg-surface shrink-0'),
+    'SettingsModal header has shrink-0 to prevent collapse'
+  );
+  assert(
+    settingsModalSource.includes('bg-surface/50 px-6 gap-2 overflow-x-auto shrink-0'),
+    'SettingsModal tab navigation container has shrink-0 to prevent collapsing on tab switch'
+  );
+  assert(
+    settingsModalSource.includes('flex-1 min-h-0 overflow-y-auto'),
+    'SettingsModal body has flex-1 min-h-0 overflow-y-auto for independent scrolling'
+  );
+  assert(
+    settingsModalSource.includes('p-4 border-t border-border bg-surface flex items-center justify-between shrink-0'),
+    'SettingsModal footer has shrink-0 to prevent collapse'
+  );
+
+  // McpServerModal layout protection
+  assert(
+    mcpModalSource.includes('px-6 py-4 border-b border-slate-200 dark:border-zinc-800 shrink-0'),
+    'McpServerModal header has shrink-0'
+  );
+  assert(
+    mcpModalSource.includes('px-6 bg-slate-50/50 dark:bg-zinc-900/50 shrink-0'),
+    'McpServerModal tab switcher has shrink-0'
+  );
+  assert(
+    mcpModalSource.includes('flex-1 min-h-0 overflow-y-auto'),
+    'McpServerModal body has flex-1 min-h-0 overflow-y-auto'
+  );
+  assert(
+    mcpModalSource.includes('border-t border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/50 shrink-0'),
+    'McpServerModal footer has shrink-0'
+  );
+  console.log('  ✓ PASSED: SettingsModal & McpServerModal navigation bars protected against flex-shrink collapse');
+  passed++;
+}
+
+// ----------------------------------------------------
 // Summary
 // ----------------------------------------------------
 console.log(`\n========================================`);

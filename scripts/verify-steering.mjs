@@ -461,10 +461,10 @@ async function runSteeringVerification() {
     assert(composerSource.includes('onAbort?: () => void;'), 'PromptComposer accepts onAbort callback');
     assert(composerSource.includes('onClick={onAbort}'), 'PromptComposer binds onAbort to dedicated Stop button');
     assert(composerSource.includes("t('composer.stopTooltip')"), 'PromptComposer has Stop tooltip');
-    assert(composerSource.includes("e.key === 'Escape'") && composerSource.includes('onAbort?.()'), 'PromptComposer binds Escape shortcut to onAbort');
-    assert(composerSource.includes("e.key === 'c' || e.key === 'C'") && composerSource.includes('onAbort?.()'), 'PromptComposer binds Ctrl+C terminal shortcut to onAbort');
-    assert(composerSource.includes("e.metaKey && e.key === '.'"), 'PromptComposer binds Cmd+. macOS abort shortcut to onAbort');
-
+    const composerAbortBlock = composerSource.match(/\/\/ Keyboard shortcuts for aborting execution while running\s*if \(status !== 'idle'\) \{([\s\S]*?)\n    \}/)?.[1] || '';
+    assert(!composerAbortBlock.includes("e.key === 'Escape'"), 'PromptComposer does not bind Escape shortcut to onAbort to prevent accidental stops');
+    assert(composerAbortBlock.includes("e.key === 'c' || e.key === 'C'") && composerAbortBlock.includes('onAbort?.()'), 'PromptComposer binds Ctrl+C terminal shortcut to onAbort');
+    assert(composerAbortBlock.includes("e.metaKey && e.key === '.'"), 'PromptComposer binds Cmd+. macOS abort shortcut to onAbort');
     const agentPanelSource = fs.readFileSync(path.resolve(__dirname, '../src/components/AgentPanel/AgentPanel.tsx'), 'utf-8');
     assert(agentPanelSource.includes('onAbort?: () => void;'), 'AgentPanel accepts onAbort');
     assert(agentPanelSource.includes('onAbort={onAbort}'), 'AgentPanel passes onAbort to PromptComposer');
@@ -472,10 +472,12 @@ async function runSteeringVerification() {
     const appSource = fs.readFileSync(path.resolve(__dirname, '../src/App.tsx'), 'utf-8');
     assert(appSource.includes('onAbort={abort}'), 'App.tsx passes onAbort={abort} to AgentPanel');
     assert(appSource.includes('Global abort shortcut'), 'App.tsx registers global abort shortcut for busy engine');
-
+    const appAbortEffect = appSource.match(/\/\/ Global abort shortcut[\s\S]*?window\.removeEventListener\('keydown', handleKeyDown\);\s*\},/)?.[0] || '';
+    assert(!appAbortEffect.includes("e.key === 'Escape'"), 'App.tsx does not bind Escape to abort to prevent accidental stops');
+    assert(appAbortEffect.includes("e.metaKey && e.key === '.'"), 'App.tsx binds Cmd+. macOS abort shortcut to abort');
     const hookSource = fs.readFileSync(path.resolve(__dirname, '../src/hooks/useOmpRpc.ts'), 'utf-8');
     assert(hookSource.includes('cancelAnimationFrame(rafIdRef.current)'), 'useOmpRpc abort flushes rAF batch');
-    assert(hookSource.includes('window.electronAPI.abortOmp()'), 'useOmpRpc abort invokes IPC abortOmp');
+    assert(hookSource.includes('window.electronAPI.abortOmp('), 'useOmpRpc abort invokes IPC abortOmp');
     assert(hookSource.includes('setCurrentThinking(null)') && hookSource.includes('currentThinkingRef.current = null'), 'useOmpRpc abort resets in-progress thinking state');
   }
 

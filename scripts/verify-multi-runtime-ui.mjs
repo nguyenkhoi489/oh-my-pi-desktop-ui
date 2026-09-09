@@ -352,6 +352,23 @@ await test('electron/preload.ts correctly exposes multi-runtime methods and onOm
   assert(code.includes("indexSessions: (projectId: string, projectPath: string, profile?: string) =>"), 'Exposes indexSessions');
   assert(code.includes("onOmpEvent: (callback: (envelope: OmpEventEnvelope) => void) =>"), 'Exposes onOmpEvent');
   assert(code.includes("ipcRenderer.on('omp:event', handler)"), 'Subscribes to omp:event');
+  assert(code.includes("onActiveRuntimeChanged: (callback: (runtimeId: string | null) => void) =>"), 'Exposes onActiveRuntimeChanged');
+  assert(code.includes("ipcRenderer.on('runtime:active-changed', handler)"), 'Subscribes to runtime:active-changed');
+});
+
+// ----------------------------------------------------
+// Test 11: Explicit TargetRuntimeId in Preload and Main
+// ----------------------------------------------------
+await test('IPC contracts support targetRuntimeId for strict command routing', () => {
+  const preloadCode = fs.readFileSync(path.resolve('electron/preload.ts'), 'utf8');
+  assert(preloadCode.includes("sendOmpMessage: (prompt: string, context?: { files?: string[] }, targetRuntimeId?: string) =>"), 'sendOmpMessage accepts targetRuntimeId');
+  assert(preloadCode.includes("switchSession: (sessionPath: string, targetRuntimeId?: string) =>"), 'switchSession accepts targetRuntimeId');
+  assert(preloadCode.includes("newSession: (parentSession?: string, targetRuntimeId?: string) =>"), 'newSession accepts targetRuntimeId');
+  assert(preloadCode.includes("loadHistory: (sessionPath?: string, targetRuntimeId?: string) =>"), 'loadHistory accepts targetRuntimeId');
+
+  const mainCode = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8');
+  assert(mainCode.includes('function resolveBridge(targetRuntimeId?: string): OmpBridge | null'), 'main.ts defines resolveBridge helper');
+  assert(mainCode.includes('resolveBridge(targetRuntimeId)'), 'main.ts routes commands through resolveBridge');
 });
 
 console.log(`\nAll ${passCount} multi-runtime UI verify tests passed successfully!`);

@@ -54,7 +54,7 @@ import { SayManager, type SayOptions } from './tts-say.ts';
 import { shareSession, joinCollabSession, type ShareSessionOptions } from './collab-share.ts';
 import { OpsManager } from './ops-manager.ts';
 import { ExtensionManager } from './extension-manager.ts';
-import { listProfiles, createProfile, deleteProfile } from './profile-paths.ts';
+import { listProfiles, createProfile, deleteProfile, getProfileSessionDirCandidates } from './profile-paths.ts';
 import {
   fetchEngineConfig,
   setEngineConfigValue,
@@ -105,6 +105,13 @@ const ompBridge = new Proxy({} as unknown as OmpBridge, {
     return active ? prop in active : false;
   },
 });
+function resolveBridge(targetRuntimeId?: string): OmpBridge | null {
+  if (targetRuntimeId && runtimeManager) {
+    const bridge = runtimeManager.getBridge(targetRuntimeId);
+    if (bridge) return bridge;
+  }
+  return runtimeManager ? runtimeManager.getActiveBridge() : null;
+}
 const authLoginManager = new AuthLoginManager((url) => shell.openExternal(url));
 const engineMaintenanceManager = new EngineMaintenanceManager();
 const opsManager = new OpsManager();
@@ -272,11 +279,14 @@ ipcMain.handle('omp:start-process', async (_, workspacePath: string, model?: str
   }
   const bridge = runtimeManager.getActiveBridge();
   if (!admitRes.isNew && bridge.isRunning()) {
-    return { success: true };
+    return { success: true, runtimeId: admitRes.runtime?.runtimeId };
   }
-  return bridge.startProcess(workspacePath, model, options);
+  const startRes = await bridge.startProcess(workspacePath, model, options);
+  return {
+    ...startRes,
+    runtimeId: admitRes.runtime?.runtimeId,
+  };
 });
-
 // IPC Handlers: Multi-Project & Runtime Management (Phase 1)
 ipcMain.handle('projects:list', async () => {
   return { success: true, projects: await projectsStore.getProjects() };
@@ -340,24 +350,28 @@ ipcMain.handle('omp:stop-process', async () => {
   return ompBridge.stopProcess();
 });
 
-ipcMain.handle('omp:send-message', async (_, prompt: string, context?: { files?: string[] }) => {
-  if (!ompBridge) return { success: false };
-  return ompBridge.sendMessage(prompt, context);
+ipcMain.handle('omp:send-message', async (_, prompt: string, context?: { files?: string[] }, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false };
+  return bridge.sendMessage(prompt, context);
 });
 
-ipcMain.handle('omp:steer', async (_, message: string, context?: { files?: string[] }) => {
-  if (!ompBridge) return { success: false };
-  return ompBridge.steer(message, context);
+ipcMain.handle('omp:steer', async (_, message: string, context?: { files?: string[] }, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false };
+  return bridge.steer(message, context);
 });
 
-ipcMain.handle('omp:abort-and-prompt', async (_, prompt: string, context?: { files?: string[] }) => {
-  if (!ompBridge) return { success: false };
-  return ompBridge.abortAndPrompt(prompt, context);
+ipcMain.handle('omp:abort-and-prompt', async (_, prompt: string, context?: { files?: string[] }, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false };
+  return bridge.abortAndPrompt(prompt, context);
 });
 
-ipcMain.handle('omp:follow-up', async (_, message: string, context?: { files?: string[] }) => {
-  if (!ompBridge) return { success: false };
-  return ompBridge.followUp(message, context);
+ipcMain.handle('omp:follow-up', async (_, message: string, context?: { files?: string[] }, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false };
+  return bridge.followUp(message, context);
 });
 
 ipcMain.handle('omp:set-steering-mode', async (_, mode: string) => {
@@ -375,9 +389,10 @@ ipcMain.handle('omp:set-interrupt-mode', async (_, mode: string) => {
   return ompBridge.setInterruptMode(mode);
 });
 
-ipcMain.handle('omp:abort', async () => {
-  if (!ompBridge) return { success: false };
-  return ompBridge.abort();
+ipcMain.handle('omp:abort', async (_, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false };
+  return bridge.abort();
 });
 
 ipcMain.handle('omp:respond-permission', async (_, requestId: string, approved: boolean) => {
@@ -600,9 +615,10 @@ ipcMain.handle('omp:set-thinking-level', async (_, level: OmpThinkingLevel) => {
   return ompBridge.setThinkingLevel(level);
 });
 
-ipcMain.handle('omp:get-state', async () => {
-  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
-  return ompBridge.getState();
+ipcMain.handle('omp:get-state', async (_, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false, error: 'Bridge uninitialized' };
+  return bridge.getState();
 });
 
 ipcMain.handle('omp:session-stats', async () => {
@@ -702,9 +718,10 @@ ipcMain.handle('omp:set-approval-mode', async (_, mode: OmpApprovalMode) => {
   return ompBridge.setApprovalMode(mode);
 });
 
-ipcMain.handle('omp:compact', async (_, customInstructions?: string) => {
-  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
-  return ompBridge.compact(customInstructions);
+ipcMain.handle('omp:compact', async (_, customInstructions?: string, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false, error: 'Bridge uninitialized' };
+  return bridge.compact(customInstructions);
 });
 
 ipcMain.handle('omp:set-auto-compaction', async (_, enabled: boolean) => {
@@ -782,9 +799,13 @@ ipcMain.handle('omp:list-sessions', async () => {
     // Find active project to enrich its sessions with projectId
     const activeProject = projects.find((p) => activeWs && path.resolve(p.path) === path.resolve(activeWs));
     if (activeProject) {
+      const activeCandidates = getProfileSessionDirCandidates(undefined, activeProject.path);
       for (const s of activeSessions) {
-        if (!s.projectId) s.projectId = activeProject.id;
-        if (!s.projectPath) s.projectPath = activeProject.path;
+        const belongsToActive = activeCandidates.some((cand) => s.path.startsWith(cand));
+        if (belongsToActive) {
+          if (!s.projectId) s.projectId = activeProject.id;
+          if (!s.projectPath) s.projectPath = activeProject.path;
+        }
       }
     }
 
@@ -816,8 +837,8 @@ ipcMain.handle('omp:list-sessions', async () => {
       sessionMap.set(s.path, {
         ...existing,
         ...s,
-        projectId: s.projectId || existing?.projectId || activeProject?.id,
-        projectPath: s.projectPath || existing?.projectPath || activeProject?.path,
+        projectId: existing?.projectId || s.projectId,
+        projectPath: existing?.projectPath || s.projectPath,
       });
     }
     return {
@@ -830,30 +851,35 @@ ipcMain.handle('omp:list-sessions', async () => {
   }
 });
 
-ipcMain.handle('omp:new-session', async (_, parentSession?: string) => {
-  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
+ipcMain.handle('omp:new-session', async (_, parentSession?: string, targetRuntimeId?: string) => {
   projectSessionsCache.clear();
-  return ompBridge.newSession(parentSession);
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false, error: 'Bridge uninitialized' };
+  return bridge.newSession(parentSession);
 });
 
-ipcMain.handle('omp:switch-session', async (_, sessionPath: string) => {
-  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
-  return ompBridge.switchSession(sessionPath);
+ipcMain.handle('omp:switch-session', async (_, sessionPath: string, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false, error: 'Bridge uninitialized' };
+  return bridge.switchSession(sessionPath);
 });
 
-ipcMain.handle('omp:branch-session', async (_, entryId: string) => {
-  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
-  return ompBridge.branchSession(entryId);
+ipcMain.handle('omp:branch-session', async (_, entryId: string, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false, error: 'Bridge uninitialized' };
+  return bridge.branchSession(entryId);
 });
 
-ipcMain.handle('omp:load-history', async (_, sessionPath?: string) => {
-  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
-  return ompBridge.loadHistory(sessionPath);
+ipcMain.handle('omp:load-history', async (_, sessionPath?: string, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false, error: 'Bridge uninitialized' };
+  return bridge.loadHistory(sessionPath);
 });
 
-ipcMain.handle('omp:fast-load-session', async (_, sessionPath: string) => {
-  if (!ompBridge) return { success: false, error: 'Bridge uninitialized' };
-  return ompBridge.fastLoadSession(sessionPath);
+ipcMain.handle('omp:fast-load-session', async (_, sessionPath: string, targetRuntimeId?: string) => {
+  const bridge = resolveBridge(targetRuntimeId);
+  if (!bridge) return { success: false, error: 'Bridge uninitialized' };
+  return bridge.fastLoadSession(sessionPath);
 });
 
 ipcMain.handle('omp:branch-entries', async () => {

@@ -762,12 +762,6 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
     }
     // Keyboard shortcuts for aborting execution while running
     if (status !== 'idle') {
-      // Escape: abort execution when menus and pickers are closed
-      if (e.key === 'Escape' && !isPickerOpen && !isCommandMenuOpen && !isSplitMenuOpen) {
-        e.preventDefault();
-        onAbort?.();
-        return;
-      }
 
       // Ctrl+C: standard terminal abort (when there is no text selection or input is empty)
       if (e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === 'c' || e.key === 'C')) {
@@ -1281,7 +1275,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
               >
                 <Square className="w-3.5 h-3.5 fill-current" />
                 <span>{t('composer.stop')}</span>
-                <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-rose-700/80 text-rose-100 ml-1">Esc</kbd>
+                <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-rose-700/80 text-rose-100 ml-1">⌘.</kbd>
               </button>
             ) : (
               /* When direction is typed, offer instant stop alongside Steer split menu */
@@ -1395,7 +1389,7 @@ const PromptComposerComponent: React.FC<PromptComposerProps> = ({
                             <span className="text-[11px] text-slate-500 dark:text-zinc-400">{t('composer.stopTooltip')}</span>
                           </div>
                         </div>
-                        <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">Esc</kbd>
+                        <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-highlight border border-border text-slate-400">⌘.</kbd>
                       </button>
                     </div>
                   )}

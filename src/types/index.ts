@@ -1400,14 +1400,14 @@ export interface ElectronAPI {
   selectBinaryFile: () => Promise<string | null>;
   startOmpProcess: (workspacePath: string, model?: string, options?: { provider?: string; extraArgs?: string[]; approvalMode?: OmpApprovalMode }) => Promise<any>;
   stopOmpProcess: () => Promise<any>;
-  sendOmpMessage: (prompt: string, context?: { files?: string[] }) => Promise<any>;
-  steerOmp: (message: string, context?: { files?: string[] }) => Promise<{ success: boolean; error?: string }>;
-  abortAndPromptOmp: (prompt: string, context?: { files?: string[] }) => Promise<{ success: boolean; error?: string }>;
-  followUpOmp: (message: string, context?: { files?: string[] }) => Promise<{ success: boolean; error?: string }>;
+  sendOmpMessage: (prompt: string, context?: { files?: string[] }, targetRuntimeId?: string) => Promise<any>;
+  steerOmp: (message: string, context?: { files?: string[] }, targetRuntimeId?: string) => Promise<{ success: boolean; error?: string }>;
+  abortAndPromptOmp: (prompt: string, context?: { files?: string[] }, targetRuntimeId?: string) => Promise<{ success: boolean; error?: string }>;
+  followUpOmp: (message: string, context?: { files?: string[] }, targetRuntimeId?: string) => Promise<{ success: boolean; error?: string }>;
   setSteeringMode: (mode: string) => Promise<{ success: boolean; error?: string }>;
   setFollowUpMode: (mode: string) => Promise<{ success: boolean; error?: string }>;
   setInterruptMode: (mode: string) => Promise<{ success: boolean; error?: string }>;
-  abortOmp: () => Promise<{ success: boolean; error?: string }>;
+  abortOmp: (targetRuntimeId?: string) => Promise<{ success: boolean; error?: string }>;
   respondToPermission: (requestId: string, approved: boolean) => Promise<any>;
   respondUiRequest: (id: string, payload: { value?: unknown; confirmed?: boolean; cancelled?: boolean }) => Promise<any>;
 
@@ -1416,8 +1416,8 @@ export interface ElectronAPI {
   findModels?: (pattern: string) => Promise<FindModelsResult>;
   setModel: (provider: string, modelId: string) => Promise<{ success: boolean; model?: OmpModelInfo; error?: string }>;
   setThinkingLevel: (level: OmpThinkingLevel) => Promise<{ success: boolean; error?: string }>;
-  getEngineState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
-  getState: () => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
+  getEngineState: (targetRuntimeId?: string) => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
+  getState: (targetRuntimeId?: string) => Promise<{ success: boolean; state?: OmpEngineState; error?: string }>;
   getSessionStats: () => Promise<{ success: boolean; stats?: OmpSessionStats; error?: string }>;
   getGlobalUsage: (options?: boolean | FetchGlobalUsageOptions) => Promise<GlobalUsageResult>;
   getGlobalStats: (forceRefresh?: boolean) => Promise<GlobalStatsResult>;
@@ -1431,14 +1431,14 @@ export interface ElectronAPI {
 
   setApprovalMode: (mode: OmpApprovalMode) => Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }>;
   getApprovalMode: () => Promise<{ success: boolean; mode?: OmpApprovalMode; error?: string }>;
-  compact: (customInstructions?: string) => Promise<{ success: boolean; error?: string }>;
+  compact: (customInstructions?: string, targetRuntimeId?: string) => Promise<{ success: boolean; error?: string }>;
   setAutoCompaction: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   listSessions: () => Promise<{ success: boolean; sessions?: OmpSessionInfo[]; error?: string }>;
-  newSession: (parentSession?: string) => Promise<{ success: boolean; error?: string }>;
-  switchSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
-  branchSession: (entryId: string) => Promise<{ success: boolean; error?: string }>;
-  loadHistory: (sessionPath?: string) => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
-  fastLoadSession?: (sessionPath: string) => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
+  newSession: (parentSession?: string, targetRuntimeId?: string) => Promise<{ success: boolean; error?: string }>;
+  switchSession: (sessionPath: string, targetRuntimeId?: string) => Promise<{ success: boolean; error?: string }>;
+  branchSession: (entryId: string, targetRuntimeId?: string) => Promise<{ success: boolean; error?: string }>;
+  loadHistory: (sessionPath?: string, targetRuntimeId?: string) => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
+  fastLoadSession?: (sessionPath: string, targetRuntimeId?: string) => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
   getBranchEntries: () => Promise<{ success: boolean; entries?: OmpBranchEntry[]; error?: string }>;
   renameSession: (name: string) => Promise<{ success: boolean; error?: string }>;
   deleteSession: (sessionPath: string) => Promise<{ success: boolean; error?: string }>;
@@ -1630,6 +1630,7 @@ export interface ElectronAPI {
   stopRuntime?: (runtimeId: string) => Promise<{ success: boolean; error?: string }>;
   indexSessions?: (projectId: string, projectPath: string, profile?: string) => Promise<{ success: boolean; sessions?: OmpSessionInfo[]; error?: string }>;
   onOmpEvent?: (callback: (envelope: OmpEventEnvelope) => void) => () => void;
+  onActiveRuntimeChanged?: (callback: (runtimeId: string | null) => void) => () => void;
 }
 export type InspectorTab = 'subagents' | 'changes' | 'browser' | 'summary';
 

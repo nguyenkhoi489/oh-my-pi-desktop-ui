@@ -298,7 +298,7 @@ export function useOmpRpc() {
   const refreshEngineState = useCallback(async (): Promise<OmpEngineState | null> => {
     if (!window.electronAPI) return null;
     try {
-      const res = await window.electronAPI.getState();
+      const res = await window.electronAPI.getState(activeRuntimeIdRef.current || undefined);
       if (res.success && res.state) {
         setEngineState(res.state);
         if (res.state.model) {
@@ -456,7 +456,7 @@ export function useOmpRpc() {
   );
 
   const switchSession = useCallback(
-    async (sessionPath: string): Promise<boolean> => {
+    async (sessionPath: string, targetRuntimeId?: string): Promise<boolean> => {
       if (status !== 'idle') {
         console.warn('[useOmpRpc] Cannot switch session while agent is busy (status:', status, ')');
         return false;
@@ -465,7 +465,7 @@ export function useOmpRpc() {
       if (sessionPath === activeSessionPathRef.current) {
         return true;
       }
-
+      const effectiveRuntimeId = targetRuntimeId || activeRuntimeIdRef.current || undefined;
       if (window.electronAPI) {
         try {
           const switchId = ++currentSwitchIdRef.current;
@@ -506,7 +506,7 @@ export function useOmpRpc() {
 
           // 2. Direct JSONL load in parallel (< 20ms)
           const fastLoadPromise = !cached && window.electronAPI.fastLoadSession
-            ? window.electronAPI.fastLoadSession(sessionPath).catch(() => null)
+            ? window.electronAPI.fastLoadSession(sessionPath, effectiveRuntimeId).catch(() => null)
             : null;
 
           if (fastLoadPromise) {
@@ -526,7 +526,7 @@ export function useOmpRpc() {
           }
 
           // 3. Engine CLI sync in background
-          const switchPromise = window.electronAPI.switchSession(sessionPath);
+          const switchPromise = window.electronAPI.switchSession(sessionPath, effectiveRuntimeId);
           const res = await switchPromise;
           if (currentSwitchIdRef.current !== switchId) {
             return false;
@@ -535,7 +535,7 @@ export function useOmpRpc() {
           if (res.success) {
             // If neither cached nor fastLoad succeeded, fallback to loadHistory
             if (!cached && !fastLoadPromise) {
-              const histRes = await window.electronAPI.loadHistory(sessionPath);
+              const histRes = await window.electronAPI.loadHistory(sessionPath, effectiveRuntimeId);
               if (currentSwitchIdRef.current !== switchId) return false;
               if (histRes.success && Array.isArray(histRes.messages)) {
                 const correlated = await correlateBranchEntries(histRes.messages);
@@ -569,7 +569,7 @@ export function useOmpRpc() {
   );
 
   const newSession = useCallback(
-    async (parentSession?: string): Promise<boolean> => {
+    async (parentSession?: string, targetRuntimeId?: string): Promise<boolean> => {
       if (status !== 'idle') {
         console.warn('[useOmpRpc] Cannot create new session while agent is busy (status:', status, ')');
         return false;
@@ -577,7 +577,8 @@ export function useOmpRpc() {
 
       if (window.electronAPI) {
         try {
-          const res = await window.electronAPI.newSession(parentSession);
+          const effectiveRuntimeId = targetRuntimeId || activeRuntimeIdRef.current || undefined;
+          const res = await window.electronAPI.newSession(parentSession, effectiveRuntimeId);
           if (res.success) {
             if (rafIdRef.current !== null) {
               cancelAnimationFrame(rafIdRef.current);
@@ -621,7 +622,7 @@ export function useOmpRpc() {
     [status, refreshSessions, refreshEngineState]
   );
   const resetChat = useCallback(
-    async (reloadHistory = false): Promise<void> => {
+    async (reloadHistory = false, targetRuntimeId?: string): Promise<void> => {
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
@@ -648,7 +649,7 @@ export function useOmpRpc() {
       setTokensPerSecond(null);
       if (reloadHistory && window.electronAPI?.loadHistory) {
         try {
-          const histRes = await window.electronAPI.loadHistory();
+          const histRes = await window.electronAPI.loadHistory(undefined, targetRuntimeId || activeRuntimeIdRef.current || undefined);
           if (histRes?.success && Array.isArray(histRes.messages)) {
             const correlated = await correlateBranchEntries(histRes.messages);
             setMessages(correlated);
@@ -917,6 +918,15 @@ export function useOmpRpc() {
           });
         })
       : () => {};
+    const unsubActiveRuntime = window.electronAPI.onActiveRuntimeChanged
+      ? window.electronAPI.onActiveRuntimeChanged((newRuntimeId) => {
+          if (newRuntimeId && activeRuntimeIdRef.current !== newRuntimeId) {
+            activeRuntimeIdRef.current = newRuntimeId;
+            setActiveRuntimeId(newRuntimeId);
+          }
+        })
+      : () => {};
+
 
     const unsubStatus = window.electronAPI.onOmpStatusChange((newStatus) => {
       const leftIdle = lastStatusRef.current === 'idle' && newStatus !== 'idle';
@@ -1168,11 +1178,12 @@ export function useOmpRpc() {
       unsubRetry();
       unsubSay();
       unsubEvent();
+      unsubActiveRuntime();
     };
   }, [flushTokens, refreshEngineState, refreshCommands]);
 
   const sendMessage = useCallback(
-    async (prompt: string, contextFiles?: string[]) => {
+    async (prompt: string, contextFiles?: string[], targetRuntimeId?: string) => {
       if (!prompt.trim()) return;
 
       if (rafIdRef.current !== null) {
@@ -1212,7 +1223,7 @@ export function useOmpRpc() {
 
       if (window.electronAPI) {
         try {
-          await window.electronAPI.sendOmpMessage(prompt, { files: contextFiles });
+          await window.electronAPI.sendOmpMessage(prompt, { files: contextFiles }, targetRuntimeId || activeRuntimeIdRef.current || undefined);
         } catch (err) {
           console.error('[useOmpRpc] Failed to send message via Electron IPC:', err);
           setStatus('idle');
@@ -1453,7 +1464,7 @@ export function useOmpRpc() {
     );
     if (window.electronAPI) {
       try {
-        await window.electronAPI.abortOmp();
+        await window.electronAPI.abortOmp(activeRuntimeIdRef.current || undefined);
       } catch (err) {
         console.error('[useOmpRpc] Failed to abort via Electron IPC:', err);
       }

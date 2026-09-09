@@ -403,6 +403,7 @@ try {
     const settingsModalTsx = fs.readFileSync(path.resolve(process.cwd(), 'src/components/Modals/SettingsModal.tsx'), 'utf-8');
     assert(settingsModalTsx.includes('max-w-4xl'), 'SettingsModal.tsx uses max-w-4xl for comfortable navbar width');
     assert(settingsModalTsx.includes('whitespace-nowrap'), 'SettingsModal.tsx uses whitespace-nowrap for navbar tabs');
+    assert(settingsModalTsx.includes('overflow-x-auto shrink-0'), 'SettingsModal.tsx tab navigation keeps shrink-0 with overflow-x-auto');
   }
 
   console.log('\n====================================================');

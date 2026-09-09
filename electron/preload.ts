@@ -57,17 +57,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopOmpProcess: () =>
     ipcRenderer.invoke('omp:stop-process'),
 
-  sendOmpMessage: (prompt: string, context?: { files?: string[] }) =>
-    ipcRenderer.invoke('omp:send-message', prompt, context),
+  sendOmpMessage: (prompt: string, context?: { files?: string[] }, targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:send-message', prompt, context, targetRuntimeId),
 
-  steerOmp: (message: string, context?: { files?: string[] }) =>
-    ipcRenderer.invoke('omp:steer', message, context),
+  steerOmp: (message: string, context?: { files?: string[] }, targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:steer', message, context, targetRuntimeId),
 
-  abortAndPromptOmp: (prompt: string, context?: { files?: string[] }) =>
-    ipcRenderer.invoke('omp:abort-and-prompt', prompt, context),
+  abortAndPromptOmp: (prompt: string, context?: { files?: string[] }, targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:abort-and-prompt', prompt, context, targetRuntimeId),
 
-  followUpOmp: (message: string, context?: { files?: string[] }) =>
-    ipcRenderer.invoke('omp:follow-up', message, context),
+  followUpOmp: (message: string, context?: { files?: string[] }, targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:follow-up', message, context, targetRuntimeId),
 
   setSteeringMode: (mode: string) =>
     ipcRenderer.invoke('omp:set-steering-mode', mode),
@@ -78,8 +78,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setInterruptMode: (mode: string) =>
     ipcRenderer.invoke('omp:set-interrupt-mode', mode),
 
-  abortOmp: () =>
-    ipcRenderer.invoke('omp:abort'),
+  abortOmp: (targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:abort', targetRuntimeId),
   respondToPermission: (requestId: string, approved: boolean) =>
     ipcRenderer.invoke('omp:respond-permission', requestId, approved),
 
@@ -99,11 +99,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setThinkingLevel: (level: OmpThinkingLevel) =>
     ipcRenderer.invoke('omp:set-thinking-level', level),
 
-  getEngineState: () =>
-    ipcRenderer.invoke('omp:get-state'),
+  getEngineState: (targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:get-state', targetRuntimeId),
 
-  getState: () =>
-    ipcRenderer.invoke('omp:get-state'),
+  getState: (targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:get-state', targetRuntimeId),
 
   getSessionStats: () =>
     ipcRenderer.invoke('omp:session-stats'),
@@ -153,8 +153,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getApprovalMode: () =>
     ipcRenderer.invoke('omp:get-approval-mode'),
 
-  compact: (customInstructions?: string) =>
-    ipcRenderer.invoke('omp:compact', customInstructions),
+  compact: (customInstructions?: string, targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:compact', customInstructions, targetRuntimeId),
 
   setAutoCompaction: (enabled: boolean) =>
     ipcRenderer.invoke('omp:set-auto-compaction', enabled),
@@ -176,19 +176,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listSessions: () =>
     ipcRenderer.invoke('omp:list-sessions'),
 
-  newSession: (parentSession?: string) =>
-    ipcRenderer.invoke('omp:new-session', parentSession),
+  newSession: (parentSession?: string, targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:new-session', parentSession, targetRuntimeId),
 
-  switchSession: (sessionPath: string) =>
-    ipcRenderer.invoke('omp:switch-session', sessionPath),
+  switchSession: (sessionPath: string, targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:switch-session', sessionPath, targetRuntimeId),
 
-  branchSession: (entryId: string) =>
-    ipcRenderer.invoke('omp:branch-session', entryId),
+  branchSession: (entryId: string, targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:branch-session', entryId, targetRuntimeId),
 
-  loadHistory: (sessionPath?: string) =>
-    ipcRenderer.invoke('omp:load-history', sessionPath),
-  fastLoadSession: (sessionPath: string) =>
-    ipcRenderer.invoke('omp:fast-load-session', sessionPath),
+  loadHistory: (sessionPath?: string, targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:load-history', sessionPath, targetRuntimeId),
+  fastLoadSession: (sessionPath: string, targetRuntimeId?: string) =>
+    ipcRenderer.invoke('omp:fast-load-session', sessionPath, targetRuntimeId),
   getBranchEntries: () =>
     ipcRenderer.invoke('omp:branch-entries'),
 
@@ -674,5 +674,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: unknown, envelope: OmpEventEnvelope) => callback(envelope);
     ipcRenderer.on('omp:event', handler);
     return () => ipcRenderer.removeListener('omp:event', handler);
+  },
+  onActiveRuntimeChanged: (callback: (runtimeId: string | null) => void) => {
+    const handler = (_: unknown, runtimeId: string | null) => callback(runtimeId);
+    ipcRenderer.on('runtime:active-changed', handler);
+    return () => ipcRenderer.removeListener('runtime:active-changed', handler);
   },
 });

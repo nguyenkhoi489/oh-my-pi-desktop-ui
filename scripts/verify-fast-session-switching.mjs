@@ -284,6 +284,26 @@ console.log('\n[Test 6] Cross-Project Switching & Active Project Sessions Invari
   assert(ompRpcSource.includes('// 1. Optimistic render from in-memory LRU cache (< 1ms)'), 'useOmpRpc renders cached messages optimistically before switchPromise');
   assert(ompRpcSource.includes('// 2. Direct JSONL load in parallel (< 20ms)'), 'useOmpRpc loads direct JSONL in parallel before switchPromise');
 }
+
+// ----------------------------------------------------
+// Test 7: Multi-Runtime Session Isolation Invariants
+// ----------------------------------------------------
+console.log('\n[Test 7] Multi-Runtime Session Isolation Invariants');
+{
+  const mainSource = fs.readFileSync(path.resolve(process.cwd(), 'electron/main.ts'), 'utf-8');
+  assert(mainSource.includes('projectId: existing?.projectId || s.projectId'), 'main.ts prioritizes indexed existing.projectId over current active session metadata');
+  assert(mainSource.includes('activeCandidates.some((cand) => s.path.startsWith(cand))'), 'main.ts strictly guards activeProject metadata assignment to matching session directory candidates');
+
+  const pglSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/Sidebar/ProjectGroupList.tsx'), 'utf-8');
+  assert(!pglSource.includes("session.path.includes(`-${projectName}`)"), 'ProjectGroupList does not use ambiguous projectName substring matching');
+  assert(!pglSource.includes('if (!matchedProjectId && (session.active || activeSessionPath === session.path) && activeProjectId)'), 'ProjectGroupList does not blindly steal sessions for activeProjectId');
+
+  const appSource = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf-8');
+  assert(appSource.includes('await newSession();\n    refreshEngineState();'), 'App.tsx handleProcessStarted creates a clean session for freshly switched project');
+
+  const rmSource = fs.readFileSync(path.resolve(process.cwd(), 'electron/runtime-manager.ts'), 'utf-8');
+  assert(rmSource.includes("this.window.webContents.send('runtime:active-changed', runtimeId)"), 'RuntimeManager notifies renderer on active runtime change');
+}
 console.log('\n====================================================');
 console.log(`Fast Session Switching Verification: ${passed} passed, ${failed} failed.`);
 console.log('====================================================\n');
