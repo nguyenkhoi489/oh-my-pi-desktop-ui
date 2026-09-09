@@ -14,6 +14,82 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-09 — Claude Code Advisor Plugin for OMP (Fable 5.1 Enabled)
+- **State:**
+  - Phát hiện và xử lý thành công nguyên nhân ban đầu tưởng thiếu `fable`: Máy người dùng có 2 bản Claude Code: `/opt/homebrew/bin/claude` (2.1.85 cũ) và `~/.local/bin/claude` (2.1.266 mới).
+  - Cập nhật `resolveClaudeBinary()` và child PATH ưu tiên `~/.local/bin/claude`. Bản 2.1.266 hỗ trợ đầy đủ `fable` (Fable 5.1, context 1M tokens, thinking: low, medium, high, max).
+  - Catalog `CLAUDE_CODE_MODELS` có đủ 4 model: `fable`, `opus`, `sonnet`, `haiku`.
+  - Khởi chạy test thực tế: `~/.local/bin/claude -p --model "fable"` phản hồi trong 10.26s; `omp models claude-code` hiển thị chính xác bảng 4 model.
+  - Cấu hình role `advisor: claude-code/fable:high` trong `~/.omp/agent/config.yml`.
+  - Xử lý hoàn chỉnh các hợp đồng: `isToolResultOnly` gọi `markSeen` để lượt kế tiếp chỉ gửi delta; `pick` đặt sau `acquireLock`; xử lý post-header `TimeoutError` kết thúc bằng `finish_reason: "stop"`.
+  - Thêm `scripts/verify-claude-code-plugin.mjs` (22/22 passed), thêm `"test:claude-code"` vào `package.json`.
+  - Toàn bộ 19/19 unit tests trong plugin xanh, cả 2 lệnh typecheck (`tsc`) 0 lỗi.
+- **In-flight:** Không có.
+- **Next:** Advisor role đã trỏ tới `claude-code/fable:high`. Người dùng có thể sử dụng ngay trong OMP-Agent hoặc OMP CLI.
+- **Refs:** `plans/260909-1934-claude-code-advisor-plugin/plan.md`, `scripts/verify-claude-code-plugin.mjs`, `docs/claude-code-advisor-plugin.md`, `plans/journals/2026-09-09-claude-code-advisor-plugin-implementation.md`
+
+## 2026-09-09 — Multi-Runtime Session Isolation & Cross-Project Clean Slate
+- **State:**
+  - **Context & Symptom:** Các session bị chồng chéo, rò rỉ dữ liệu giữa các project khác nhau (ví dụ: mở project Floriondmc lại nạp nhầm session của HGA, đổi project bị kẹt phải khởi động lại app).
+  - **Root Cause & Solution:**
+    - **IPC Command Path Routing:** Các IPC handler ở Main process (`electron/main.ts`) phụ thuộc vào proxy `ompBridge` đơn điểm. Đã bổ sung tham số `targetRuntimeId?: string` vào các hàm IPC (`sendOmpMessage`, `switchSession`, `newSession`, `loadHistory`, `fastLoadSession`, `getState`, `compact`, `abortOmp`, v.v.) và định tuyến qua `resolveBridge(targetRuntimeId)`.
+    - **Two-way Active Runtime Sync:** Bổ sung sự kiện `runtime:active-changed` trong `electron/runtime-manager.ts`, phát xuống Renderer mỗi khi `activeRuntimeId` thay đổi. `src/hooks/useOmpRpc.ts` cập nhật tức thời `activeRuntimeIdRef.current` và state `activeRuntimeId`.
+    - **Strict Session Index Overlay:** Trong `electron/main.ts:omp:list-sessions`, bảo toàn `existing?.projectId` từ `indexProjectSessions` thay vì bị ghi đè bởi `activeProject.id`. Kiểm tra chặt chẽ `getProfileSessionDirCandidates` trước khi enrich metadata.
+    - **Strict Sidebar Session Grouping:** Trong `src/components/Sidebar/ProjectGroupList.tsx`, xóa bỏ hoàn toàn nhánh đoán chuỗi tương đối `session.path.includes('-' + projectName)` và fallback gán nhầm sang `activeProjectId`. Chỉ nhóm theo `session.projectId === project.id` hoặc so khớp canonical path.
+    - **Clean Slate on Project Select:** Trong `src/App.tsx`, `handleSelectProject` gọi `await openFolderDialog(project.path)`. Khi engine của project mới khởi động (`handleProcessStarted`), tự động gọi `newSession()` để mở sẵn khung soạn thảo rỗng tinh tươm.
+  - **Verification:**
+    - `npm run test:fast-session-switching`: 72 passed, 0 failed (bổ sung Test 7 bảo vệ bất biến multi-runtime session isolation).
+    - `npm run test:multi-runtime-ui`: 11 passed, 0 failed (bổ sung Test 11 kiểm tra targetRuntimeId IPC routing).
+    - `npm run test:session-indexer`: 6 passed, 0 failed.
+    - `npm run test:runtime-manager`: 7 passed, 0 failed.
+    - `npm run test:center-chat-layout`: 106 passed, 0 failed.
+    - `npm run test:renderer-sessions`: 51 passed, 0 failed.
+    - `npm run test:clean-slate`: 57 passed, 0 failed.
+    - `npm run test:session-control`: 58 passed, 0 failed.
+    - `npm run test:engine-control`: 49 passed, 0 failed.
+    - `npm run test:i18n`: 3582 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi TypeCheck.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng cho người dùng kiểm thử trực tiếp trên ứng dụng.
+- **Refs:** `plans/plan-260909-1100-multi-runtime-session-isolation.md`, `electron/main.ts`, `electron/runtime-manager.ts`, `src/hooks/useOmpRpc.ts`, `src/components/Sidebar/ProjectGroupList.tsx`, `src/App.tsx`
+
+## 2026-09-09 — Fix: SettingsModal Tab Bar Collapsing on Tab Switch
+- **State:**
+  - **Context & Symptom:** Khi chuyển tab trong modal Cài đặt (`SettingsModal`), thanh tab navigation bị co xẹp biến mất (chỉ còn sliver ~3px) khi chọn các tab có nội dung dài (`engine`, `providers`, `engine-config`).
+  - **Root Cause & Solution:**
+    - Container modal `max-h-[90vh] flex flex-col` bị quá tải chiều cao do nội dung tab dài. Thanh Tab Navigation có `overflow-x-auto` nhưng thiếu `shrink-0`, đồng thời body thiếu `min-h-0` khiến flexbox ép thanh navigation co xẹp về 0px.
+    - Bổ sung `shrink-0` cho Header, Tab Navigation, Footer và `min-h-0` cho Modal Body trong cả `src/components/Modals/SettingsModal.tsx` và `src/components/Modals/settings/McpServerModal.tsx`.
+    - Bổ sung Test 8 vào `scripts/verify-modal-ux.mjs` và assertion hồi quy vào `scripts/verify-mcp-config.mjs` (Test 9) để khóa cứng ràng buộc `overflow-x-auto shrink-0` và `flex-1 min-h-0`.
+  - **Verification:**
+    - `npm run test:modal-ux`: 53 passed, 0 failed.
+    - `npm run test:mcp-config`: 95 passed, 0 failed.
+    - `npm run test:engine-config-ui`: 172 passed, 0 failed.
+    - `npm run test:i18n`: 3582 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi TypeCheck.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng cho packaging và sử dụng.
+- **Refs:** `plans/reports/fix-260909-1730-settings-modal-tab-bar-collapse.md`, `src/components/Modals/SettingsModal.tsx`, `scripts/verify-modal-ux.mjs`
+
+## 2026-09-09 — Fix: Remove Escape Shortcut for Aborting Tasks to Prevent Accidental Stops
+- **State:**
+  - **Context & Symptom:** Người dùng hay bấm nhầm phím `Escape` khi Agent đang thực thi khiến task đang chạy bị ngắt dừng (`abort()`) ngoài ý muốn.
+  - **Root Cause & Solution:**
+    - Loại bỏ nhánh `e.key === 'Escape'` khỏi global keydown listener trong `src/App.tsx`.
+    - Loại bỏ nhánh `e.key === 'Escape'` gọi `onAbort?.()` trong `src/components/AgentPanel/PromptComposer.tsx`. Phím `Escape` giờ đây chỉ dùng để đóng menu/picker theo đúng nguyên tắc teardown symmetry.
+    - Giữ lại phím tắt ngắt ngang có chủ đích: `Cmd + .` (chuẩn macOS) và `Ctrl + C` (chuẩn terminal khi không bôi đen chữ trong composer).
+    - Cập nhật nhãn phím tắt nút Stop từ `Esc` sang `⌘.` trong `PromptComposer.tsx`.
+    - Cập nhật tooltip i18n `composer.stopTooltip` trong cả `shared/i18n/vi.ts` và `shared/i18n/en.ts` thành `(Ctrl+C / ⌘.)`.
+    - Cập nhật `scripts/verify-steering.mjs` (Test 12) để khóa hợp đồng UI và phím tắt ngắt ngang mới.
+  - **Verification:**
+    - `npm run test:steering`: 95 passed, 0 failed.
+    - `npm run test:i18n`: 3582 passed, 0 failed.
+    - `npm run test:modal-ux`: 44 passed, 0 failed.
+    - `npm run test:composer-attach`: 38 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi TypeCheck.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng sử dụng, người dùng có thể an tâm bấm Esc mà không sợ vô tình hủy task.
+- **Refs:** `plans/reports/fix-260909-1200-remove-escape-abort-shortcut.md`, `src/App.tsx`, `src/components/AgentPanel/PromptComposer.tsx`, `scripts/verify-steering.mjs`
+
 ## 2026-09-08 — Fix: Mermaid Diagram Syntax Error & DOM Body Leak Prevention
 - **State:**
   - **Root Cause Identified & Fixed:**

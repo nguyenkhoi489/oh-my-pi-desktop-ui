@@ -119,6 +119,8 @@ interface SettingsModalProps {
   onSetCustomBinaryPath?: (path: string) => Promise<void | OmpInstallStatus>;
   availableModels: OmpModelInfo[];
   onRefreshModels?: () => Promise<unknown>;
+  selectedModel?: OmpModelInfo | string | null;
+  onSelectModel?: (provider: string, modelId: string) => void;
   thinkingLevel?: OmpThinkingLevel;
   onSelectThinkingLevel?: (level: OmpThinkingLevel) => void;
   onRestartEngine?: () => Promise<void>;
@@ -243,6 +245,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSetCustomBinaryPath,
   availableModels,
   onRefreshModels,
+  selectedModel,
+  onSelectModel,
   thinkingLevel,
   onSelectThinkingLevel,
   onRestartEngine,
@@ -973,7 +977,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4 select-none">
       <div className="w-full max-w-4xl bg-panel border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-surface-highlight border border-border text-codex-accent">
               <Settings className="w-4 h-4" />
@@ -1001,7 +1005,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-border bg-surface/50 px-6 gap-2 overflow-x-auto">
+        <div className="flex border-b border-border bg-surface/50 px-6 gap-2 overflow-x-auto shrink-0">
           <button
             onClick={() => {
               setActiveTab('general');
@@ -1072,7 +1076,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
           {/* TAB 1: General */}
           {activeTab === 'general' && (
             <div className="space-y-6">
@@ -2397,20 +2401,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <span className="text-[10.5px] text-slate-400 font-normal">{models.length} models</span>
                           </div>
                           <div className="grid grid-cols-2 gap-2">
-                            {models.map((m) => (
-                              <div
-                                key={m.id}
-                                className="p-2 bg-surface-highlight/70 rounded-lg border border-border text-left"
-                              >
-                                <div className="text-xs font-medium text-slate-800 dark:text-zinc-200 truncate">
-                                  {m.name || m.id} {m.reasoning ? '🧠' : ''}
-                                </div>
-                                <div className="text-[10px] font-mono text-slate-500 dark:text-zinc-400 flex items-center justify-between mt-0.5">
-                                  <span className="truncate">{m.id}</span>
-                                  {m.contextWindow && <span>{Math.round(m.contextWindow / 1000)}k ctx</span>}
-                                </div>
-                              </div>
-                            ))}
+                            {models.map((m) => {
+                              const isSelected = (
+                                typeof selectedModel === 'string'
+                                  ? selectedModel === m.id || selectedModel === `${m.provider}/${m.id}`
+                                  : selectedModel?.id === m.id && (!selectedModel.provider || selectedModel.provider === m.provider)
+                              );
+                              return (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() => onSelectModel?.(m.provider, m.id)}
+                                  className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer w-full flex flex-col justify-between group ${
+                                    isSelected
+                                      ? 'bg-blue-500/10 border-blue-500/50 shadow-sm ring-1 ring-blue-500/30'
+                                      : 'bg-surface-highlight/70 border-border hover:border-slate-400 dark:hover:border-zinc-500 hover:bg-surface-highlight'
+                                  }`}
+                                  title={isSelected ? t('settings.providers.selectedBadge') : t('settings.providers.clickToSelectHint')}
+                                >
+                                  <div className="flex items-center justify-between gap-1 w-full">
+                                    <div className="text-xs font-medium text-slate-800 dark:text-zinc-200 truncate flex items-center gap-1.5">
+                                      <span>{m.name || m.id}</span>
+                                      {m.reasoning && <span>🧠</span>}
+                                    </div>
+                                    {isSelected && (
+                                      <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-500 bg-blue-500/15 px-1.5 py-0.5 rounded shrink-0">
+                                        <Check className="w-3 h-3" />
+                                        {t('settings.providers.selectedBadge')}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] font-mono text-slate-500 dark:text-zinc-400 flex items-center justify-between mt-1 w-full">
+                                    <span className="truncate">{m.id}</span>
+                                    {m.contextWindow && <span>{Math.round(m.contextWindow / 1000)}k ctx</span>}
+                                  </div>
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       ))}
@@ -2664,7 +2691,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Modal Footer / Restart Banner */}
-        <div className="p-4 border-t border-border bg-surface flex items-center justify-between">
+        <div className="p-4 border-t border-border bg-surface flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             {hasEngineChanged && (
               <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 font-medium">

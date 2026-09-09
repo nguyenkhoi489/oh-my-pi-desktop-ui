@@ -1,0 +1,15 @@
+{
+  "name": "omp-claude-code-provider",
+  "version": "0.1.0",
+  "description": "OMP provider plugin wrapping claude -p for advisor role",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test --experimental-strip-types test/shim.test.ts"
+  },
+  "omp": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}

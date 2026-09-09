@@ -387,10 +387,11 @@ export function App() {
 
   const handleProcessStarted = useCallback(async () => {
     await resetChat(false);
+    await newSession();
     refreshEngineState();
     refreshModels();
     refreshSessions();
-  }, [resetChat, refreshEngineState, refreshModels, refreshSessions]);
+  }, [resetChat, newSession, refreshEngineState, refreshModels, refreshSessions]);
   const handleSpeakLastAssistantText = useCallback(async () => {
     if (isSpeaking) {
       await stopSay();
@@ -611,7 +612,7 @@ export function App() {
   const handleSelectProject = useCallback(async (project: ProjectItem) => {
     if (project.path !== workspacePath) {
       await resetChat(false);
-      openFolderDialog(project.path);
+      await openFolderDialog(project.path);
     }
   }, [workspacePath, resetChat, openFolderDialog]);
 
@@ -660,6 +661,7 @@ export function App() {
         const project = projects.find((p) => p.id === projectId);
         if (project && project.path !== workspacePath) {
           await openFolderDialog(project.path);
+          return;
         }
       }
       await newSession();
@@ -820,12 +822,12 @@ export function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeDiff, acceptDiff]);
-  // Global abort shortcut (Escape or Cmd+.) when agent is busy and no modal is open
+  // Global abort shortcut (Cmd+.) when agent is busy and no modal is open
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (status === 'idle') return;
       if (isSettingsModalOpen || isOmnibarOpen || isOmpModalOpen || isOpsModalOpen || isCommitModalOpen || isUnsavedModalOpen) return;
-      if (e.key === 'Escape' || (e.metaKey && e.key === '.')) {
+      if (e.metaKey && e.key === '.') {
         const tag = (e.target as HTMLElement)?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') {
           return;
@@ -1168,6 +1170,8 @@ export function App() {
         onSelectBinaryFile={browseBinaryFile}
         onSetCustomBinaryPath={setCustomPath}
         availableModels={availableModels}
+        selectedModel={selectedModel}
+        onSelectModel={changeModel}
         onRefreshModels={refreshModels}
         thinkingLevel={thinkingLevel}
         onSelectThinkingLevel={changeThinkingLevel}

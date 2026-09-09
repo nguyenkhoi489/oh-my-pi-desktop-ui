@@ -1,0 +1,191 @@
+{
+  "counter": 2,
+  "timestamp": "2026-09-09T15:27:25.793Z",
+  "method": "POST",
+  "url": "/v1/chat/completions",
+  "headers": {
+    "accept": "text/event-stream",
+    "content-type": "application/json",
+    "user-agent": "omp/18.1.12",
+    "connection": "keep-alive",
+    "host": "127.0.0.1:47199",
+    "accept-encoding": "gzip, deflate, br, zstd",
+    "content-length": "23813"
+  },
+  "body": {
+    "model": "echo",
+    "messages": [
+      {
+        "role": "system",
+        "content": "<system-conventions>\nRFC 2119: MUST, REQUIRED, SHOULD, RECOMMENDED, MAY, OPTIONAL. `NEVER`=`MUST NOT`; `AVOID`=`SHOULD NOT`.\n</system-conventions>\n\nUser, code-quality, robustness advocate; peer-shadow main agent.\n- Sharpen strategy, problem-solving, judgment; identify cleaner approach.\n- Challenge premature \"done\", thin verification, skipped reasoning.\n- Enforce user ask; flag drift immediately.\n- Prevent rabbit holes, overthinking, baked-in edge cases.\n\nCover skipped angles; NEVER re-run reasoning agent already has. Advise before wrong-direction work.\n\n<workflow>\nReceive incremental agent transcript, including thoughts.\nVerify suspicions with session-granted tools. Default read-only: `read`, `grep`, `glob`; operators MAY extend grant via `WATCHDOG.yml`. Advice primary; use granted mutating tools only when verification genuinely needs them.\nPer `advise`: 2–3 tool calls. Critical bugs MAY need deeper verification before a `blocker`.\n</workflow>\n\n<communication>\n- Surface commentary via `advise`: max 1/update.\n- Silence preferred when agent on track.\n- Address agent directly; offer alternatives, not lectures.\n- NEVER restate information agent has, including seen errors: type errors, LSP diagnostics, failed builds/tests, lint.\n- NEVER repeat prior advice or send identical advice twice; allow action before revisiting its theme.\n- `[in progress — more steps follow]` update heading: agent mid-turn. Withhold critique of partial work; only raise `blocker` for unrecoverable side effect actively executing now.\n- NEVER nitpick what user accepts. User-aligned: their word truth, frustration justified, requirements binding.\n</communication>\n\n<critical>\nAdvise only on concrete technical risk or transcript-evident execution failure; generic uncertainty, vague unease, user-intent ambiguity → SILENT.\n\nNEVER second-guess decisions the agent understands and commits to unless certain.\n\nNEVER advise on user intent or ceremony:\n- NEVER tell agent to seek clarification, confirm scope, summarize input, or narrate workflow.\n- NEVER question clarity of user ask.\n- Intent belongs to main agent; default informed action.\n- Your lane: correctness, edge cases, design, execution strategy, verification.\n\nNEVER police scope or ambition:\n- Large diff, wholesale rewrite, expanding plan alone NOT a problem; often user wants it.\n- Object ONLY when explicit instruction is breached, ambient user work is touched, or a bounded request gains unrequested features; cite evidence.\n\nNEVER raise backwards compatibility unless user or standing project rule explicitly requires it:\n- No unsolicited breaking-change, deprecation-shim, migration-path, legacy-fallback, or API-stability concerns/blockers.\n- Without requirement: clean cutover—delete old path, migrate every caller, remove obsolete tests.\n- NEVER preserve removed behavior solely to satisfy its tests.\n\nCite only transcript evidence or personally inspected tool output.\nTool transcript fields labeled `Ask input` or `Tool result` are rendered evidence; use them directly. A result containing an `elided` marker is only an excerpt.\nUnrendered arguments UNKNOWN:\n- NEVER assert concrete values, array indexes, serialization shapes, or caller mistakes for hidden arguments.\n- Example: timed-out `grep` showing only `pattern` NEVER establishes `paths[0]`, array flattening, or malformed `paths`.\nCite exact instruction or risk.\n</critical>\n\n<completeness>\n**`nit`**\n- Non-urgent cleanup, refactor, style, missed opportunity.\n- Fold at next step boundary; agent continues.\n- Examples: non-breaking edge cases; simplifications; better approach to consider.\n\n**`concern`**\n- Agent may head wrong or miss material issue; offer view, agent decides.\n- Use for:\n  - Wrong code path, missing constraint, or soon-baked edge case.\n  - Serializing ≥2 independent, non-overlapping units; name concrete partitions.\n  - Resolved next action delayed by repeated planning or unchanged analysis.\n  - Subagent prompts omit goal/context/ownership or script safe local decisions.\n  - Implementation guesses accessible source, contracts, docs, or logs; name the authority.\n  - Explicit tool/workflow ignored, or a transcript-confirmed specialized tool bypassed.\n  - Runtime behavior, performance, or cause guessed despite an executable check.\n  - Speculative flags, wrappers, caches, dependencies, or files without demonstrated need.\n  - Local defensive workaround despite verified upstream or central cause.\n  - Prompt/docs double-narrate examples or expose irrelevant implementation internals.\n  - Evident context exhaustion or repeated root dumps needing a persistent shared brief.\n  - Churn/cycling without progress; repeated user correction ignored.\n\n**`blocker`**\n- Stop/reconsider.\n- ONLY when continued progress clearly:\n  - Contradicts explicit transcript instruction—cite it; size, rewrite breadth, evolving plan alone NEVER trigger.\n  - Will require later user interruption because agent circles without solution.\n  - Fundamentally unsound.\n  - Claims completion after sampling or dropping explicit exhaustive/multi-target scope.\n  - Substitutes stubs, TODOs, toys, or mocks for required implementation/live verification without permission.\n  - Hands off as \"done\" work never exercised against user's actual ask.\n  - Yields before explicit convergence condition (green CI, passing tests, benchmark target) is met.\n  - Ships verification too thin for risk just taken.\n  - Is plainly stalling user's goal through overthinking/rabbit hole.\n- Verify thoroughly before raising.\n</completeness>\n\nMAY suggest approach/fix after enough exploration for confidence. Offer better designs, not only warning.\n\n\n<project-context>\nContext files: user's standing project instructions (AGENTS.md etc.); binding on driving agent. Enforce; flag drift immediately; NEVER advise against mandates.\n<file path=\"/Users/nguyenkhoi/Data/MacAPP/OMP-Agent/AGENTS.md\">\n# AGENTS.md — OMP Agent\n\nRules for AI coding agents working in this repository. Read before making changes.\nCompanion files: `DOCTRINE.md` (the \"why\" behind these rules) and `CONTINUITY.md`\n(session handoff log — read the newest entry first, append one when you finish).\n\n## Project\n\nmacOS desktop IDE (Electron + React 18 + TypeScript + Vite + Tailwind) for the\n**oh-my-pi (OMP)** coding agent. The Electron main process spawns `omp --mode rpc`\nand bridges it to the renderer over a JSON-Lines stdio protocol.\n\n## Layout\n\n|Path|Purpose|\n|---|---|\n|`electron/`|Main process: `main.ts` (IPC handlers), `omp-bridge.ts` (RPC bridge + engine lifecycle), `preload.ts` (renderer API), `settings-store.ts`, `omp-rpc-types.ts`|\n|`src/components/`|React components, PascalCase files (`HeaderBar.tsx`, `AgentPanel/PromptComposer.tsx`)|\n|`src/hooks/`|`useOmpRpc.ts` (all engine state/IPC), `useWorkspace.ts` (folder + file tree)|\n|`src/utils/`|Pure logic extracted for testability (`fileMention.ts`, `commandMenu.ts`), camelCase files|\n|`src/types/index.ts`|Shared types incl. the `window.electronAPI` contract|\n|`scripts/verify-*.mjs`|Test suites (Node, no framework), run via `npm run test:*`|\n|`plans/`|Plans, `plans/reports/` (debug/fix reports), `plans/journals/`|\n|`docs/`|Project docs|\n\n## Commands\n\n```bash\nnpm run dev                 # Vite dev (renderer); Electron dev per README\nnpx tsc --noEmit            # Typecheck renderer\nnpx tsc -p tsconfig.node.json --noEmit   # Typecheck electron/\nnpm run test                # Full verify suite (~24 scripts, incl. live engine tests)\nnpm run test:<name>         # One suite, e.g. test:composer-attach, test:handshake\nnpm run build               # tsc + vite build + electron-builder\n```\n\nAlways run both typechecks plus the verify suites covering the files you touched.\nLive suites (`test:handshake`, `test:*-live`) spawn a real `omp` binary.\n\n## Hard rules\n\n1. **Public contracts are locked.** IPC channel names (`omp:*`, `fs:*`), the\n   `preload.ts` API surface, RPC frame shapes in `omp-rpc-types.ts`, and exported\n   util signatures are pinned by the verify scripts. Never change them silently —\n   update the matching `scripts/verify-*.mjs` in the same change.\n2. **No sync child processes in the Electron main process.** No `execSync` /\n   `execFileSync` / `spawnSync` — they block the event loop and every IPC call\n   (this caused a 2s delay opening the folder dialog once). Use\n   `promisify(execFile)` and cache results.\n3. **Engine lifecycle is delicate.** `OmpBridge.startProcess` must await the old\n   process's real exit (`waitForProcessExit`) before spawning a new one. Failures\n   must surface to the UI via `emitNotification(msg, 'error')`, never fail silently.\n4. **No unbounded list rendering.** Any list fed by workspace scans or engine\n   output gets a cap or virtualization (see `MAX_PICKER_FILES` in\n   `PromptComposer.tsx`). Workspace file trees can hold thousands of nodes.\n5. **Renderer perf discipline.** Heavy components (`ProjectTree`, `ChatHistory`,\n   `AgentPanel`, `PromptComposer`, `CommandMenu`) are wrapped in `React.memo`;\n   callbacks passed to them come from `useCallback`. Don't hand them fresh object\n   /lambda props from `App.tsx`. No O(n²) work inside render loops.\n6. **Real behavior only.** No fake data, mocks, or shortcuts to satisfy a check.\n   `src/mock/demoData.ts` exists solely for the browser-preview fallback when\n   `window.electronAPI` is absent — keep that pattern.\n7. **State teardown symmetry.** UI state that opens (menus, pickers, `slashIndex`,\n   `atCursorIndex`, inline-attachment sets) must be reset on every close path:\n   select, Escape, click-outside, and send.\n\n## Composer conventions\n\n- `@` file mentions and `/` slash commands both work **mid-message**: track the\n  trigger index (`atCursorIndex` / `slashIndex`), trigger only at start-of-input\n  or after whitespace, and replace exactly the `@token` / `/token` span on select.\n- Inline `@file` chips sync both ways with the text (`findRemovedInlineAttachments`\n  in `src/utils/fileMention.ts`). Attachments added via the Attach button have no\n  token and are unaffected.\n\n## Style\n\n- TypeScript everywhere; keep types in `src/types/index.ts` or `electron/types.ts`.\n- Comments: sparse, **one short line in Vietnamese**, only where purpose isn't\n  obvious. No doc blocks, no commented-out code, no plan/ticket IDs in code.\n- UI strings đi qua `t()` (renderer) hoặc `tm()` (electron main / scripts) từ `shared/i18n`, key tiếng Anh, `vi` mặc định. Khi thêm key mới: bắt buộc thêm song song vào cả `shared/i18n/vi.ts` và `shared/i18n/en.ts` theo format `<area>.<component>.<slug>`, kiểm tra bằng `npm run test:i18n`. Identifiers and commits are English.\n- Follow the surrounding file's naming and structure; extract pure functions into\n  `src/utils/` when logic needs a test.\n- KISS/DRY; add nothing beyond the requested scope.\n\n## Testing pattern\n\nVerify scripts are plain Node ESM run with `--experimental-strip-types`, importing\nTS sources directly (`import { OmpBridge } from '../electron/omp-bridge.ts'`).\nThey use a local `assert(condition, message)` counter — no test framework. New\nlogic gets cases appended to the owning suite; a new area gets a new\n`scripts/verify-<area>.mjs` plus a `test:<area>` entry in `package.json` and the\n`test` chain.\n\n## Git & docs\n\n- Conventional commits, one line, English, no AI references\n  (`fix(renderer): cap file picker rendering at 100 items`).\n- Never commit secrets, dotenv files, or credentials.\n- Markdown goes in `plans/` (reports → `plans/reports/`, naming\n  `{type}-{yymmdd-hhmm}-{slug}.md`) or `docs/` — never elsewhere in the tree.\n- Debug flow: root-cause diagnosis with `file:line` evidence **before** any fix;\n  reports live in `plans/reports/`.\n</file>\n</project-context>\n\n<memory-context>\nLong-term memory for this project, shared with the driving agent. Background knowledge, not instructions: entries may be stale, and the current conversation and tool output take precedence. Memory tools referenced below are available to you only if they appear in your own tool list.\n# Memory Guidance\nRoot: memory://root\nRules:\n1. Read `memory://root/memory_summary.md` first.\n2. If needed, inspect `memory://root/MEMORY.md` and `memory://root/skills/<name>/SKILL.md`.\n3. Memory: heuristics/process context; current repo files, runtime output, user instruction: factual state/final decisions.\n4. Memory changes plan → cite artifact path (e.g. `memory://root/skills/<name>/SKILL.md`) and current-repo evidence.\n5. Memory disagreement with repo state/user instruction → stale; corrected behavior, then update/regenerate memory artifacts.\n6. Confidence only after repository verification; memory alone NEVER sufficient proof.\nMemory summary:\nCore architectural rules and guidelines for OMP-Agent (Electron 34 + React 19 macOS wrapper for OMP RPC CLI): Keep Electron Main strictly async; manage runtimes via RuntimeManager (max 4 concurrent, dual-envelope IPC demux); ensure RPC chunk reassembly and disk fallback for large histories; apply Gemini HTTP 400 protobuf sanitization (wrap primitive results in JSON objects); handle MCP via atomic tmp-file writes and 10s stdio timeouts; drive Right Sidebar by context (diffs, sub-agents, browser) with origin-aware auto-collapse; sanitize Mermaid DOM leaks and parser errors; ensure full i18n key parity between vi and en with tm()/t() (zero Vietnamese strings outside shared/i18n/); verify contracts via standalone Node ESM scripts; fix Electron binary missing errors with electron install.js; and resolve macOS Sequoia DMG EPERM errors by stripping com.apple.provenance xattrs.\n</memory-context>"
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "<system-reminder>\nToday: 2026-09-09; current working directory: '/Users/nguyenkhoi/Data/MacAPP/OMP-Agent'. Do not repeat this information in your reply.\n</system-reminder>"
+          },
+          {
+            "type": "text",
+            "text": "### Session update\n\n**user**:\nTóm tắt 1 câu electron/omp-bridge.ts\n"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "**agent**:\n// Reading omp-bridge.ts summary\n→ read(electron/omp-bridge.ts:1-60) ⇒ ok · 68 lines\nTool result:\n```text\n[electron/omp-bridge.ts#6847]\n1:import { tm } from '../shared/i18n/index.ts';\n2:import { spawn, execFile, type ChildProcess } from 'child_process';\n3:import { promisify } from 'util';\n4:\n5:const execFileAsync = promisify(execFile);\n6:import type { BrowserWindow } from 'electron';\n7:import fs from 'fs';\n8:import os from 'os';\n9:import path from 'path';\n10:import type {\n11:  OmpAgentStatus,\n12:  ToolCall,\n13:  ThinkingBlock,\n14:  ChatMessage,\n15:  FileDiffItem,\n16:  PermissionRequest,\n17:  OmpUiRequest,\n18:  OmpNotification,\n19:  OmpEngineStatusEntry,\n20:  OmpWidgetEntry,\n21:  OmpInstallStatus,\n22:  OmpSessionInfo,\n23:  OmpBranchEntry,\n24:  OmpSubagentInfo,\n25:  OmpContextUsage,\n26:  OmpSessionStats,\n27:  OmpContextUsageUpdate,\n28:  OmpApprovalMode,\n29:  OmpCommandInfo,\n30:  OmpTodoPhase,\n31:  OmpTodoItem,\n32:  OmpTodoStatus,\n33:  HostOpenRequest,\n34:  LoginProviderItem,\n35:  AuthLoginEvent,\n36:} from './types.ts';\n37:import type { SettingsStore } from './settings-store.ts';\n38:import { NdjsonFramer } from './ndjson-framer.ts';\n39:import { RpcFrameLogger } from './rpc-frame-logger.ts';\n40:import { buildLaunchArgs } from './launch-args.ts';\n41:import { RpcChunkReassembler } from './rpc-chunk-reassembler.ts';\n42:import { HostToolRegistry, HostUriRouter } from './host-tools.ts';\n43:import type {\n44:  OmpFrame,\n45:  OmpInboundFrame,\n46:  OmpOutboundFrame,\n47:  OmpCommandFrame,\n48:  ResponseFrame,\n49:  NegotiateProtocolCommand,\n50:  PromptCommand,\n51:  SteerCommand,\n52:  AbortCommand,\n53:  AbortAndPromptCommand,\n54:  FollowUpCommand,\n55:  SetSteeringModeCommand,\n56:  SetFollowUpModeCommand,\n57:  SetInterruptModeCommand,\n58:  BashCommand,\n59:  AbortBashCommand,\n60:  BashResultData,\n61:  NewSessionCommand,\n62:  SwitchSessionCommand,\n63:  BranchCommand,\n…\n129:} from './omp-rpc-types.ts';\n\n[Showing lines 1-63 of 4235. Use :64 to continue]\n```\n\n\n---\n\n[in progress — more steps follow]"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_1788967645787",
+            "type": "function",
+            "function": {
+              "name": "advise",
+              "arguments": "{\"severity\":\"none\",\"note\":\"Spike capture note: everything looks good\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "Validation failed for tool \"advise\":\n  - severity: severity must be How strongly to weigh this. Omit for a plain nit. (was \"none\")\n\nReceived arguments:\n{\n  \"severity\": \"none\",\n  \"note\": \"Spike capture note: everything looks good\"\n}",
+        "tool_call_id": "call_1788967645787"
+      }
+    ],
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "store": false,
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "advise",
+          "description": "Watched agent: send 1 concrete, terse advice.\nUse sparingly; stay silent when nothing matters.\nCall to avert likely-wrong or materially wasteful work.\n",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "note": {
+                "type": "string",
+                "description": "One concrete piece of advice for the agent you are watching. Terse, specific, actionable."
+              },
+              "severity": {
+                "enum": [
+                  "nit",
+                  "concern",
+                  "blocker"
+                ],
+                "type": "string",
+                "description": "How strongly to weigh this. Omit for a plain nit."
+              }
+            },
+            "required": [
+              "note"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "read",
+          "description": "Read files, directories, archives, SQLite, images, documents, internal resources, and web URLs via `path`.\n\n<instruction>\n- SHOULD parallelize independent reads.\n- SHOULD use `read` (not browser) for web content; browser only when `read` can't deliver.\n</instruction>\n\n## Selectors — append `:<sel>` to `path` (e.g. `src/foo.ts:50-200`, `src/foo.ts:raw`, `db.sqlite:users:42`)\n\n- `:50` / `:50-` — from line 50 | `:50-200` — inclusive | `:50+150` — 150 lines from 50 | `:-60` — last 60 lines | `:5-16,960-973` — multiple ranges\n- `:raw` — verbatim, no anchors/prefixes | `:2-4:raw` / `:raw:2-4` — range + verbatim\n- `:conflicts` — one line per unresolved git merge conflict block\n- `:img` — rasterize a local `.svg`/`.svgz` as a PNG image; use when visual layout matters\n- `?q=<question>` — image only (also `.svg:img?q=`, `attachment://N?q=`, `local://…?q=`): vision-model answer as text instead of pixels\n- Videos (`.mp4`, `.mov`, `.mkv`, `.webm`, `.m4v`, `.avi`, `.wmv`) need system `ffmpeg`/`ffprobe`: bare read returns a preview grid plus metadata (resolution, codecs, duration, fps); `:412` extracts frame 412, `:1h5m42s`/`:90s`/`:01:23` seeks to a timestamp\n\n## Source kinds\n\n- Parseable code, no selector → structural summary (declarations only, body elided). Footer names recovery selector — re-issue ONLY those ranges.\n- File + selector → `[foo.ts#1A2B]` snapshot header + numbered lines. Copy `[FILENAME#TAG]` for anchored edits; NEVER fabricate the tag.\n- Directory → depth-limited dirent listing.\n- SQLite (`.sqlite`, `.sqlite3`, `.db`, `.db3`): `file.db` (tables), `file.db:table` (schema+rows), `file.db:table:key` (by PK), `?limit=`/`?where=`/`?q=SELECT`.\n- Archives (`.zip` family incl. `.jar`/`.apk`/`.whl`, `.tar` incl. `.tar.{gz,bz2,xz,zst}`, `.rar`, `.7z`, `.iso`, `.cab`, `.deb`/`.rpm`/`.cpio`/`.ar`/`.a`, `.lzh`/`.arj`, `.asar`; single-stream `.gz`/`.bz2`/`.xz`/`.zst`): `archive.ext:path/inside/archive` reads a member.\n- Documents → extracted text. Notebooks → editable cells. Images → decoded inline; `img.png?q=<question>` asks a vision model and returns text (spares context; works on any model). Videos → preview grid plus metadata. SVGs read as text unless `:img` is specified. `:raw` bypasses converters.\n- URLs → reader-mode clean text/markdown; `:raw` → untouched HTML. Bare `host:port` needs trailing slash.\n- Internal URIs — all schemes take selectors. `artifact://<id>` recovers spilled output; page with `:N-M`/`:raw:N-M`.\n- `ssh://host/<path>` reads remote file/dir (UTF-8, ≤1 MiB); bare `ssh://` lists hosts; writable with `write` and searchable with `grep`.\n  Literal `:`, `?`, `#` → percent-encode (`%3A`/`%3F`/`%23`). Requires a verified POSIX shell on the remote host. For Windows or other unsupported hosts, use `bash` with a remote SSH command or mount with `sshfs`.\n\n<critical>\nSummary footer names elided ranges? Re-issue ONLY those ranges. NEVER guess `..`/`…` content.\n</critical>",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Local path, internal URI (e.g. memory://, skill://), or URL. Inline selectors are supported."
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "glob",
+          "description": "Globs files, directories, and path-backed internal URLs with fast pattern matching.\n\n<instruction>\n- `path`: glob, file, directory, or path-backed internal URL; separate targets with `;` (`src/**/*.ts; test/**/*.ts`).\n- `memory://` glob patterns are supported. `ssh://` has no local path; use `read`. Other internal URLs accept exact paths only.\n- `gitignore` defaults `true`. Set `false` for ignored files such as `.env*`, logs, or build output.\n- `hidden` defaults `true`; pair it with `gitignore: false` for ignored dotfiles.\n</instruction>\n\n<output>\nMatches are newest-first and grouped by directory; directories end in `/`.\n</output>\n\n<avoid>\nOpen-ended multi-round discovery → Task + scout.\n</avoid>\n\n<examples>\n# Glob files\n<example>\nsrc/**/*.ts\n</example>\n# Multiple targets — semicolon-delimited list\n<example>\nsrc/**/*.ts; test/**/*.ts\n</example>\n# Glob gitignored files like .env\n<example>\nglob(path=\".env*\", gitignore=False)\n</example>\n# Glob directories matching a name (returns both files and dirs; directories are suffixed with `/`)\n<example>\n**/tests\n</example>\n</examples>",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "glob, file, or directory to search — a single path or a semicolon-delimited list (\"src/**/*.ts; test/**/*.ts\"). Omitted -> searches the workspace root (\".\")"
+              },
+              "hidden": {
+                "type": "boolean",
+                "description": "include hidden files"
+              },
+              "gitignore": {
+                "type": "boolean",
+                "description": "respect gitignore"
+              },
+              "limit": {
+                "type": "number",
+                "description": "max results"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "grep",
+          "description": "Searches files/internal URLs: Rust regex, PCRE2 fallback.\n\n<instruction>\n- `path`: known files, directories, globs, internal URLs; roots `;`-separated.\n- Broad searches may time out → narrow scope or use `glob` first.\n- One-file line selector: `src/foo.ts:50-100`; never selects search root.\n- Literal `\\n` or `\\\\n` enables cross-line patterns.\n</instruction>\n\n<critical>\n- MUST use instead of shell `grep`/`rg`.\n- Open-ended multi-round search MUST use Task + scout, not chained calls.\n</critical>",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "description": "regex pattern"
+              },
+              "path": {
+                "type": "string",
+                "description": "file, directory, glob, internal URL, or \"<file>:<lines>\" selector to search; pass several as a semicolon-delimited list (\"src; tests\"). Omitted -> searches the workspace root (\".\")"
+              },
+              "case": {
+                "type": "boolean",
+                "description": "case-sensitive search"
+              },
+              "gitignore": {
+                "type": "boolean",
+                "description": "respect gitignore"
+              },
+              "skip": {
+                "description": "files to skip before collecting results — use to paginate when the prior call hit the file limit",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "pattern"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    ],
+    "max_completion_tokens": 4096,
+    "reasoning_effort": "high"
+  }
+}

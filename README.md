@@ -103,3 +103,9 @@ Pipeline nằm trong `scripts/release/`: `build-mac.sh` (typecheck → vite buil
 ├── package.json
 └── vite.config.ts
 ```
+
+---
+
+## Tài liệu & Plugins liên quan
+
+* [Claude Code Advisor Plugin](docs/claude-code-advisor-plugin.md): Plugin OMP cho phép role advisor chạy bằng Claude Code đã đăng nhập trên máy cá nhân.
