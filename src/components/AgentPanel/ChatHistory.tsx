@@ -15,9 +15,9 @@ import {
   RotateCcw,
   Wrench,
 } from 'lucide-react';
-import { ChatMessage, ThinkingBlock, ToolCall, OmpAgentStatus } from '../../types';
+import { ChatMessage, ThinkingBlock, ToolCall, OmpAgentStatus, FileDiffItem, OmpSubagentInfo } from '../../types';
 import { ThinkingCard } from './ThinkingCard';
-import { ToolCallCard } from './ToolCallCard';
+import { ChatTurnContextCard } from './ChatTurnContextCard';
 import { MarkdownRenderer } from '../Common/MarkdownRenderer';
 import { isImageFile } from '../../utils/imageAttachment';
 import { ImageLightboxModal } from './ImageLightboxModal';
@@ -31,6 +31,9 @@ interface ChatHistoryProps {
   activeToolCalls: ToolCall[];
   currentStreamText: string;
   status?: OmpAgentStatus;
+  diffFiles?: FileDiffItem[];
+  subagents?: OmpSubagentInfo[];
+  onSelectDiff?: (index: number) => void;
   onBranchSession?: (entryId: string) => void;
   onOpenFile?: (filePath: string) => void;
   onOpenBrowser?: (url: string) => void;
@@ -224,6 +227,9 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
   activeToolCalls,
   currentStreamText,
   status = 'idle',
+  diffFiles = [],
+  subagents = [],
+  onSelectDiff,
   onBranchSession,
   onOpenFile,
   onRetry,
@@ -486,11 +492,14 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
 
             {/* Tool Calls if attached */}
             {msg.toolCalls && msg.toolCalls.length > 0 && (
-              <div className="space-y-1.5">
-                {msg.toolCalls.map((tc) => (
-                  <ToolCallCard key={tc.id} toolCall={tc} />
-                ))}
-              </div>
+              <ChatTurnContextCard
+                toolCalls={msg.toolCalls}
+                diffFiles={index === visibleMessages.length - 1 ? diffFiles : []}
+                subagents={index === visibleMessages.length - 1 ? subagents : []}
+                onSelectDiff={onSelectDiff}
+                onOpenBrowser={onOpenBrowser}
+                onOpenFile={onOpenFile}
+              />
             )}
 
             {/* Message Bubble or Error Card */}
@@ -539,11 +548,16 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
 
       {/* Active Tool Calls in Progress */}
       {activeToolCalls.length > 0 && (
-        <div className="space-y-1.5">
-          {activeToolCalls.map((tc) => (
-            <ToolCallCard key={tc.id} toolCall={tc} onOpenBrowser={onOpenBrowser} />
-          ))}
-        </div>
+        <ChatTurnContextCard
+          toolCalls={activeToolCalls}
+          isActive={true}
+          activeToolName={activeToolCalls[activeToolCalls.length - 1]?.name}
+          diffFiles={diffFiles}
+          subagents={subagents}
+          onSelectDiff={onSelectDiff}
+          onOpenBrowser={onOpenBrowser}
+          onOpenFile={onOpenFile}
+        />
       )}
 
       {/* Active Streaming Text */}

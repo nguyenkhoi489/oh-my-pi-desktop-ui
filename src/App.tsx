@@ -30,6 +30,18 @@ export function App() {
   const [isStatsPanelOpen, setIsStatsPanelOpen] = useState<boolean>(false);
   const [isOmpModalOpen, setIsOmpModalOpen] = useState<boolean>(false);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(true);
+  const {
+    width: leftSidebarWidth,
+    isDragging: isLeftSidebarDragging,
+    startResize: startLeftSidebarResize,
+    resetWidth: resetLeftSidebarWidth,
+  } = useResizable({
+    initialWidth: 240,
+    minWidth: 200,
+    maxWidth: () => (typeof window !== 'undefined' ? Math.min(500, Math.floor(window.innerWidth * 0.35)) : 500),
+    storageKey: 'omp_left_sidebar_width',
+    direction: 'right',
+  });
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(false);
   const {
     width: rightSidebarWidth,
@@ -52,8 +64,9 @@ export function App() {
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('changes');
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [gitStatus, setGitStatus] = useState<GitStatusResult | null>(null);
-  const [browserUrl, setBrowserUrl] = useState<string>('http://localhost:5173');
+  const [browserUrl, setBrowserUrl] = useState<string | null>(null);
   const [browserUrlNonce, setBrowserUrlNonce] = useState<number>(0);
+  const [isAgentDriving, setIsAgentDriving] = useState<boolean>(false);
   const handleOpenFileByPathRef = useRef<(path: string) => void>(() => {});
 
   const handleOpenBrowser = useCallback((targetUrl: string) => {
@@ -93,6 +106,22 @@ export function App() {
       handleOpenBrowser(url);
     });
   }, [handleOpenBrowser]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onBrowserDrivingState) return;
+    return window.electronAPI.onBrowserDrivingState((state) => {
+      setIsAgentDriving(Boolean(state.active));
+      if (state.active) {
+        setIsRightSidebarOpen(true);
+        setRightSidebarView('inspector');
+        setInspectorTab('browser');
+        if (state.url) {
+          setBrowserUrl(state.url);
+          setBrowserUrlNonce((prev) => prev + 1);
+        }
+      }
+    });
+  }, []);
 
   // Handle open local file requests from in-app markdown links or events
   useEffect(() => {
@@ -387,6 +416,8 @@ export function App() {
 
   const handleProcessStarted = useCallback(async () => {
     await resetChat(false);
+    setBrowserUrl(null);
+    setInspectorTab('changes');
     await newSession();
     refreshEngineState();
     refreshModels();
@@ -638,6 +669,8 @@ export function App() {
 
   const handleSelectSessionFromGroup = useCallback(
     async (sessionPath: string, projectId?: string) => {
+      setBrowserUrl(null);
+      setInspectorTab('changes');
       const foundRuntime = Object.values(runtimeStates).find((rt) => rt.sessionPath === sessionPath);
       if (foundRuntime && foundRuntime.runtimeId !== activeRuntimeId) {
         await switchRuntime(foundRuntime.runtimeId);
@@ -657,6 +690,8 @@ export function App() {
   );
   const handleNewSessionForProject = useCallback(
     async (projectId?: string) => {
+      setBrowserUrl(null);
+      setInspectorTab('changes');
       if (projectId) {
         const project = projects.find((p) => p.id === projectId);
         if (project && project.path !== workspacePath) {
@@ -668,6 +703,16 @@ export function App() {
     },
     [projects, workspacePath, openFolderDialog, newSession]
   );
+
+  // Reset browser state when active session changes
+  const prevActiveSessionRef = useRef<string | null>(activeSessionPath);
+  useEffect(() => {
+    if (prevActiveSessionRef.current !== activeSessionPath) {
+      prevActiveSessionRef.current = activeSessionPath;
+      setBrowserUrl(null);
+      setInspectorTab('changes');
+    }
+  }, [activeSessionPath]);
 
 
   // Auto-switch Visual Diff tab when a new pending diff arrives
@@ -917,38 +962,57 @@ export function App() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Left Sidebar: File Tree & Sessions */}
         <div
-          className={`bg-panel border-r border-border flex flex-col shrink-0 select-none transition-all duration-200 overflow-hidden ${
-            isLeftSidebarOpen ? 'w-60 opacity-100' : 'w-0 opacity-0 border-r-0 pointer-events-none'
+          className={`bg-panel border-r border-border flex flex-col shrink-0 select-none relative overflow-hidden ${
+            isLeftSidebarDragging ? 'transition-none' : 'transition-all duration-200'
+          } ${
+            isLeftSidebarOpen ? 'opacity-100' : 'opacity-0 border-r-0 pointer-events-none'
           }`}
+          style={{ width: isLeftSidebarOpen ? `${leftSidebarWidth}px` : 0 }}
         >
-          <div className="w-60 h-full flex flex-col">
-            <ProjectGroupList
-              projects={projects}
-              activeProjectId={projects.find((p) => p.path === workspacePath)?.id}
-              activeProjectPath={workspacePath}
-              sessions={sessions}
-              activeSessionPath={activeSessionPath}
-              activeSessionName={engineState?.sessionName}
-              currentStatus={status}
-              runtimeStates={runtimeStates}
-              onSelectProject={handleSelectProject}
-              onAddProject={handleAddProject}
-              onRemoveProject={handleRemoveProject}
-              onTogglePinProject={handleTogglePinProject}
-              onSelectSession={handleSelectSessionFromGroup}
-              onNewSession={handleNewSessionForProject}
-              onDeleteSession={deleteSession}
-              onRenameSession={renameSession}
-              onExportSession={exportSession}
-            />
-            <ProjectTree
-              files={files}
-              selectedFile={selectedFile}
-              onSelectFile={handleSelectFileWithGuard}
-              onReload={refreshFiles}
-              onAddToChat={handleAddToChat}
-              onDeleteFile={handleDeleteFile}
-            />
+          {/* Left Resize Handle */}
+          {isLeftSidebarOpen && (
+            <div
+              onMouseDown={startLeftSidebarResize}
+              onDoubleClick={resetLeftSidebarWidth}
+              className="absolute right-0 top-0 bottom-0 w-2 translate-x-1 cursor-col-resize z-30 group flex items-center justify-center hover:bg-codex-accent/40 active:bg-codex-accent transition-colors"
+              title={t('sidebar.leftResizeHandle')}
+            >
+              <div className="w-0.5 h-8 rounded-full bg-transparent group-hover:bg-codex-accent/80 transition-colors" />
+            </div>
+          )}
+
+          <div className="h-full flex flex-col" style={{ width: `${leftSidebarWidth}px` }}>
+            <div className="shrink-0 max-h-[45%] flex flex-col min-h-[140px] border-b border-border">
+              <ProjectGroupList
+                projects={projects}
+                activeProjectId={projects.find((p) => p.path === workspacePath)?.id}
+                activeProjectPath={workspacePath}
+                sessions={sessions}
+                activeSessionPath={activeSessionPath}
+                activeSessionName={engineState?.sessionName}
+                currentStatus={status}
+                runtimeStates={runtimeStates}
+                onSelectProject={handleSelectProject}
+                onAddProject={handleAddProject}
+                onRemoveProject={handleRemoveProject}
+                onTogglePinProject={handleTogglePinProject}
+                onSelectSession={handleSelectSessionFromGroup}
+                onNewSession={handleNewSessionForProject}
+                onDeleteSession={deleteSession}
+                onRenameSession={renameSession}
+                onExportSession={exportSession}
+              />
+            </div>
+            <div className="flex-1 flex flex-col min-h-0">
+              <ProjectTree
+                files={files}
+                selectedFile={selectedFile}
+                onSelectFile={handleSelectFileWithGuard}
+                onReload={refreshFiles}
+                onAddToChat={handleAddToChat}
+                onDeleteFile={handleDeleteFile}
+              />
+            </div>
             <SubagentHub subagents={subagents} />
           </div>
         </div>
@@ -999,6 +1063,13 @@ export function App() {
               approvalMode={approvalMode}
               onSelectApprovalMode={setApprovalMode}
               onOpenStatsPanel={() => setIsStatsPanelOpen(true)}
+              diffFiles={activeDiff ? [activeDiff] : []}
+              subagents={subagents}
+              onSelectDiff={() => {
+                setIsRightSidebarOpen(true);
+                setRightSidebarView('inspector');
+                setInspectorTab('changes');
+              }}
             />
           ) : (
             <CanvasContainer
@@ -1059,8 +1130,9 @@ export function App() {
                 onExpandCanvas={() => setCenterView((prev) => (prev === 'workbench' ? 'chat' : 'workbench'))}
                 activeTab={inspectorTab}
                 onTabChange={setInspectorTab}
-                initialBrowserUrl={browserUrl}
+                initialBrowserUrl={browserUrl || undefined}
                 browserUrlNonce={browserUrlNonce}
+                isAgentDriving={isAgentDriving}
                 diffFiles={activeDiff ? [activeDiff] : []}
                 onAcceptDiff={acceptDiff}
                 onRejectDiff={rejectDiff}
@@ -1128,7 +1200,7 @@ export function App() {
         </div>
       </div>
       {/* Fullscreen transparent overlay while resizing to prevent webview/monaco mouse event interception */}
-      {isRightSidebarDragging && (
+      {(isLeftSidebarDragging || isRightSidebarDragging) && (
         <div className="fixed inset-0 z-50 cursor-col-resize select-none pointer-events-auto bg-transparent" />
       )}
 

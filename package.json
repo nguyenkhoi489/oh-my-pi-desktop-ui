@@ -32,6 +32,8 @@
     "test:editor-save": "node --experimental-strip-types scripts/verify-editor-save-state.mjs",
     "test:unsaved-guard": "node --experimental-strip-types scripts/verify-unsaved-guard.mjs",
     "test:clean-slate": "node --experimental-strip-types scripts/verify-clean-slate-and-artifacts.mjs",
+    "test:chat-context-card": "node --experimental-strip-types scripts/verify-chat-context-card.mjs",
+    "test:browser-cdp-driver": "node --experimental-strip-types scripts/verify-browser-cdp-driver.mjs",
     "test:grievances": "node --experimental-strip-types scripts/verify-grievances.mjs",
     "test:ssh-hosts": "node --experimental-strip-types scripts/verify-ssh-hosts.mjs",
     "test:image-backends": "node --experimental-strip-types scripts/verify-image-backends.mjs",

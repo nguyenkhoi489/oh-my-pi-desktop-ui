@@ -64,11 +64,20 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
   onExportSession,
 }) => {
   const { t } = useI18n();
-  // Projects are collapsed by default
+  // Cac du an mac dinh duoc thu gon
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+  // Quan ly trang thai xem them session theo tung du an
+  const [expandedAllSessions, setExpandedAllSessions] = useState<Record<string, boolean>>({});
 
   const toggleCollapse = (projectId: string) => {
     setExpandedProjects((prev) => ({
+      ...prev,
+      [projectId]: !prev[projectId],
+    }));
+  };
+
+  const toggleExpandAllSessions = (projectId: string) => {
+    setExpandedAllSessions((prev) => ({
       ...prev,
       [projectId]: !prev[projectId],
     }));
@@ -156,9 +165,9 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
   };
 
   return (
-    <div className="flex flex-col border-t border-border p-2 bg-panel shrink-0 select-none overflow-y-auto max-h-[50%]">
-      {/* Header Bar */}
-      <div className="flex items-center justify-between px-2 py-1 mb-1 text-[11px] font-bold text-slate-400 dark:text-zinc-500 tracking-wider uppercase shrink-0">
+    <div className="flex flex-col h-full overflow-hidden select-none bg-panel">
+      {/* Header Bar - Fixed top */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/40 text-[11px] font-bold text-slate-400 dark:text-zinc-500 tracking-wider uppercase shrink-0">
         <div className="flex items-center gap-1.5">
           <FolderGit2 className="w-3.5 h-3.5" />
           <span>{t('projects.title')}</span>
@@ -175,13 +184,33 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
         )}
       </div>
 
-      {/* Project Trees */}
-      <div className="space-y-1">
+      {/* Project Trees - Scrollable list */}
+      <div className="flex-1 overflow-y-auto min-h-0 p-2 space-y-1">
         {projects.map((project) => {
           const isCollapsed = !expandedProjects[project.id];
           const projectSessions = groupedSessions.map.get(project.id) || [];
           const isActiveProject = activeProjectId === project.id || activeProjectPath === project.path;
 
+          // Sap xep session theo updatedAt moi nhat
+          const sortedSessions = [...projectSessions].sort((a, b) => {
+            const timeB = new Date(b.updatedAt || b.timestamp || 0).getTime();
+            const timeA = new Date(a.updatedAt || a.timestamp || 0).getTime();
+            return timeB - timeA;
+          });
+          const isExpandedAll = !!expandedAllSessions[project.id];
+          const MAX_VISIBLE_SESSIONS = 3;
+          const hasMore = !isExpandedAll && sortedSessions.length > MAX_VISIBLE_SESSIONS;
+          const hiddenCount = sortedSessions.length - MAX_VISIBLE_SESSIONS;
+
+          let visibleSessions = sortedSessions;
+          if (hasMore) {
+            visibleSessions = sortedSessions.slice(0, MAX_VISIBLE_SESSIONS);
+            // Bat bien: Luon ghim session active neu o ngoai top 3
+            const activeSessionInProject = sortedSessions.find((s) => s.path === activeSessionPath);
+            if (activeSessionInProject && !visibleSessions.some((s) => s.path === activeSessionPath)) {
+              visibleSessions = [...visibleSessions, activeSessionInProject];
+            }
+          }
           return (
             <div key={project.id} className="flex flex-col rounded-md overflow-hidden">
               {/* Project Header Row */}
@@ -268,12 +297,12 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
               {/* Child Sessions */}
               {!isCollapsed && (
                 <div className="pl-4 pr-1 py-0.5 space-y-0.5 border-l border-border/40 ml-3">
-                  {projectSessions.length === 0 ? (
+                  {visibleSessions.length === 0 ? (
                     <div className="px-2 py-1 text-[11px] text-slate-400 dark:text-zinc-500 italic">
                       {t('threads.noSessions')}
                     </div>
                   ) : (
-                    projectSessions.map((session) => {
+                    visibleSessions.map((session) => {
                       const isActiveSession = activeSessionPath === session.path;
                       const { isRunning, attention } = getSessionStatus(session);
                       const title = (isActiveSession && activeSessionName) || session.title || 'New Session';
@@ -344,6 +373,31 @@ export const ProjectGroupList: React.FC<ProjectGroupListProps> = React.memo(({
                         </div>
                       );
                     })
+                  )}
+
+                  {hasMore && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpandAllSessions(project.id);
+                      }}
+                      className="w-full mt-0.5 py-1 px-2 text-[11px] font-medium text-blue-500 dark:text-blue-400 hover:bg-blue-500/10 rounded text-left transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>+ {t('projects.showMoreSessions', { count: hiddenCount })}</span>
+                    </button>
+                  )}
+                  {isExpandedAll && sortedSessions.length > MAX_VISIBLE_SESSIONS && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpandAllSessions(project.id);
+                      }}
+                      className="w-full mt-0.5 py-1 px-2 text-[11px] font-medium text-slate-500 dark:text-zinc-400 hover:bg-surface-highlight rounded text-left transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>- {t('projects.showFewerSessions')}</span>
+                    </button>
                   )}
                 </div>
               )}

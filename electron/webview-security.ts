@@ -2,7 +2,7 @@
  * Webview security hardening for Electron guest webcontents.
  */
 
-import type { App } from 'electron';
+import type { App, WebContents } from 'electron';
 
 export interface WebviewPreferences {
   preload?: string;
@@ -72,6 +72,27 @@ export interface ElectronAppWithEvents {
     listener: (event: unknown, ...args: unknown[]) => void
   ): unknown;
 }
+export class WebviewGuestRegistry {
+  private static guestContents: WebContents | null = null;
+
+  static setGuest(contents: unknown): void {
+    this.guestContents = (contents && typeof contents === 'object' ? contents : null) as WebContents | null;
+  }
+
+  static getGuest(): WebContents | null {
+    if (this.guestContents && typeof this.guestContents.isDestroyed === 'function' && this.guestContents.isDestroyed()) {
+      this.guestContents = null;
+    }
+    return this.guestContents;
+  }
+
+  static clearGuest(contents?: unknown): void {
+    if (!contents || this.guestContents === contents) {
+      this.guestContents = null;
+    }
+  }
+}
+
 
 /**
  * Attaches security lockdown handlers for all webviews created in the Electron application.
@@ -120,6 +141,12 @@ export function configureWebviewSecurity(
     });
 
     if (typeof contents.getType === 'function' && contents.getType() === 'webview') {
+      WebviewGuestRegistry.setGuest(contents);
+      if (typeof contents.on === 'function') {
+        contents.on('destroyed', () => {
+          WebviewGuestRegistry.clearGuest(contents);
+        });
+      }
       // Deny all permission requests and permission checks for guest webview sessions
       if (contents.session) {
         if (typeof contents.session.setPermissionRequestHandler === 'function') {

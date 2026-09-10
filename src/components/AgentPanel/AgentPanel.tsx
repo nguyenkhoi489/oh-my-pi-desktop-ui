@@ -17,6 +17,8 @@ import {
   OmpModelInfo,
   OmpThinkingLevel,
   OmpApprovalMode,
+  FileDiffItem,
+  OmpSubagentInfo,
 } from '../../types';
 import { ChatHistory } from './ChatHistory';
 import { AgentActivityIndicator } from './AgentActivityIndicator';
@@ -76,6 +78,9 @@ export interface AgentPanelProps {
   approvalMode?: OmpApprovalMode;
   onSelectApprovalMode?: (mode: OmpApprovalMode) => void;
   onOpenStatsPanel?: () => void;
+  diffFiles?: FileDiffItem[];
+  subagents?: OmpSubagentInfo[];
+  onSelectDiff?: (index: number) => void;
 }
 
 const AgentPanelComponent: React.FC<AgentPanelProps> = ({
@@ -111,6 +116,9 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   retryState,
   onAbortRetry,
   onRepairSession,
+  diffFiles = [],
+  subagents = [],
+  onSelectDiff,
   projectName,
   gitBranch,
   floatingChanges,
@@ -177,6 +185,9 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
             activeToolCalls={activeToolCalls}
             currentStreamText={currentStreamText}
             status={status}
+            diffFiles={diffFiles}
+            subagents={subagents}
+            onSelectDiff={onSelectDiff}
             onBranchSession={onBranchSession}
             onOpenFile={onOpenFile}
             onOpenBrowser={onOpenBrowser}

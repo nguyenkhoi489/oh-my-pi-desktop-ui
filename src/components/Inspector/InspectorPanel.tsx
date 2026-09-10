@@ -33,6 +33,7 @@ export interface InspectorPanelProps {
   initialBrowserUrl?: string;
   browserUrlNonce?: number;
   onSendUrlToChat?: (url: string) => void;
+  isAgentDriving?: boolean;
   // Changes Tab
   diffFiles?: FileDiffItem[];
   activeDiffIndex?: number;
@@ -59,9 +60,10 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = memo(function Inspe
   onClose,
   activeTab,
   onTabChange,
-  initialBrowserUrl = 'http://localhost:5173',
+  initialBrowserUrl,
   browserUrlNonce,
   onSendUrlToChat,
+  isAgentDriving,
   diffFiles = [],
   activeDiffIndex = 0,
   onSelectDiff,
@@ -110,11 +112,13 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = memo(function Inspe
   const hasChangesTab = hasChanges || currentTab === 'changes';
   const [hasVisitedBrowser, setHasVisitedBrowser] = useState<boolean>(false);
   useEffect(() => {
-    if (currentTab === 'browser' || initialBrowserUrl) {
+    if (!initialBrowserUrl && currentTab !== 'browser') {
+      setHasVisitedBrowser(false);
+    } else if (currentTab === 'browser' || initialBrowserUrl) {
       setHasVisitedBrowser(true);
     }
-  }, [currentTab, initialBrowserUrl]);
-  const hasBrowserTab = currentTab === 'browser' || hasVisitedBrowser || Boolean(initialBrowserUrl);
+  }, [currentTab, initialBrowserUrl, workspacePath]);
+  const hasBrowserTab = currentTab === 'browser' || Boolean(initialBrowserUrl) || hasVisitedBrowser;
   useEffect(() => {
     if (activeTab !== undefined) {
       setInternalTab(activeTab);
@@ -319,6 +323,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = memo(function Inspe
             <ArtifactsOverview
               diffFiles={diffFiles}
               sources={sources}
+              workspacePath={workspacePath}
               onSelectDiff={(idx) => {
                 onSelectDiff?.(idx);
                 setIsViewingDiffDetail(true);
@@ -366,6 +371,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = memo(function Inspe
           <BrowserPanel
             initialUrl={initialBrowserUrl}
             urlNonce={browserUrlNonce}
+            isAgentDriving={isAgentDriving}
             onSendUrlToChat={onSendUrlToChat}
           />
         </div>

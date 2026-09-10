@@ -4,6 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import type { HostUriResultPayload } from './omp-rpc-types.ts';
 import type { HostOpenRequest } from './types.ts';
+import { WebviewGuestRegistry } from './webview-security.ts';
+import { WebviewCdpDriver } from './webview-cdp-driver.ts';
 
 const electron = typeof electronPkg === 'object' && electronPkg !== null ? (electronPkg as any).default || electronPkg : {};
 const shell = electron.shell || { openExternal: async () => {}, showItemInFolder: () => {} };
@@ -29,6 +31,9 @@ export interface HostToolDefinition {
 
 export interface HostIntegrationOptions {
   openInApp?: (request: HostOpenRequest) => void;
+  getMainWindow?: () => unknown;
+  getGuestWebContents?: () => unknown;
+  cdpDriver?: WebviewCdpDriver;
 }
 
 const DEFAULT_TOOL_TIMEOUT_MS = 15000;
@@ -37,10 +42,41 @@ const PICK_FILE_TIMEOUT_MS = 10 * 60 * 1000;
 export class HostToolRegistry {
   private tools: Map<string, HostToolDefinition> = new Map();
   private openInApp?: (request: HostOpenRequest) => void;
+  private getMainWindow?: () => unknown;
+  private getGuestWebContents?: () => unknown;
+  private cdpDriver: WebviewCdpDriver;
 
   constructor(options: HostIntegrationOptions = {}) {
     this.openInApp = options.openInApp;
+    this.getMainWindow = options.getMainWindow;
+    this.getGuestWebContents = options.getGuestWebContents;
+    this.cdpDriver = options.cdpDriver || new WebviewCdpDriver();
     this.registerBuiltinTools();
+  }
+
+  private notifyDrivingState(active: boolean, url?: string): void {
+    const rawWin = this.getMainWindow ? this.getMainWindow() : electron.BrowserWindow?.getAllWindows?.()?.[0];
+    const win = rawWin as { isDestroyed?: () => boolean; webContents?: { isDestroyed?: () => boolean; send?: (ch: string, ...args: unknown[]) => void } };
+    if (win && !win.isDestroyed?.() && win.webContents && !win.webContents.isDestroyed?.()) {
+      win.webContents.send?.('omp:browser-driving-state', { active, url });
+    }
+  }
+  private async ensureBrowserGuest(url?: string): Promise<electronPkg.WebContents> {
+    this.notifyDrivingState(true, url);
+    let guest = (this.getGuestWebContents ? this.getGuestWebContents() : WebviewGuestRegistry.getGuest()) as electronPkg.WebContents | null;
+    if (!guest) {
+      for (let i = 0; i < 20; i++) {
+        const { promise, resolve } = Promise.withResolvers<void>();
+        setTimeout(resolve, 100);
+        await promise;
+        guest = (this.getGuestWebContents ? this.getGuestWebContents() : WebviewGuestRegistry.getGuest()) as electronPkg.WebContents | null;
+        if (guest) break;
+      }
+    }
+    if (!guest) {
+      throw new Error('No active In-App Browser webview found. Please open the browser tab first.');
+    }
+    return guest;
   }
 
   // Register tool
@@ -92,11 +128,23 @@ export class HostToolRegistry {
     const timeoutMs = context.timeoutMs ?? tool.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
     let timer: NodeJS.Timeout | undefined;
     let onAbort: (() => void) | undefined;
+    const toolAbortController = new AbortController();
+    const onParentAbort = () => toolAbortController.abort();
+    if (context.signal.aborted) {
+      toolAbortController.abort();
+    } else {
+      context.signal.addEventListener('abort', onParentAbort, { once: true });
+    }
+
     const guardPromise = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
+        toolAbortController.abort();
         reject(new Error(`Host tool "${name}" timed out after ${timeoutMs}ms`));
       }, timeoutMs);
-      onAbort = () => reject(new Error(`Host tool "${name}" was aborted`));
+      onAbort = () => {
+        toolAbortController.abort();
+        reject(new Error(`Host tool "${name}" was aborted`));
+      };
       context.signal.addEventListener('abort', onAbort, { once: true });
     });
 
@@ -104,7 +152,7 @@ export class HostToolRegistry {
       const execPromise = (async () => {
         const rawRes = await tool.execute(args, {
           toolCallId: context.toolCallId,
-          signal: context.signal,
+          signal: toolAbortController.signal,
         });
 
         if (typeof rawRes === 'string') {
@@ -132,6 +180,7 @@ export class HostToolRegistry {
     } finally {
       clearTimeout(timer);
       if (onAbort) context.signal.removeEventListener('abort', onAbort);
+      context.signal.removeEventListener('abort', onParentAbort);
     }
   }
 
@@ -254,6 +303,139 @@ export class HostToolRegistry {
           return tm('electron.hostTools.pickFile.canceled');
         }
         return tm('electron.hostTools.pickFile.selected', { path: res.filePaths[0] });
+      },
+    });
+
+    // 6. browser_navigate: Navigate in-app webview
+    this.register({
+      name: 'browser_navigate',
+      label: 'Navigate In-App Browser',
+      description: 'Navigate the in-app browser to a validated HTTP/HTTPS or about:blank URL',
+      timeoutMs: 60000,
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'Target URL to load' },
+        },
+        required: ['url'],
+      },
+      execute: async (args: { url: string }, context) => {
+        const targetUrl = String(args?.url || '').trim();
+        WebviewCdpDriver.validateUrl(targetUrl);
+        const guest = await this.ensureBrowserGuest(targetUrl);
+        try {
+          await this.cdpDriver.ensureAttached(guest);
+          const res = await this.cdpDriver.navigate(targetUrl, context.signal);
+          return `Navigated in-app browser to ${res.url}`;
+        } finally {
+          this.cdpDriver.detach();
+          this.notifyDrivingState(false);
+        }
+      },
+    });
+
+    // 7. browser_click: Click coordinates or element
+    this.register({
+      name: 'browser_click',
+      label: 'Click In-App Browser Element',
+      description: 'Click coordinates or a CSS selector in the in-app browser via native CDP',
+      timeoutMs: 60000,
+      parameters: {
+        type: 'object',
+        properties: {
+          selector: { type: 'string', description: 'CSS selector of the target element' },
+          x: { type: 'number', description: 'X coordinate to click' },
+          y: { type: 'number', description: 'Y coordinate to click' },
+        },
+      },
+      execute: async (args: { selector?: string; x?: number; y?: number }, context) => {
+        const guest = await this.ensureBrowserGuest();
+        try {
+          await this.cdpDriver.ensureAttached(guest);
+          const res = await this.cdpDriver.click({ selector: args?.selector, x: args?.x, y: args?.y }, context.signal);
+          return `Clicked in-app browser at (${res.x}, ${res.y})${args?.selector ? ` for selector "${args.selector}"` : ''}`;
+        } finally {
+          this.cdpDriver.detach();
+          this.notifyDrivingState(false);
+        }
+      },
+    });
+
+    // 8. browser_type: Type text into active element
+    this.register({
+      name: 'browser_type',
+      label: 'Type Into In-App Browser',
+      description: 'Type characters into the focused element in the in-app browser via native CDP',
+      timeoutMs: 60000,
+      parameters: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: 'Text characters to type' },
+        },
+        required: ['text'],
+      },
+      execute: async (args: { text: string }, context) => {
+        const guest = await this.ensureBrowserGuest();
+        try {
+          await this.cdpDriver.ensureAttached(guest);
+          const res = await this.cdpDriver.type(String(args?.text || ''), context.signal);
+          return `Typed ${res.count} characters into in-app browser`;
+        } finally {
+          this.cdpDriver.detach();
+          this.notifyDrivingState(false);
+        }
+      },
+    });
+
+    // 9. browser_snapshot: Capture sanitized accessibility tree
+    this.register({
+      name: 'browser_snapshot',
+      label: 'Snapshot In-App Browser AXTree',
+      description: 'Extract the accessibility tree with password masking and prompt injection defense wrapper',
+      timeoutMs: 60000,
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+      execute: async (_args: unknown, context) => {
+        const guest = await this.ensureBrowserGuest();
+        try {
+          await this.cdpDriver.ensureAttached(guest);
+          const origin = typeof guest.getURL === 'function' ? guest.getURL() : undefined;
+          const snapshotText = await this.cdpDriver.snapshot(origin, context.signal);
+          return {
+            content: [{ type: 'text', text: snapshotText }],
+          };
+        } finally {
+          this.cdpDriver.detach();
+          this.notifyDrivingState(false);
+        }
+      },
+    });
+
+    // 10. browser_screenshot: Capture visual screenshot
+    this.register({
+      name: 'browser_screenshot',
+      label: 'Capture In-App Browser Screenshot',
+      description: 'Capture a visual PNG screenshot of the in-app browser',
+      timeoutMs: 60000,
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+      execute: async (_args: unknown, context) => {
+        const guest = await this.ensureBrowserGuest();
+        try {
+          await this.cdpDriver.ensureAttached(guest);
+          const res = await this.cdpDriver.screenshot(context.signal);
+          return {
+            content: [{ type: 'text', text: 'In-app browser screenshot captured successfully' }],
+            details: { dataUrl: res.dataUrl },
+          };
+        } finally {
+          this.cdpDriver.detach();
+          this.notifyDrivingState(false);
+        }
       },
     });
   }

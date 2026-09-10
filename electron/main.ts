@@ -9,6 +9,7 @@ import { promisify } from 'util';
 const execFileAsync = promisify(execFile);
 import { fileURLToPath } from 'url';
 import { OmpBridge } from './omp-bridge.ts';
+import { cleanBrowserSessionStorage, resetWebviewToBlank } from './browser-clean-slate.ts';
 import type {
   WorkspaceFile,
   GitCommitSummary,
@@ -224,7 +225,7 @@ function createWindow() {
   mainWindow.webContents.on('did-finish-load', () => {
     // Reset active runtime ve default bridge khi reload trang
     if (runtimeManager) {
-      runtimeManager.setActiveRuntime(null);
+      runtimeManager.setActiveRuntime(null).catch(() => {});
     }
   });
   mainWindow.on('closed', () => {
@@ -334,6 +335,14 @@ ipcMain.handle('runtime:stop', async (_, runtimeId: string) => {
   const ok = await runtimeManager.stopRuntime(runtimeId);
   return { success: ok };
 });
+ipcMain.handle('omp:clean-slate', async () => {
+  await Promise.all([
+    cleanBrowserSessionStorage(),
+    resetWebviewToBlank(),
+  ]);
+  return { success: true };
+});
+
 
 ipcMain.handle('runtime:index-sessions', async (_, projectId: string, projectPath: string, profile?: string) => {
   try {
@@ -853,12 +862,16 @@ ipcMain.handle('omp:list-sessions', async () => {
 
 ipcMain.handle('omp:new-session', async (_, parentSession?: string, targetRuntimeId?: string) => {
   projectSessionsCache.clear();
+  await resetWebviewToBlank();
+  await cleanBrowserSessionStorage();
   const bridge = resolveBridge(targetRuntimeId);
   if (!bridge) return { success: false, error: 'Bridge uninitialized' };
   return bridge.newSession(parentSession);
 });
 
 ipcMain.handle('omp:switch-session', async (_, sessionPath: string, targetRuntimeId?: string) => {
+  await resetWebviewToBlank();
+  await cleanBrowserSessionStorage();
   const bridge = resolveBridge(targetRuntimeId);
   if (!bridge) return { success: false, error: 'Bridge uninitialized' };
   return bridge.switchSession(sessionPath);

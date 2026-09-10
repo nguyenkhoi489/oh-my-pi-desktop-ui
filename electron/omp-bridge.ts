@@ -245,6 +245,7 @@ export class OmpBridge {
   private availableCommands: OmpCommandInfo[] = [];
   public hostToolRegistry: HostToolRegistry = new HostToolRegistry({
     openInApp: (request) => this.emitHostOpenRequest(request),
+    getMainWindow: () => this.window,
   });
   public hostUriRouter: HostUriRouter = new HostUriRouter({
     openInApp: (request) => this.emitHostOpenRequest(request),

@@ -1,26 +1,25 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import {
   FileCode,
   FilePlus,
   FileMinus,
   FileEdit,
-  Image as ImageIcon,
   ChevronRight,
   Sparkles,
   Paperclip,
 } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nProvider';
+import { isImageFile } from '../../utils/imageAttachment';
+import { AttachmentImage } from '../Common/AttachmentImage';
+import { ImageLightboxModal } from '../AgentPanel/ImageLightboxModal';
 import type { FileDiffItem, ChatFileAttachment } from '../../types';
 
 export interface ArtifactsOverviewProps {
   diffFiles?: FileDiffItem[];
   sources?: ChatFileAttachment[];
   onSelectDiff?: (index: number) => void;
+  workspacePath?: string;
   className?: string;
-}
-
-function isImageFile(filePath: string): boolean {
-  return /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(filePath);
 }
 
 function getFileName(filePath: string): string {
@@ -38,9 +37,11 @@ export const ArtifactsOverview: React.FC<ArtifactsOverviewProps> = memo(function
   diffFiles = [],
   sources = [],
   onSelectDiff,
+  workspacePath,
   className = '',
 }) {
   const { t } = useI18n();
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
 
   return (
     <div className={`flex flex-col h-full w-full bg-background overflow-y-auto p-4 select-none space-y-6 ${className}`}>
@@ -147,33 +148,40 @@ export const ArtifactsOverview: React.FC<ArtifactsOverviewProps> = memo(function
             {sources.map((src, idx) => {
               const name = src.name || getFileName(src.path);
               const isImg = isImageFile(src.path);
+              const resolvedPath =
+                workspacePath && !src.path.startsWith('/') && !src.path.match(/^[a-zA-Z]:/)
+                  ? `${workspacePath.replace(/[/\\]$/, '')}/${src.path.replace(/^[/\\]/, '')}`
+                  : src.path;
+
+              const handleClickItem = () => {
+                if (isImg) {
+                  setLightboxImage({ url: resolvedPath, name });
+                } else {
+                  window.dispatchEvent(new CustomEvent('omp:open-file', { detail: { path: resolvedPath } }));
+                }
+              };
 
               return (
                 <div
                   key={`${src.path}-${idx}`}
-                  className="p-2 rounded-xl border border-border/80 bg-surface hover:bg-surface-highlight/70 transition-all duration-150 flex flex-col gap-1.5 shadow-2xs min-w-0"
+                  onClick={handleClickItem}
+                  className="p-2 rounded-xl border border-border/80 bg-surface hover:bg-surface-highlight/70 transition-all duration-150 flex flex-col gap-1.5 shadow-2xs min-w-0 cursor-pointer"
                   title={src.path}
                 >
                   <div className="h-16 rounded-lg bg-surface-highlight flex items-center justify-center overflow-hidden border border-border/40">
                     {isImg ? (
-                      <img
-                        src={`file://${src.path}`}
+                      <AttachmentImage
+                        src={resolvedPath}
                         alt={name}
                         className="h-full w-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
                       />
                     ) : (
                       <FileCode className="w-6 h-6 text-slate-400" />
                     )}
-                    {isImg && (
-                      <ImageIcon className="w-6 h-6 text-slate-400 hidden group-has-[img[style*='none']]:block" />
-                    )}
                   </div>
                   <div className="min-w-0">
                     <div className="text-[11px] font-medium text-slate-800 dark:text-zinc-200 truncate">
-                      {name}
+                       {name}
                     </div>
                   </div>
                 </div>
@@ -182,6 +190,14 @@ export const ArtifactsOverview: React.FC<ArtifactsOverviewProps> = memo(function
           </div>
         )}
       </div>
+      {lightboxImage && (
+        <ImageLightboxModal
+          isOpen={Boolean(lightboxImage)}
+          imageUrl={lightboxImage.url}
+          imageName={lightboxImage.name}
+          onClose={() => setLightboxImage(null)}
+        />
+      )}
     </div>
   );
 });

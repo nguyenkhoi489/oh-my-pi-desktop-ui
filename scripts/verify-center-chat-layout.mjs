@@ -85,6 +85,10 @@ console.log('\n[Test 2] ProjectGroupList Component & Live Runtime Status');
   assert(code.includes('formatRelativeTime'), 'Uses relative timestamp helper');
   assert(code.includes('const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});'), 'Project groups default to collapsed to prevent vertical overflow');
   assert(code.includes('const isCollapsed = !expandedProjects[project.id];'), 'Computes isCollapsed from expandedProjects map');
+  assert(code.includes('MAX_VISIBLE_SESSIONS = 3'), 'Caps visible sessions to 3 items per project');
+  assert(code.includes('expandedAllSessions'), 'Manages expanded session state per project');
+  assert(code.includes('projects.showMoreSessions'), 'Renders show more button when project has more than 3 sessions');
+  assert(code.includes('activeSessionInProject'), 'Guarantees active session is always pinned even outside top 3');
 }
 
 // ----------------------------------------------------
@@ -253,6 +257,9 @@ console.log('\n[Test 5] App.tsx 3-Column Layout Architecture');
     code.includes('onClearExternalAttachment={handleClearAttachmentRequest}'),
     'App.tsx passes onClearExternalAttachment to reset consumed attachmentRequest'
   );
+  assert(code.includes('leftSidebarWidth'), 'App.tsx tracks leftSidebarWidth via useResizable');
+  assert(code.includes('startLeftSidebarResize'), 'App.tsx binds startLeftSidebarResize to left resize handle');
+  assert(code.includes('sidebar.leftResizeHandle'), 'App.tsx provides localized tooltip for left resize handle');
 
   const composerPath = path.resolve('src/components/AgentPanel/PromptComposer.tsx');
   assert(fs.existsSync(composerPath), 'PromptComposer.tsx exists');

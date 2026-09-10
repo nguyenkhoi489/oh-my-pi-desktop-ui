@@ -14,6 +14,59 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-10 — Tool Call Sources & Outputs Popover, Native Webview CDP Driving & Clean Slate Reset
+- **State:**
+  - **Chat Tool Calls & Subagents Grouping (`ChatTurnContextCard`):** Đóng gói toàn bộ tool calls trong cùng một turn (cả streaming trực tiếp qua `activeToolCalls` lẫn lịch sử đã hoàn thành `msg.toolCalls`) thành `ChatTurnContextCard` nhỏ gọn (< 50px mặc định). Hỗ trợ Popover 2 ngăn **Sources** và **Outputs**, chuyển file trực tiếp tới editor hoặc Inspector Diff, hiển thị spinner và nhãn tool đang chạy khi streaming.
+  - **Inspector Tab Strip Latch Fix:** Đặt `browserUrl = null` mặc định trong `App.tsx`, reset đồng bộ `inspectorTab = 'changes'` và `browserUrl = null` khi chuyển project/session. Chỉ hiển thị duy nhất tab `Thay đổi (N)` khi chỉ có thay đổi code.
+  - **Tệp đính kèm trong Inspector:** Thay thế thẻ `img` thô bằng `AttachmentImage` (sử dụng data URL cache và IPC `read-image-base64` an toàn), truyền chính xác `workspacePath`, tích hợp `ImageLightboxModal` khi click để phóng to xem chi tiết.
+  - **Native Webview CDP Driving:**
+    - Lưu trữ và tự động dọn dẹp `guestWebContents` qua `WebviewGuestRegistry` trong `electron/webview-security.ts`.
+    - Hiện thực `WebviewCdpDriver` (`webContents.debugger.attach('1.3')`), tự động chờ `devtools-closed` trước khi attach, detach sau khi hoàn tất để nhường DevTools.
+    - Thao tác click/type sử dụng DOM Box Model (`DOM.querySelector`, `DOM.getBoxModel`, `Input.dispatchMouseEvent`, `Input.dispatchKeyEvent`), không chèn script eval.
+    - Bảo vệ chống Indirect Prompt Injection: Bọc snapshot AXTree trong `<untrusted_web_content>` (thoát ký tự an toàn) kèm cảnh báo hệ thống, che giấu mật khẩu/token (hỗ trợ thuộc tính `protectedValue` và từ khóa đa ngôn ngữ).
+    - Bổ sung bộ công cụ máy chủ: `browser_navigate`, `browser_click`, `browser_type`, `browser_snapshot`, `browser_screenshot`.
+    - Tự động mở tab Browser và khóa tương tác toàn diện (`isAgentDriving` Lock Overlay) trên cả toolbar lẫn webview khi agent điều khiển.
+  - **Clean Slate Storage Reset:**
+    - Hiện thực `cleanBrowserSessionStorage` và `resetWebviewToBlank` trong `electron/browser-clean-slate.ts`, xóa sạch cookies, storage, indexedDB, HTTP cache, auth cache và DNS cache trên partition `persist:omp-agent-browser`.
+    - Tích hợp reset tuần tự có thứ tự vào `omp:new-session`, `omp:switch-session`, và `RuntimeManager.setActiveRuntime`.
+    - Bảo toàn nghiêm ngặt hợp đồng bảo mật sandbox webview và `setWindowOpenHandler` (chặn popup, điều hướng link ngoài qua `openExternal`).
+  - **i18n Parity:** Bổ sung đầy đủ 24 keys mới cho `chat.context.*` và `browser.agentDriving*` trong cả `shared/i18n/vi.ts` và `shared/i18n/en.ts`.
+  - **Verification:**
+    - `npm run test:browser-panel`: 6/6 passed.
+    - `npm run test:clean-slate`: 76/76 passed.
+    - `npm run test:chat-context-card`: 60/60 passed.
+    - `npm run test:browser-cdp-driver`: 41/41 passed.
+    - `npm run test:host-tools`: 18/18 passed.
+    - `npm run test:preload`: passed.
+    - `npm run test:i18n`: 3616 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi TypeCheck.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng kiểm thử trực quan trên giao diện ứng dụng.
+- **Refs:** `plans/260910-2125-tool-call-browser-ux/plan.md`, `plans/260910-2125-tool-call-browser-ux/phase-*.md`, `electron/webview-cdp-driver.ts`, `electron/browser-clean-slate.ts`, `src/components/AgentPanel/ChatTurnContextCard.tsx`
+
+## 2026-09-10 — Resizable Left Sidebar, Fixed Panel Headers & 3-Session Capping
+- **State:**
+  - **Left Sidebar Resizing:** Tích hợp `useResizable` (`direction: 'right'`, clamp 200px – 500px, lưu `omp_left_sidebar_width` trong localStorage, double-click reset 240px). Đặt thanh Resize Handle ở mép phải của Left Sidebar kèm hiệu ứng hover. Cập nhật drag shield overlay toàn màn hình hỗ trợ cả `isLeftSidebarDragging` chống kẹt chuột qua webview/Monaco.
+  - **Fixed Headers & Split Independent Panels:**
+    - `src/components/Sidebar/ProjectGroupList.tsx`: Tách Header "DỰ ÁN" cố định (`shrink-0 border-b`), bọc danh sách project/session trong `flex-1 overflow-y-auto min-h-0`. Loại bỏ container `max-h-[50%]` cũ.
+    - `src/components/Sidebar/ProjectTree.tsx`: Tách Toolbar "EXPLORER" cố định (`shrink-0 border-b`), bọc file tree trong `flex-1 overflow-y-auto min-h-0`. Cuộn file dài không còn làm trôi toolbar Explorer.
+  - **Smart Session Capping & Active Pinning:**
+    - Mặc định mỗi dự án chỉ hiển thị tối đa 3 session mới nhất (sắp xếp theo `updatedAt` giảm dần).
+    - Tự động ghim (pin) `activeSessionPath` nếu phiên chat đang hoạt động nằm ngoài top 3.
+    - Thêm nút toggle "Xem thêm {count} phiên" / "Thu gọn" cho từng dự án.
+  - **i18n Parity:** Bổ sung `projects.showMoreSessions`, `projects.showFewerSessions`, `sidebar.leftResizeHandle` vào cả `shared/i18n/vi.ts` và `shared/i18n/en.ts`.
+  - **Verification:**
+    - `npm run test:i18n`: 3592 passed, 0 failed.
+    - `npm run test:center-chat-layout`: 113 passed, 0 failed (bổ sung assertions cho session capping & left sidebar resize).
+    - `npm run test:resizable-sidebar`: 17 passed, 0 failed (bổ sung test case kéo dãn left sidebar).
+    - `npm run test:fast-session-switching`: 72 passed, 0 failed.
+    - `npm run test:file-preview-links`: 18 passed, 0 failed.
+    - `npm run test:clean-slate`: 57 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi TypeCheck.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng cho người dùng trải nghiệm thực tế trên ứng dụng.
+- **Refs:** `plans/plan-260910-1830-sidebar-sessions-and-resizable-panels.md`, `plans/reports/advise-260910-1800-sidebar-sessions-and-fixed-panels.md`, `src/App.tsx`, `src/components/Sidebar/ProjectGroupList.tsx`, `src/components/Sidebar/ProjectTree.tsx`
+
 ## 2026-09-09 — Claude Code Advisor Plugin for OMP (Fable 5.1 Enabled)
 - **State:**
   - Phát hiện và xử lý thành công nguyên nhân ban đầu tưởng thiếu `fable`: Máy người dùng có 2 bản Claude Code: `/opt/homebrew/bin/claude` (2.1.85 cũ) và `~/.local/bin/claude` (2.1.266 mới).

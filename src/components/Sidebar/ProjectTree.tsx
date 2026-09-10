@@ -252,9 +252,9 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto p-2">
-      {/* Explorer Top Toolbar */}
-      <div className="flex items-center justify-between px-2 py-1.5 mb-1 text-[11px] font-bold text-slate-400 dark:text-zinc-500 tracking-wider uppercase">
+    <div className="flex flex-col h-full overflow-hidden select-none">
+      {/* Thanh cong cu Explorer co dinh */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/40 text-[11px] font-bold text-slate-400 dark:text-zinc-500 tracking-wider uppercase shrink-0 bg-panel">
         <div className="flex items-center gap-1.5">
           <FolderGit2 className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
           <span>Explorer</span>
@@ -297,7 +297,8 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
         </div>
       </div>
 
-      <div className="space-y-0.5">
+      {/* Vung cuon danh sach file */}
+      <div className="flex-1 overflow-y-auto min-h-0 p-2 space-y-0.5">
         {files.length > 0 ? (
           files.map((f) => renderFileNode(f))
         ) : (
@@ -306,7 +307,6 @@ const ProjectTreeComponent: React.FC<ProjectTreeProps> = ({
           </div>
         )}
       </div>
-
       {contextMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={closeMenu} onContextMenu={(e) => e.preventDefault()} />

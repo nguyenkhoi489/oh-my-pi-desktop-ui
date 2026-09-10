@@ -1558,6 +1558,7 @@ export interface ElectronAPI {
   ) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
   getPathForFile: (file: any) => string | undefined;
   onOpenInAppBrowser?: (callback: (url: string) => void) => () => void;
+  onBrowserDrivingState?: (callback: (state: { active: boolean; url?: string }) => void) => () => void;
 
 
   // Settings & Persistence (Phase 7)

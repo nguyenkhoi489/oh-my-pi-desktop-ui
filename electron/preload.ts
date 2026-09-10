@@ -655,6 +655,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('omp:open-in-app-browser', handler);
     return () => ipcRenderer.removeListener('omp:open-in-app-browser', handler);
   },
+  onBrowserDrivingState: (callback: (state: { active: boolean; url?: string }) => void) => {
+    const handler = (_: unknown, state: { active: boolean; url?: string }) => callback(state);
+    ipcRenderer.on('omp:browser-driving-state', handler);
+    return () => ipcRenderer.removeListener('omp:browser-driving-state', handler);
+  },
   // Multi-Project & Runtime Management (Phase 1)
   listProjects: () => ipcRenderer.invoke('projects:list'),
   addProject: (projectPath: string, name?: string) => ipcRenderer.invoke('projects:add', projectPath, name),

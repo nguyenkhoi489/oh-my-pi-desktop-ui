@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { BrowserWindow } from 'electron';
 import { tm } from '../shared/i18n/index.ts';
 import { OmpBridge } from './omp-bridge.ts';
+import { cleanBrowserSessionStorage, resetWebviewToBlank } from './browser-clean-slate.ts';
 import type { SettingsStore } from './settings-store.ts';
 import type {
   ManagedRuntimeSnapshot,
@@ -236,7 +237,9 @@ export class RuntimeManager {
     return { success: true, runtime: this.toSnapshot(managed), isNew: true };
   }
 
-  public setActiveRuntime(runtimeId: string | null): boolean {
+  public async setActiveRuntime(runtimeId: string | null): Promise<boolean> {
+    await resetWebviewToBlank();
+    await cleanBrowserSessionStorage();
     if (!runtimeId) {
       this.activeRuntimeId = null;
       this.emitActiveRuntimeChanged(null);

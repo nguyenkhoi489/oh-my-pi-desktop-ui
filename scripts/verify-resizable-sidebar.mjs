@@ -183,6 +183,17 @@ await test('App.tsx integrates useResizable with drag overlay and resize handle'
   assert(code.includes('fixed inset-0 z-50 cursor-col-resize select-none pointer-events-auto'), 'App.tsx mounts full-screen overlay during drag to prevent webview mouse capture');
 });
 
+await test('App.tsx integrates useResizable for Left Sidebar', async () => {
+  const appPath = path.resolve('src/App.tsx');
+  const code = fs.readFileSync(appPath, 'utf8');
+
+  assert(code.includes('leftSidebarWidth'), 'App.tsx tracks leftSidebarWidth');
+  assert(code.includes('startLeftSidebarResize'), 'App.tsx has startLeftSidebarResize');
+  assert(code.includes('onDoubleClick={resetLeftSidebarWidth}'), 'App.tsx supports left double-click reset');
+  assert(code.includes('isLeftSidebarDragging ? \'transition-none\' : \'transition-all duration-200\''), 'App.tsx disables transition during left drag');
+  assert(code.includes('(isLeftSidebarDragging || isRightSidebarDragging)'), 'App.tsx mounts drag overlay for both sidebars');
+});
+
 // ----------------------------------------------------
 // Test 5: i18n Key Parity
 // ----------------------------------------------------
@@ -190,6 +201,11 @@ console.log('\n[Test 5] i18n Key Parity');
 await test('inspector.resizeHandle is registered in vi and en', () => {
   assert(vi['inspector.resizeHandle'], 'vi dictionary has inspector.resizeHandle');
   assert(en['inspector.resizeHandle'], 'en dictionary has inspector.resizeHandle');
+});
+
+await test('sidebar.leftResizeHandle is registered in vi and en', () => {
+  assert(vi['sidebar.leftResizeHandle'], 'vi dictionary has sidebar.leftResizeHandle');
+  assert(en['sidebar.leftResizeHandle'], 'en dictionary has sidebar.leftResizeHandle');
 });
 
 console.log(`\n====================================================`);

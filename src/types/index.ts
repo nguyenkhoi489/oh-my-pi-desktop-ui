@@ -1572,6 +1572,7 @@ export interface ElectronAPI {
   ) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
   getPathForFile: (file: File) => string | undefined;
   onOpenInAppBrowser?: (callback: (url: string) => void) => () => void;
+  onBrowserDrivingState?: (callback: (state: { active: boolean; url?: string }) => void) => () => void;
   onOmpStatusChange: (callback: (status: OmpAgentStatus) => void) => () => void;
   onOmpStreamToken: (callback: (token: string) => void) => () => void;
   onOmpThinking: (callback: (thinking: ThinkingBlock) => void) => () => void;

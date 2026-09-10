@@ -10,6 +10,7 @@ import {
   Globe,
   AlertTriangle,
   RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { normalizeUrl, isLocalFileTarget, extractFilePath } from '../../utils/urlHelper';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -19,6 +20,7 @@ export interface BrowserPanelProps {
   initialUrl?: string;
   urlNonce?: number;
   onSendUrlToChat?: (url: string) => void;
+  isAgentDriving?: boolean;
   className?: string;
 }
 
@@ -41,6 +43,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
   initialUrl = 'http://localhost:5173',
   urlNonce,
   onSendUrlToChat,
+  isAgentDriving = false,
   className = '',
 }) {
   const { t } = useI18n();
@@ -277,7 +280,16 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
   }, [t, url]);
 
   return (
-    <div className={`flex flex-col h-full w-full bg-background overflow-hidden select-none ${className}`}>
+    <div className={`flex flex-col h-full w-full bg-background overflow-hidden select-none relative ${className}`}>
+      {/* Agent Driving Lock Overlay - covers entire panel including address bar and controls */}
+      {isAgentDriving && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-[1px] pointer-events-auto select-none animate-fade-in">
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface/95 border border-border shadow-xl text-xs font-medium text-slate-800 dark:text-zinc-200">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+            <span>{t('browser.agentDrivingActive')}</span>
+          </div>
+        </div>
+      )}
       {/* Top Navigation & Address Toolbar */}
       <div className="h-10 px-2 bg-surface border-b border-border flex items-center gap-1.5 shrink-0 text-slate-700 dark:text-zinc-300">
         {/* History Back */}
@@ -360,8 +372,9 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
         <button
           type="button"
           onClick={handleToggleDevTools}
-          title={t('browser.toggleDevTools')}
-          className={`p-1.5 rounded-md hover:bg-surface-highlight transition-colors ${
+          disabled={isAgentDriving}
+          title={isAgentDriving ? t('browser.agentDrivingLocked') : t('browser.toggleDevTools')}
+          className={`p-1.5 rounded-md hover:bg-surface-highlight transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
             isDevToolsOpen ? 'text-accent bg-surface-highlight' : 'text-slate-600 dark:text-zinc-400'
           }`}
         >
