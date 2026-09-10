@@ -159,6 +159,59 @@ console.log("[Test 6] Bearer authentication verification");
   const res = await handle(unauthReq);
   assert(res.status === 401, "Invalid token returns 401");
 }
+// ----------------------------------------------------
+// Test 7: Subagent Mode (General Completion without advise tool)
+// ----------------------------------------------------
+console.log("[Test 7] Subagent mode runs general runner without advise schema and returns text response");
+{
+  const token = "subagent-token-xyz";
+  let capturedMode = null;
+  let runnerCalled = 0;
+
+  const { handle } = createRequestHandler({
+    cwd: process.cwd(),
+    token,
+    runner: async (opts) => {
+      runnerCalled++;
+      capturedMode = opts.mode;
+      return {
+        structuredOutput: { severity: "none", note: "" },
+        textResponse: "Subagent completed task successfully.",
+        sessionId: "subagent-sess-999"
+      };
+    }
+  });
+
+  const subagentReq = new Request("http://127.0.0.1/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "opus",
+      tools: [
+        { type: "function", function: { name: "read", description: "read file" } },
+        { type: "function", function: { name: "edit", description: "edit file" } }
+      ],
+      messages: [
+        { role: "user", content: "Inspect codebase" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "c_read", type: "function", function: { name: "read", arguments: "{}" } }]
+        },
+        { role: "tool", content: "file content ok", tool_call_id: "c_read" }
+      ]
+    })
+  });
+
+  const res = await handle(subagentReq);
+  assert(res.status === 200, "Subagent request returns 200");
+  assert(capturedMode === "general", "Runner mode is general for subagents");
+  assert(runnerCalled === 1, "Runner is invoked even with tool result (no early stop in subagent mode)");
+  const data = await res.json();
+  assert(data.choices[0].finish_reason === "stop", "Finish reason is stop");
+  assert(data.choices[0].message.content === "Subagent completed task successfully.", "Content matches text response");
+  assert(data.choices[0].message.tool_calls === undefined, "No advise tool call in subagent mode");
+}
 
 console.log(`\n=== Verification Summary: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

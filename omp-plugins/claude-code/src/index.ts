@@ -80,11 +80,7 @@ export default async function (pi: OmpExtensionContext): Promise<void> {
   });
 
   registerEvent("session_shutdown", () => {
-    try {
-      server.stop();
-    } catch {
-      // Bo qua loi stop
-    }
+    // Giu shim server hoat dong xuyen suot cac session; chi don tien trinh va session map
     killAllActiveProcesses();
     sessionMap.reset();
   });

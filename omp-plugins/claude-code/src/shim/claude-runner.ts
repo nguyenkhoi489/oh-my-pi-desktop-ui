@@ -55,6 +55,7 @@ export interface RunnerUsage {
 
 export interface RunnerResult {
   structuredOutput: StructuredAdvisory;
+  textResponse?: string;
   sessionId?: string;
   usage?: RunnerUsage;
   totalCostUsd?: number;
@@ -71,6 +72,7 @@ export interface RunnerOptions {
   resumeId?: string;
   timeoutMs?: number;
   claudePath?: string;
+  mode?: "advisor" | "general";
 }
 
 export interface RunnerStreamOptions extends RunnerOptions {
@@ -195,16 +197,16 @@ function buildChildEnv(): NodeJS.ProcessEnv {
 export async function runClaudeProcess(options: RunnerOptions): Promise<RunnerResult> {
   const binary = options.claudePath || resolveClaudeBinary();
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const isGeneral = options.mode === "general";
   const args: string[] = [
     "-p",
     "--model",
     options.model,
     "--output-format",
     "json",
-    "--json-schema",
-    ADVISE_SCHEMA,
+    ...(isGeneral ? [] : ["--json-schema", ADVISE_SCHEMA]),
     "--allowedTools",
-    "Read,Grep,Glob",
+    isGeneral ? "Read,Grep,Glob,Edit,Write,Bash" : "Read,Grep,Glob",
     "--permission-mode",
     "dontAsk"
   ];
@@ -321,6 +323,22 @@ export async function runClaudeProcess(options: RunnerOptions): Promise<RunnerRe
         return;
       }
 
+      if (isGeneral) {
+        const textResult =
+          typeof parsed.result === "string"
+            ? parsed.result
+            : stdoutBuffer.trim();
+        resolve({
+          structuredOutput: { severity: "none", note: "" },
+          textResponse: textResult,
+          sessionId: typeof parsed.session_id === "string" ? parsed.session_id : undefined,
+          usage: parsed.usage as RunnerUsage | undefined,
+          totalCostUsd: typeof parsed.total_cost_usd === "number" ? parsed.total_cost_usd : undefined,
+          rawResult: parsed
+        });
+        return;
+      }
+
       const structured = extractStructuredOutput(parsed, stdoutBuffer.trim());
 
       resolve({
@@ -339,6 +357,7 @@ export async function runClaudeStreamProcess(options: RunnerStreamOptions): Prom
   const binary = options.claudePath || resolveClaudeBinary();
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
 
+  const isGeneral = options.mode === "general";
   const args: string[] = [
     "-p",
     "--verbose",
@@ -347,10 +366,9 @@ export async function runClaudeStreamProcess(options: RunnerStreamOptions): Prom
     "--output-format",
     "stream-json",
     "--include-partial-messages",
-    "--json-schema",
-    ADVISE_SCHEMA,
+    ...(isGeneral ? [] : ["--json-schema", ADVISE_SCHEMA]),
     "--allowedTools",
-    "Read,Grep,Glob",
+    isGeneral ? "Read,Grep,Glob,Edit,Write,Bash" : "Read,Grep,Glob",
     "--permission-mode",
     "dontAsk"
   ];
@@ -382,6 +400,7 @@ export async function runClaudeStreamProcess(options: RunnerStreamOptions): Prom
     let stderrBuffer = "";
     let timedOut = false;
 
+    let accumulatedText = "";
     try {
       proc = spawn(binary, args, {
         cwd: options.cwd,
@@ -434,6 +453,7 @@ export async function runClaudeStreamProcess(options: RunnerStreamOptions): Prom
             if (ev && ev.type === "content_block_delta") {
               const delta = ev.delta as Record<string, unknown> | undefined;
               if (delta && delta.type === "text_delta" && typeof delta.text === "string") {
+                accumulatedText += delta.text;
                 options.onTextDelta?.(delta.text);
               }
             }
@@ -500,6 +520,21 @@ export async function runClaudeStreamProcess(options: RunnerStreamOptions): Prom
       }
 
       const parsed = lastResultObj || {};
+      if (isGeneral) {
+        const textResult =
+          accumulatedText.trim() ||
+          (typeof parsed.result === "string" ? parsed.result : "");
+        resolve({
+          structuredOutput: { severity: "none", note: "" },
+          textResponse: textResult,
+          sessionId: typeof parsed.session_id === "string" ? parsed.session_id : observedSessionId,
+          usage: (parsed.usage as RunnerUsage | undefined) || observedUsage,
+          totalCostUsd: typeof parsed.total_cost_usd === "number" ? parsed.total_cost_usd : observedCost,
+          rawResult: parsed
+        });
+        return;
+      }
+
       const structured = observedStructuredOutput || extractStructuredOutput(parsed, "");
 
       resolve({

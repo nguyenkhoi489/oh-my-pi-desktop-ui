@@ -115,12 +115,28 @@ export function createRequestHandler(settings: ShimSettings): RequestHandlerCont
       const model = normalizeModelId(rawModel);
       const isStream = body.stream === true;
       const effort = resolveEffort(body.reasoning_effort, settings.defaultEffort);
-
+      const rawTools = Array.isArray(body.tools)
+        ? (body.tools as Array<{ type?: string; function?: { name?: string } }>)
+        : [];
+      const hasAdviseTool = rawTools.some(t => t.function?.name === "advise");
+      const hasOtherTools = rawTools.some(t => t.function?.name && t.function.name !== "advise");
+      const hasAdviseInMessages = messages.some(m => {
+        const rec = m as Record<string, unknown>;
+        if (!Array.isArray(rec.tool_calls)) return false;
+        return rec.tool_calls.some(tc => {
+          const callObj = tc as Record<string, unknown>;
+          const fnObj = callObj.function as Record<string, unknown> | undefined;
+          return fnObj?.name === "advise";
+        });
+      });
+      const isExplicitGeneral = body.mode === "general" || (hasOtherTools && !hasAdviseTool);
+      const isAdvisorMode = !isExplicitGeneral && (hasAdviseTool || hasAdviseInMessages || rawTools.length === 0);
+      const runnerMode: "advisor" | "general" = isAdvisorMode ? "advisor" : "general";
       const fullPromptInfo = buildPrompt(messages);
       const completionId = `chatcmpl-${crypto.randomUUID()}`;
 
-      // Neu message cuoi la ket qua tool thi tra stop ngay, khong can spawn
-      if (fullPromptInfo.isToolResultOnly) {
+      // Chi early stop o advisor mode khi message cuoi la ket qua tool
+      if (isAdvisorMode && fullPromptInfo.isToolResultOnly) {
         const convKey = sessionMap.computeKey(fullPromptInfo.systemPrompt, messages);
         sessionMap.markSeen(convKey, messages);
 
@@ -163,7 +179,8 @@ export function createRequestHandler(settings: ShimSettings): RequestHandlerCont
         effort,
         timeoutMs: settings.timeoutMs,
         sessionId: sessionPick.mode === "new" ? sessionPick.sessionId : undefined,
-        resumeId: sessionPick.mode === "resume" ? sessionPick.sessionId : undefined
+        resumeId: sessionPick.mode === "resume" ? sessionPick.sessionId : undefined,
+        mode: runnerMode
       };
 
       if (isStream) {
@@ -226,23 +243,23 @@ export function createRequestHandler(settings: ShimSettings): RequestHandlerCont
               }
             }
 
-            const severity = streamResult.structuredOutput.severity;
             let toolCall: OpenAiToolCall | undefined;
-
-            if (severity !== "none") {
-              toolCall = {
-                id: `call_${crypto.randomUUID().replace(/-/g, "")}`,
-                type: "function",
-                function: {
-                  name: "advise",
-                  arguments: JSON.stringify({
-                    severity,
-                    note: streamResult.structuredOutput.note
-                  })
-                }
-              };
+            if (isAdvisorMode) {
+              const severity = streamResult.structuredOutput.severity;
+              if (severity !== "none") {
+                toolCall = {
+                  id: `call_${crypto.randomUUID().replace(/-/g, "")}`,
+                  type: "function",
+                  function: {
+                    name: "advise",
+                    arguments: JSON.stringify({
+                      severity,
+                      note: streamResult.structuredOutput.note
+                    })
+                  }
+                };
+              }
             }
-
             if (headersSent) {
               // Header da gui: phat them tool_call (neu co), chunk cuoi va DONE
               if (toolCall) {
@@ -289,11 +306,14 @@ export function createRequestHandler(settings: ShimSettings): RequestHandlerCont
               await writer.write(encoder.encode("data: [DONE]\n\n"));
             } else {
               // Khong co delta nao duoc phat: tao toan bo chunk va mo response
+              const textOutput = isAdvisorMode
+                ? (toolCall ? undefined : "")
+                : (streamResult.textResponse ?? "");
               const chunks = buildSseChunks({
                 id: completionId,
                 model,
                 toolCall,
-                text: toolCall ? undefined : ""
+                text: textOutput
               });
               headersSent = true;
               responseGate.resolve(
@@ -429,22 +449,27 @@ export function createRequestHandler(settings: ShimSettings): RequestHandlerCont
           messages
         );
 
-        const severity = runnerResult.structuredOutput.severity;
         let toolCall: OpenAiToolCall | undefined;
-
-        if (severity !== "none") {
-          toolCall = {
-            id: `call_${crypto.randomUUID().replace(/-/g, "")}`,
-            type: "function",
-            function: {
-              name: "advise",
-              arguments: JSON.stringify({
-                severity,
-                note: runnerResult.structuredOutput.note
-              })
-            }
-          };
+        if (isAdvisorMode) {
+          const severity = runnerResult.structuredOutput.severity;
+          if (severity !== "none") {
+            toolCall = {
+              id: `call_${crypto.randomUUID().replace(/-/g, "")}`,
+              type: "function",
+              function: {
+                name: "advise",
+                arguments: JSON.stringify({
+                  severity,
+                  note: runnerResult.structuredOutput.note
+                })
+              }
+            };
+          }
         }
+
+        const textOutput = isAdvisorMode
+          ? (toolCall ? undefined : "")
+          : (runnerResult.textResponse ?? "");
 
         return new Response(
           JSON.stringify(
@@ -452,7 +477,7 @@ export function createRequestHandler(settings: ShimSettings): RequestHandlerCont
               id: completionId,
               model,
               toolCall,
-              text: toolCall ? undefined : "",
+              text: textOutput,
               usage: runnerResult.usage
             })
           ),

@@ -759,3 +759,106 @@ test("handle-request.ts: isToolResultOnly cap nhat seenMessages de turn tiep the
   assert.match(calls[1].prompt, /Turn 3 message/);
   assert.ok(!calls[1].prompt.includes("Turn 1"));
 });
+
+test("handle-request.ts: subagent mode voi tools khac advise hoat dong streaming text va finish_reason stop", async () => {
+  const token = "test-token";
+  let capturedMode: string | undefined;
+
+  const mockStreamRunner = async (opts: RunnerStreamOptions): Promise<RunnerResult> => {
+    capturedMode = opts.mode;
+    opts.onTextDelta?.("Day la ket qua ");
+    opts.onTextDelta?.("tu subagent opus.");
+    return {
+      structuredOutput: { severity: "none", note: "" },
+      textResponse: "Day la ket qua tu subagent opus.",
+      sessionId: "subagent-session-1"
+    };
+  };
+
+  const { handle } = createRequestHandler({
+    cwd: "/fake/cwd",
+    token,
+    streamRunner: mockStreamRunner
+  });
+
+  const req = new Request("http://127.0.0.1/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "opus",
+      stream: true,
+      tools: [
+        { type: "function", function: { name: "read", description: "read file" } },
+        { type: "function", function: { name: "bash", description: "run command" } }
+      ],
+      messages: [{ role: "user", content: "Kiem tra file README.md" }]
+    })
+  });
+
+  const res = await handle(req);
+  assert.equal(res.status, 200);
+  assert.equal(capturedMode, "general");
+
+  const text = await res.text();
+  const lines = text.split("\n").filter(l => l.startsWith("data: ") && l !== "data: [DONE]");
+  const chunks = lines.map(l => JSON.parse(l.slice(6)) as { choices: Array<{ delta: { content?: string; tool_calls?: unknown[] }; finish_reason: string | null }> });
+
+  const contentDeltas = chunks.map(c => c.choices[0].delta.content).filter(Boolean);
+  assert.equal(contentDeltas.join(""), "Day la ket qua tu subagent opus.");
+  const lastChunk = chunks[chunks.length - 1];
+  assert.equal(lastChunk.choices[0].finish_reason, "stop");
+  assert.equal(lastChunk.choices[0].delta.tool_calls, undefined);
+});
+
+test("handle-request.ts: subagent mode khong bi early stop khi nhan ket qua tool va tiep tuc goi runner", async () => {
+  const token = "test-token";
+  let runnerCalledCount = 0;
+
+  const mockRunner = async (opts: RunnerOptions): Promise<RunnerResult> => {
+    runnerCalledCount++;
+    return {
+      structuredOutput: { severity: "none", note: "" },
+      textResponse: "Phan tich tiep sau khi doc file xong",
+      sessionId: "subagent-session-2"
+    };
+  };
+
+  const { handle } = createRequestHandler({
+    cwd: "/fake/cwd",
+    token,
+    runner: mockRunner
+  });
+
+  // Request subagent chua ket qua tool result cua tool "read"
+  const req = new Request("http://127.0.0.1/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "opus",
+      stream: false,
+      tools: [
+        { type: "function", function: { name: "read", description: "read file" } }
+      ],
+      messages: [
+        { role: "user", content: "Kiem tra README" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "call_r1", type: "function", function: { name: "read", arguments: "{\"path\":\"README.md\"}" } }]
+        },
+        { role: "tool", tool_call_id: "call_r1", content: "# OMP Agent README" }
+      ]
+    })
+  });
+
+  const res = await handle(req);
+  assert.equal(res.status, 200);
+  assert.equal(runnerCalledCount, 1);
+
+  const body = (await res.json()) as {
+    choices: Array<{ message: { content: string; tool_calls?: unknown[] }; finish_reason: string }>;
+  };
+  assert.equal(body.choices[0].finish_reason, "stop");
+  assert.equal(body.choices[0].message.content, "Phan tich tiep sau khi doc file xong");
+  assert.equal(body.choices[0].message.tool_calls, undefined);
+});

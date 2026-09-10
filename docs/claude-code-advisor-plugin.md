@@ -18,8 +18,13 @@ Tiến trình con: `claude -p --model <model> --output-format stream-json ...`
        │ (stdout json / stream-json: structured_output { severity, note })
        ▼
 HTTP Shim map kết quả:
-  - severity != "none": SSE chunk / JSON `tool_calls: advise({ severity, note })`
-  - severity == "none": SSE chunk / JSON `content: ""` với `finish_reason: "stop"`
+  - Advisor Mode (request chứa tool advise):
+    - severity != "none": SSE chunk / JSON `tool_calls: advise({ severity, note })`
+    - severity == "none": SSE chunk / JSON `content: ""` với `finish_reason: "stop"`
+  - Subagent / General Mode (request cho task agent / subagent với các tool khác hoặc chat):
+    - Bỏ qua `--json-schema ADVISE_SCHEMA`, cho phép full tools (`Read,Grep,Glob,Edit,Write,Bash`)
+    - Stream text tự do qua `content_block_delta` (`text_delta`) với `finish_reason: "stop"`
+    - Không ngắt ở `isToolResultOnly`, tiếp tục duy trì hội thoại đa lượt khi subagent nhận kết quả tool
   - Quota/Rate limit: HTTP 429 (OMP watchdog pause advisor)
   - Timeout: HTTP 200 severity "none" (tránh OMP halt advisor sau 3 chu kỳ)
 ```

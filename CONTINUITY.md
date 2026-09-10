@@ -1751,3 +1751,22 @@ Entry template:
 - **Next:** Ready for packaging and user testing.
 - **Refs:**
   - `plans/plan-260907-1630-mcp-management-ui.md`
+
+## 2026-09-10 — Expanded omp-plugin-claude with Autonomous Subagent Mode
+- **State:** Completed investigation and implemented Autonomous Agent Pass-through mode for `omp-claude-code-provider`:
+  - `omp-plugins/claude-code/src/shim/claude-runner.ts`:
+    - Added `mode?: "advisor" | "general"` to `RunnerOptions` and `textResponse?: string` to `RunnerResult`.
+    - In `general` mode: omitted `--json-schema ADVISE_SCHEMA`, expanded tools to `Read,Grep,Glob,Edit,Write,Bash`, and captures full streamed text.
+  - `omp-plugins/claude-code/src/shim/handle-request.ts`:
+    - Differentiates `isAdvisorMode` vs `general` mode dynamically via tool inspections (`advise` vs other task tools).
+    - Prevents premature abort on `isToolResultOnly` in subagent mode, ensuring multi-turn tool results are fed back into the runner.
+    - Streams plain text chunks directly with `finish_reason: "stop"` without emitting forced `advise` tool calls.
+  - Lifecycle fix in `omp-plugins/claude-code/src/index.ts`:
+    - Kept HTTP server alive across sessions by removing `server.stop()` inside `session_shutdown`.
+  - Documentation & Verification:
+    - Added subagent test cases in `omp-plugins/claude-code/test/shim.test.ts` (17/17 passed).
+    - Updated `scripts/verify-claude-code-plugin.mjs` with Test 7 (28/28 passed).
+    - Verified end-to-end against live Claude Code runner with real SSE streaming.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` passed with 0 errors.
+- **In-flight:** None.
+- **Next:** Ready for subagent execution in OMP-Agent.
