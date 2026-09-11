@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   FileDiff,
   Code2,
@@ -56,17 +56,22 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
   const { t } = useI18n();
   const [hasVisitedBrowser, setHasVisitedBrowser] = useState<boolean>(activeTab === 'browser');
   const [previewNonce, setPreviewNonce] = useState<number>(0);
+  const prevActiveTabRef = useRef<ActiveCanvasTab>(activeTab);
+  const hasVisitedBrowserRef = useRef<boolean>(activeTab === 'browser');
 
   useEffect(() => {
     if (activeTab === 'browser') {
-      setHasVisitedBrowser(true);
-      setPreviewNonce((prev) => prev + 1);
+      if (!hasVisitedBrowserRef.current) {
+        hasVisitedBrowserRef.current = true;
+        setHasVisitedBrowser(true);
+      } else if (prevActiveTabRef.current !== 'browser') {
+        setPreviewNonce((prev) => prev + 1);
+      }
     }
+    prevActiveTabRef.current = activeTab;
   }, [activeTab]);
 
   const handleOpenLivePreview = useCallback(() => {
-    setHasVisitedBrowser(true);
-    setPreviewNonce((prev) => prev + 1);
     onSelectTab('browser');
   }, [onSelectTab]);
 
@@ -172,7 +177,7 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
         {hasVisitedBrowser && (
           <div className={`flex-1 min-h-0 ${activeTab === 'browser' ? 'flex flex-col' : 'hidden'}`}>
             <BrowserPanel
-              initialUrl={previewUrl}
+              initialUrl={previewUrl || 'about:blank'}
               urlNonce={previewNonce}
               partition="persist:omp-agent-preview"
             />

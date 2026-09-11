@@ -60,11 +60,15 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
   const [isDevToolsOpen, setIsDevToolsOpen] = useState<boolean>(false);
 
   const webviewRef = useRef<ElectronWebviewElement | null>(null);
+  const currentUrlRef = useRef<string>(initialUrl);
+  const initialSrcRef = useRef<string>(initialUrl);
+  const isDomReadyRef = useRef<boolean>(false);
+  const pendingNavUrlRef = useRef<string | null>(null);
 
   const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI);
 
   // Navigate to target URL
-  const navigateTo = useCallback((targetUrl: string) => {
+  const navigateTo = useCallback((targetUrl: string, force = false) => {
     if (isLocalFileTarget(targetUrl)) {
       const filePath = extractFilePath(targetUrl);
       const isHtml = Boolean(filePath && (filePath.toLowerCase().endsWith('.html') || filePath.toLowerCase().endsWith('.htm')));
@@ -79,6 +83,8 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
       }
     }
     const normalized = normalizeUrl(targetUrl);
+
+    currentUrlRef.current = normalized;
     setUrl(normalized);
     setInputUrl(normalized);
     setLoadError(null);
@@ -86,10 +92,31 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
 
     const wv = webviewRef.current;
     if (wv && typeof wv.loadURL === 'function') {
-      try {
-        wv.loadURL(normalized);
-      } catch (err) {
-        console.error('Failed to load URL in webview:', err);
+      if (isDomReadyRef.current) {
+        let currentWvUrl = '';
+        try {
+          currentWvUrl = typeof wv.getURL === 'function' ? wv.getURL() : '';
+        } catch {
+          // Webview guest not fully attached yet
+        }
+
+        if (!force && currentWvUrl && currentWvUrl === normalized) {
+          return;
+        }
+
+        wv.loadURL(normalized).catch((err: unknown) => {
+          const errObj = err as { errorCode?: number; errno?: number; code?: string; message?: string };
+          const isAborted =
+            errObj?.errorCode === -3 ||
+            errObj?.errno === -3 ||
+            errObj?.code === 'ERR_ABORTED' ||
+            (typeof errObj?.message === 'string' && errObj.message.includes('ERR_ABORTED'));
+          if (!isAborted) {
+            console.error('Failed to load URL in webview:', err);
+          }
+        });
+      } else {
+        pendingNavUrlRef.current = normalized;
       }
     }
   }, []);
@@ -104,7 +131,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
     if (initialUrl && (isUrlChanged || isNonceChanged)) {
       prevUrlRef.current = initialUrl;
       prevNonceRef.current = urlNonce;
-      navigateTo(initialUrl);
+      navigateTo(initialUrl, isNonceChanged);
     }
   }, [initialUrl, urlNonce, navigateTo]);
 
@@ -152,25 +179,27 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
       try {
         wv.reload();
       } catch {
-        navigateTo(url);
+        navigateTo(currentUrlRef.current);
       }
     } else {
-      navigateTo(url);
+      navigateTo(currentUrlRef.current);
     }
-  }, [navigateTo, url]);
+  }, [navigateTo]);
 
 
   const handleOpenExternal = useCallback(() => {
-    if (url && window.electronAPI?.openExternal) {
-      window.electronAPI.openExternal(url);
-    } else if (url) {
-      window.open(url, '_blank', 'noopener,noreferrer');
+    const activeUrl = currentUrlRef.current || url;
+    if (activeUrl && window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(activeUrl);
+    } else if (activeUrl) {
+      window.open(activeUrl, '_blank', 'noopener,noreferrer');
     }
   }, [url]);
 
   const handleSendToChat = useCallback(() => {
-    if (url && onSendUrlToChat) {
-      onSendUrlToChat(url);
+    const activeUrl = currentUrlRef.current || url;
+    if (activeUrl && onSendUrlToChat) {
+      onSendUrlToChat(activeUrl);
     }
   }, [url, onSendUrlToChat]);
 
@@ -196,6 +225,25 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
     const wv = webviewRef.current;
     if (!wv) return;
 
+    const onDomReady = () => {
+      isDomReadyRef.current = true;
+      if (pendingNavUrlRef.current && typeof wv.loadURL === 'function') {
+        const nextUrl = pendingNavUrlRef.current;
+        pendingNavUrlRef.current = null;
+        wv.loadURL(nextUrl).catch((err: unknown) => {
+          const errObj = err as { errorCode?: number; errno?: number; code?: string; message?: string };
+          const isAborted =
+            errObj?.errorCode === -3 ||
+            errObj?.errno === -3 ||
+            errObj?.code === 'ERR_ABORTED' ||
+            (typeof errObj?.message === 'string' && errObj.message.includes('ERR_ABORTED'));
+          if (!isAborted) {
+            console.error('Failed to load URL in webview:', err);
+          }
+        });
+      }
+    };
+
     const onStartLoading = () => {
       setIsLoading(true);
       setLoadError(null);
@@ -210,6 +258,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
         if (typeof wv.getURL === 'function') {
           const current = wv.getURL();
           if (current && current !== 'about:blank') {
+            currentUrlRef.current = current;
             setUrl(current);
             setInputUrl(current);
           }
@@ -222,6 +271,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
     const onDidNavigate = (e: Event) => {
       const navEvent = e as WebviewNavigateEvent;
       if (navEvent.url) {
+        currentUrlRef.current = navEvent.url;
         setUrl(navEvent.url);
         setInputUrl(navEvent.url);
       }
@@ -241,7 +291,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
         setLoadError({
           title: t('browser.loadErrorTitle'),
           description: t('browser.loadErrorDesc', {
-            url: failEvent.validatedURL || url,
+            url: failEvent.validatedURL || currentUrlRef.current,
             error: failEvent.errorDescription || String(failEvent.errorCode),
           }),
         });
@@ -262,6 +312,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
       setIsCrashed(true);
     };
 
+    wv.addEventListener('dom-ready', onDomReady);
     wv.addEventListener('did-start-loading', onStartLoading);
     wv.addEventListener('did-stop-loading', onStopLoading);
     wv.addEventListener('did-navigate', onDidNavigate);
@@ -273,6 +324,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
     wv.addEventListener('responsive', onResponsive);
 
     return () => {
+      wv.removeEventListener('dom-ready', onDomReady);
       wv.removeEventListener('did-start-loading', onStartLoading);
       wv.removeEventListener('did-stop-loading', onStopLoading);
       wv.removeEventListener('did-navigate', onDidNavigate);
@@ -283,7 +335,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
       wv.removeEventListener('unresponsive', onUnresponsive);
       wv.removeEventListener('responsive', onResponsive);
     };
-  }, [t, url]);
+  }, [t]);
 
   return (
     <div className={`flex flex-col h-full w-full bg-background overflow-hidden select-none relative ${className}`}>
@@ -452,7 +504,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
         ) : (
           <webview
             ref={webviewRef as unknown as React.RefObject<HTMLDivElement>}
-            src={url}
+            src={initialSrcRef.current}
             partition={partition}
             allowpopups={false}
             className="w-full h-full border-none"

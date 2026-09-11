@@ -59,7 +59,6 @@ await test('normalizeUrl correctly handles localhost, domains, queries, and sche
     normalizeUrl('singleword'),
     'https://www.google.com/search?q=singleword'
   );
-
   // Dangerous protocols sanitized to search query
   const jsResult = normalizeUrl('javascript:alert(1)');
   assert(jsResult.startsWith('https://www.google.com/search?q='), 'javascript: must be sanitized');
@@ -489,6 +488,31 @@ await test('isSafeFileUrl prevents symlink escapes and configureWebviewSecurity 
     await fs.rm(secretDir, { recursive: true, force: true }).catch(() => {});
     clearCanonicalWsCache();
   }
+});
+
+// ----------------------------------------------------
+// Test 8: Webview Navigation Loop Defense & ERR_ABORTED Mitigation
+// ----------------------------------------------------
+await test('BrowserPanel protects against in-page anchor loops and double-navigation aborts', async () => {
+  const browserPanelSrc = await fs.readFile(path.resolve('src/components/Inspector/BrowserPanel.tsx'), 'utf-8');
+
+  // Verify webview uses static initialSrcRef rather than dynamic reactive src={url}
+  assert(
+    browserPanelSrc.includes('src={initialSrcRef.current}'),
+    'BrowserPanel must use initialSrcRef to prevent React re-renders from re-triggering top-level navigations'
+  );
+
+  // Verify loadURL Promise catches and suppresses ERR_ABORTED (-3)
+  assert(
+    browserPanelSrc.includes("errObj?.code === 'ERR_ABORTED'") || browserPanelSrc.includes('ERR_ABORTED'),
+    'BrowserPanel must catch and suppress ERR_ABORTED (-3) on loadURL'
+  );
+
+  // Verify in-page navigation does not trigger loadURL loop
+  assert(
+    browserPanelSrc.includes('currentWvUrl === normalized'),
+    'BrowserPanel must deduplicate navigations when webview is already at the target URL'
+  );
 });
 
 console.log(`\nAll ${passCount} browser-panel verify tests passed successfully!`);
