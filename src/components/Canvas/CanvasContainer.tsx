@@ -1,18 +1,20 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   FileDiff,
   Code2,
-  BookOpen,
+  Globe,
   Terminal as TermIcon,
   GitCommit,
 } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nProvider';
-import { ActiveCanvasTab, FileDiffItem, WorkspaceFile, ThemeMode, ArtifactDocument, OmpModelInfo } from '../../types';
+import { ActiveCanvasTab, FileDiffItem, WorkspaceFile, ThemeMode, OmpModelInfo } from '../../types';
 import { DiffViewer } from './DiffViewer';
 import { CodeEditor } from './CodeEditor';
-import { ArtifactViewer } from './ArtifactViewer';
 import { TerminalView } from './TerminalView';
 import { CommitView } from './CommitView';
+import { BrowserPanel } from '../Inspector/BrowserPanel';
+import { toFileUrl } from '../../utils/urlHelper';
+import { isHtmlFile } from '../../utils/fileLanguage';
 interface CanvasContainerProps {
   activeTab: ActiveCanvasTab;
   onSelectTab: (tab: ActiveCanvasTab) => void;
@@ -25,10 +27,6 @@ interface CanvasContainerProps {
   onSaveFile?: (filePath: string, content: string) => Promise<boolean>;
   onDirtyChange?: (dirty: boolean) => void;
   onDraftChange?: (draft: string) => void;
-  artifacts?: ArtifactDocument[];
-  selectedArtifactId?: string;
-  onSelectArtifact?: (id: string) => void;
-  onReloadArtifact?: (id?: string) => void;
   workspacePath?: string;
   availableModels?: OmpModelInfo[];
   selectedModel?: OmpModelInfo | string | null;
@@ -46,13 +44,9 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
   selectedFile,
   fileContent,
   theme = 'light',
-  artifacts,
   onSaveFile,
   onDirtyChange,
   onDraftChange,
-  selectedArtifactId,
-  onSelectArtifact,
-  onReloadArtifact,
   workspacePath,
   availableModels = [],
   selectedModel,
@@ -60,6 +54,26 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
   isCommitDisabled,
 }) => {
   const { t } = useI18n();
+  const [hasVisitedBrowser, setHasVisitedBrowser] = useState<boolean>(activeTab === 'browser');
+  const [previewNonce, setPreviewNonce] = useState<number>(0);
+
+  useEffect(() => {
+    if (activeTab === 'browser') {
+      setHasVisitedBrowser(true);
+      setPreviewNonce((prev) => prev + 1);
+    }
+  }, [activeTab]);
+
+  const handleOpenLivePreview = useCallback(() => {
+    setHasVisitedBrowser(true);
+    setPreviewNonce((prev) => prev + 1);
+    onSelectTab('browser');
+  }, [onSelectTab]);
+
+  const previewUrl = selectedFile?.path && isHtmlFile(selectedFile.path)
+    ? toFileUrl(selectedFile.path)
+    : undefined;
+
   return (
     <div className="flex-1 flex flex-col h-full bg-background border-r border-border overflow-hidden">
       {/* Codex Canvas Tab Bar */}
@@ -92,20 +106,15 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
         </button>
 
         <button
-          onClick={() => onSelectTab('artifact')}
+          onClick={() => onSelectTab('browser')}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-            activeTab === 'artifact'
+            activeTab === 'browser'
               ? 'bg-surface text-slate-900 dark:text-zinc-100 font-semibold border border-border shadow-xs'
               : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 hover:bg-surface/60'
           }`}
         >
-          <BookOpen className={`w-3.5 h-3.5 ${activeTab === 'artifact' ? 'text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-zinc-400'}`} />
-          <span>Artifacts & Plan</span>
-          {artifacts && artifacts.length > 0 && (
-            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400">
-              {artifacts.length}
-            </span>
-          )}
+          <Globe className={`w-3.5 h-3.5 ${activeTab === 'browser' ? 'text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-zinc-400'}`} />
+          <span>{t('canvas.browserTab')}</span>
         </button>
 
         <button
@@ -156,17 +165,18 @@ export const CanvasContainer: React.FC<CanvasContainerProps> = ({
             onSaveFile={onSaveFile}
             onDirtyChange={onDirtyChange}
             onDraftChange={onDraftChange}
+            onOpenLivePreview={handleOpenLivePreview}
           />
         )}
 
-        {activeTab === 'artifact' && (
-          <ArtifactViewer
-            artifacts={artifacts}
-            selectedArtifactId={selectedArtifactId}
-            onSelectArtifact={onSelectArtifact}
-            onReloadArtifact={onReloadArtifact}
-            theme={theme}
-          />
+        {hasVisitedBrowser && (
+          <div className={`flex-1 min-h-0 ${activeTab === 'browser' ? 'flex flex-col' : 'hidden'}`}>
+            <BrowserPanel
+              initialUrl={previewUrl}
+              urlNonce={previewNonce}
+              partition="persist:omp-agent-preview"
+            />
+          </div>
         )}
 
         {activeTab === 'terminal' && (

@@ -26,7 +26,11 @@ export function isSafeUrl(url: string): boolean {
 
   try {
     const parsed = new URL(trimmed);
-    return Boolean(SAFE_PROTOCOLS[parsed.protocol]);
+    if (SAFE_PROTOCOLS[parsed.protocol]) return true;
+    if (parsed.protocol === 'file:' && (parsed.pathname.endsWith('.html') || parsed.pathname.endsWith('.htm'))) {
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -54,6 +58,9 @@ export function normalizeUrl(input: string): string {
   const lower = trimmed.toLowerCase();
   for (const dangerous of DANGEROUS_SCHEMES) {
     if (lower.startsWith(dangerous)) {
+      if (dangerous === 'file:' && (lower.endsWith('.html') || lower.endsWith('.htm') || lower.includes('.html?') || lower.includes('.htm?'))) {
+        return trimmed;
+      }
       return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
     }
   }

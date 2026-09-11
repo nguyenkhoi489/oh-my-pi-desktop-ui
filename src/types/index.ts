@@ -109,20 +109,8 @@ export interface OmpRetryState {
   success?: boolean;
 }
 
-export type ActiveCanvasTab = 'diff' | 'editor' | 'artifact' | 'terminal' | 'commit';
+export type ActiveCanvasTab = 'diff' | 'editor' | 'browser' | 'terminal' | 'commit';
 
-export type ArtifactType = 'html' | 'react' | 'svg' | 'markdown' | 'plan' | 'walkthrough';
-
-export interface ArtifactDocument {
-  id: string;
-  title: string;
-  type: ArtifactType;
-  content: string;
-  description?: string;
-  language?: string;
-  path?: string;
-  isLoaded?: boolean;
-}
 export interface OmpNotification {
   id: string;
   message: string;

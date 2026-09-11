@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { normalizeUrl, isSafeUrl } from '../src/utils/urlHelper.ts';
-import { configureWebviewSecurity } from '../electron/webview-security.ts';
+import * as os from 'node:os';
+import { pathToFileURL } from 'node:url';
+import {
+  configureWebviewSecurity,
+  isSafeFileUrl,
+  isSafeFileUrlSync,
+  clearCanonicalWsCache,
+  installSessionSecurityFilters,
+} from '../electron/webview-security.ts';
 import { vi } from '../shared/i18n/vi.ts';
 import { en } from '../shared/i18n/en.ts';
 
@@ -229,8 +237,12 @@ await test('BrowserPanel and InspectorPanel enforce persistent DOM mounting and 
 
   // BrowserPanel checks
   assert(
-    browserPanelSrc.includes('partition="persist:omp-agent-browser"'),
-    'BrowserPanel must use persist:omp-agent-browser partition'
+    browserPanelSrc.includes("partition = 'persist:omp-agent-browser'"),
+    'BrowserPanel must default to persist:omp-agent-browser partition'
+  );
+  assert(
+    browserPanelSrc.includes('partition={partition}'),
+    'BrowserPanel must apply partition prop to webview'
   );
   assert(
     browserPanelSrc.includes('allowpopups={false}'),
@@ -357,6 +369,126 @@ await test('BrowserPanel and InspectorPanel support external URL navigation and 
   assert(appSrc.includes('omp:open-in-app-browser'), 'App.tsx listens for omp:open-in-app-browser event');
   assert(appSrc.includes('onOpenBrowser={handleOpenBrowser}'), 'App.tsx passes onOpenBrowser to AgentPanel');
   assert(mainSrc.includes('mainWindow.webContents.setWindowOpenHandler'), 'electron/main.ts intercepts window open to route to in-app browser');
+});
+
+// ----------------------------------------------------
+// Test 7: Canonical Workspace Boundary, Symlink Escape Guard & Deferred Session Filters
+// ----------------------------------------------------
+await test('isSafeFileUrl prevents symlink escapes and configureWebviewSecurity defers session filters until whenReady', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'omp-sec-ws-'));
+  const secretDir = await fs.mkdtemp(path.join(os.tmpdir(), 'omp-sec-ext-'));
+
+  try {
+    clearCanonicalWsCache();
+
+    const safeFile = path.join(tempDir, 'safe.html');
+    await fs.writeFile(safeFile, '<h1>Safe Workspace Content</h1>', 'utf-8');
+    const secretFile = path.join(secretDir, 'credentials.env');
+    await fs.writeFile(secretFile, 'API_KEY=secret_leaked', 'utf-8');
+    const symlinkEscapeFile = path.join(tempDir, 'escape.html');
+    await fs.symlink(secretFile, symlinkEscapeFile);
+    const subDir = path.join(tempDir, 'components');
+    await fs.mkdir(subDir);
+    const symlinkSafeFile = path.join(subDir, 'safe-link.html');
+    await fs.symlink(safeFile, symlinkSafeFile);
+    const safeUrl = pathToFileURL(safeFile).href;
+    const secretUrl = pathToFileURL(secretFile).href;
+    const symlinkEscapeUrl = pathToFileURL(symlinkEscapeFile).href;
+    const symlinkSafeUrl = pathToFileURL(symlinkSafeFile).href;
+
+    assert.equal(isSafeFileUrlSync(symlinkEscapeUrl, tempDir), true, 'Lexical check cannot detect symlink escape');
+
+    const isEscapeAllowed = await isSafeFileUrl(symlinkEscapeUrl, tempDir);
+    assert.equal(isEscapeAllowed, false, 'isSafeFileUrl must resolve realpath and block symlink escape');
+
+    const isSafeAllowed = await isSafeFileUrl(safeUrl, tempDir);
+    assert.equal(isSafeAllowed, true, 'isSafeFileUrl must allow direct file inside workspace');
+
+    const isSafeSymlinkAllowed = await isSafeFileUrl(symlinkSafeUrl, tempDir);
+    assert.equal(isSafeSymlinkAllowed, true, 'isSafeFileUrl must allow symlink pointing within workspace');
+
+    const isSecretAllowed = await isSafeFileUrl(secretUrl, tempDir);
+    assert.equal(isSecretAllowed, false, 'isSafeFileUrl must block direct file outside workspace');
+
+    assert.equal(await isSafeFileUrl('http://localhost:5173', tempDir), false, 'HTTP URL must return false in isSafeFileUrl');
+    assert.equal(await isSafeFileUrl('javascript:alert(1)', tempDir), false, 'javascript URL must return false in isSafeFileUrl');
+    assert.equal(await isSafeFileUrl(safeUrl, null), false, 'Null workspace must return false');
+    assert.equal(await isSafeFileUrl(safeUrl, undefined), false, 'Undefined workspace must return false');
+
+    const installedPartitions = {};
+    const mockSessionProvider = {
+      fromPartition: (partition) => {
+        const sessionMock = {
+          webRequest: {
+            onBeforeRequest: (filter, listener) => {
+              installedPartitions[partition] = { filter, listener };
+            },
+          },
+        };
+        return sessionMock;
+      },
+    };
+
+    let whenReadyResolved = false;
+    let resolveWhenReady = null;
+    const whenReadyPromise = new Promise((resolve) => {
+      resolveWhenReady = () => {
+        whenReadyResolved = true;
+        resolve();
+      };
+    });
+
+    const mockAppWithWhenReady = {
+      on: () => {},
+      isReady: () => whenReadyResolved,
+      whenReady: () => whenReadyPromise,
+    };
+
+    // Configure before app is ready
+    configureWebviewSecurity(
+      mockAppWithWhenReady,
+      () => {},
+      () => tempDir,
+      mockSessionProvider
+    );
+
+    // Before whenReady resolves, filters must NOT be installed yet
+    assert.equal(Object.keys(installedPartitions).length, 0, 'Filters must not install before whenReady resolves');
+
+    // Resolve whenReady
+    resolveWhenReady();
+    await whenReadyPromise;
+    // Allow microtask tick for .then callback
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // Filters must now be installed on both partitions
+    assert(Boolean(installedPartitions['persist:omp-agent-browser']), 'Browser partition filter must be installed');
+    assert(Boolean(installedPartitions['persist:omp-agent-preview']), 'Preview partition filter must be installed');
+
+    const browserFilter = installedPartitions['persist:omp-agent-browser'];
+    assert.deepEqual(browserFilter.filter, { urls: ['file://*/*'] }, 'Filter pattern must target file://*/*');
+
+    const checkUrlCancel = (url) =>
+      new Promise((resolve) => {
+        browserFilter.listener({ url }, (response) => {
+          resolve(response.cancel);
+        });
+      });
+
+    const cancelSafe = await checkUrlCancel(safeUrl);
+    const cancelSafeSymlink = await checkUrlCancel(symlinkSafeUrl);
+    const cancelSymlinkEscape = await checkUrlCancel(symlinkEscapeUrl);
+    const cancelSecret = await checkUrlCancel(secretUrl);
+
+    assert.equal(cancelSafe, false, 'onBeforeRequest must NOT cancel safe workspace file');
+    assert.equal(cancelSafeSymlink, false, 'onBeforeRequest must NOT cancel safe symlink within workspace');
+    assert.equal(cancelSymlinkEscape, true, 'onBeforeRequest MUST cancel symlink escaping workspace');
+    assert.equal(cancelSecret, true, 'onBeforeRequest MUST cancel direct external file');
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(secretDir, { recursive: true, force: true }).catch(() => {});
+    clearCanonicalWsCache();
+  }
 });
 
 console.log(`\nAll ${passCount} browser-panel verify tests passed successfully!`);

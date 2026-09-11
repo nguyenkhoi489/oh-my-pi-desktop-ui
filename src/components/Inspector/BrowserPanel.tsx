@@ -12,7 +12,7 @@ import {
   RefreshCw,
   Loader2,
 } from 'lucide-react';
-import { normalizeUrl, isLocalFileTarget, extractFilePath } from '../../utils/urlHelper';
+import { normalizeUrl, isLocalFileTarget, extractFilePath, toFileUrl } from '../../utils/urlHelper';
 import { useI18n } from '../../i18n/I18nProvider';
 import type { ElectronWebviewElement } from '../../types';
 
@@ -22,6 +22,7 @@ export interface BrowserPanelProps {
   onSendUrlToChat?: (url: string) => void;
   isAgentDriving?: boolean;
   className?: string;
+  partition?: string;
 }
 
 interface WebviewNavigateEvent extends Event {
@@ -45,6 +46,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
   onSendUrlToChat,
   isAgentDriving = false,
   className = '',
+  partition = 'persist:omp-agent-browser',
 }) {
   const { t } = useI18n();
   const [url, setUrl] = useState<string>(initialUrl);
@@ -65,11 +67,15 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
   const navigateTo = useCallback((targetUrl: string) => {
     if (isLocalFileTarget(targetUrl)) {
       const filePath = extractFilePath(targetUrl);
-      if (filePath) {
+      const isHtml = Boolean(filePath && (filePath.toLowerCase().endsWith('.html') || filePath.toLowerCase().endsWith('.htm')));
+      if (filePath && !isHtml) {
         window.dispatchEvent(
           new CustomEvent('omp:open-file', { detail: { path: filePath } })
         );
         return;
+      }
+      if (filePath && isHtml) {
+        targetUrl = toFileUrl(filePath);
       }
     }
     const normalized = normalizeUrl(targetUrl);
@@ -447,7 +453,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = memo(function BrowserPa
           <webview
             ref={webviewRef as unknown as React.RefObject<HTMLDivElement>}
             src={url}
-            partition="persist:omp-agent-browser"
+            partition={partition}
             allowpopups={false}
             className="w-full h-full border-none"
             style={{ width: '100%', height: '100%' }}

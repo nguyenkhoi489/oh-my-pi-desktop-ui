@@ -214,3 +214,12 @@ export function isMarkdownFile(fileName: string): boolean {
     lower.endsWith('.mdx')
   );
 }
+
+/**
+ * Checks if a file is an HTML document
+ */
+export function isHtmlFile(fileNameOrPath: string): boolean {
+  if (!fileNameOrPath) return false;
+  const lower = fileNameOrPath.toLowerCase();
+  return lower.endsWith('.html') || lower.endsWith('.htm') || lower.endsWith('.xhtml');
+}

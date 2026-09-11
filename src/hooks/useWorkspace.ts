@@ -1,8 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { WorkspaceFile, ActiveCanvasTab, ArtifactDocument } from '../types';
-import { DEMO_WORKSPACE_FILES, DEMO_ARTIFACTS } from '../mock/demoData';
-import { discoverWorkspaceArtifacts } from '../utils/artifactDiscovery';
-
+import { useState, useCallback, useRef } from 'react';
+import { WorkspaceFile, ActiveCanvasTab } from '../types';
+import { DEMO_WORKSPACE_FILES } from '../mock/demoData';
 interface UseWorkspaceOptions {
   onProcessStarted?: () => void | Promise<void>;
 }
@@ -25,16 +23,6 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
   selectedFileRef.current = selectedFile;
   const [fileContent, setFileContent] = useState<string>('');
   const [activeTab, setActiveTab] = useState<ActiveCanvasTab>('diff');
-
-  // Artifacts & Plans dynamic state
-  const [artifacts, setArtifacts] = useState<ArtifactDocument[]>(
-    isElectron ? [] : DEMO_ARTIFACTS
-  );
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string>(
-    isElectron ? '' : DEMO_ARTIFACTS[0]?.id || ''
-  );
-  const hydratingRef = useRef<Set<string>>(new Set());
-
   const findFirstFile = (tree: WorkspaceFile[]): WorkspaceFile | null => {
     for (const item of tree) {
       if (!item.isDirectory) return item;
@@ -46,70 +34,6 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
     return null;
   };
 
-  // Reload selected artifact when not loaded or marked for reload
-  useEffect(() => {
-    const api = window.electronAPI;
-    if (!api || !selectedArtifactId) return;
-    const target = artifacts.find((a) => a.id === selectedArtifactId);
-    if (!target || target.isLoaded || !target.path || hydratingRef.current.has(target.id)) return;
-
-    const targetId = target.id;
-    hydratingRef.current.add(targetId);
-    api
-      .readFile(target.path)
-      .catch((err) => {
-        console.error('[useWorkspace] Failed to read artifact content:', target.path, err);
-        return '';
-      })
-      .then((content) => {
-        setArtifacts((prev) =>
-          prev.map((item) => (item.id === targetId ? { ...item, content, isLoaded: true } : item))
-        );
-      })
-      .finally(() => hydratingRef.current.delete(targetId));
-  }, [selectedArtifactId, artifacts]);
-
-  // Update artifacts list when file tree changes, keep content but mark for reload
-  const syncArtifactsFromFiles = useCallback((dirFiles: WorkspaceFile[]) => {
-    if (!isElectron) {
-      setArtifacts(DEMO_ARTIFACTS);
-      setSelectedArtifactId((prev) => prev || DEMO_ARTIFACTS[0]?.id || '');
-      return;
-    }
-
-    const discovered = discoverWorkspaceArtifacts(dirFiles);
-    setArtifacts((prevArtifacts) => {
-      const prevMap = new Map(prevArtifacts.map((a) => [a.id, a]));
-      return discovered.map((item) => {
-        const existing = prevMap.get(item.id);
-        return existing?.isLoaded ? { ...item, content: existing.content } : item;
-      });
-    });
-    setSelectedArtifactId((prevId) =>
-      discovered.some((a) => a.id === prevId) ? prevId : discovered[0]?.id || ''
-    );
-  }, [isElectron]);
-
-  const selectArtifact = useCallback((id: string) => {
-    setSelectedArtifactId(id);
-  }, []);
-
-  const markArtifactStale = useCallback((predicate: (art: ArtifactDocument) => boolean) => {
-    setArtifacts((prev) =>
-      prev.map((item) => (item.isLoaded && predicate(item) ? { ...item, isLoaded: false } : item))
-    );
-  }, []);
-
-  const reloadArtifact = useCallback((id?: string) => {
-    const targetId = id || selectedArtifactId;
-    if (!targetId) return;
-    markArtifactStale((art) => art.id === targetId);
-  }, [selectedArtifactId, markArtifactStale]);
-
-  // Called when engine writes file so corresponding artifact is reloaded
-  const invalidateArtifactByPath = useCallback((filePath: string) => {
-    markArtifactStale((art) => art.path === filePath);
-  }, [markArtifactStale]);
 
   const openFolderDialog = useCallback(async (customPath?: string, opts?: { isSessionSwitch?: boolean }) => {
     if (window.electronAPI) {
@@ -124,7 +48,6 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
 
         const dirFiles = await window.electronAPI.readDirectory(folderPath);
         setFiles(dirFiles);
-        syncArtifactsFromFiles(dirFiles);
 
         const firstFile = findFirstFile(dirFiles);
         if (firstFile) {
@@ -148,7 +71,7 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
         }
       }
     }
-  }, [options, syncArtifactsFromFiles]);
+  }, [options]);
 
   const selectFile = useCallback(async (file: WorkspaceFile) => {
     if (file.isDirectory) return;
@@ -185,7 +108,6 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
       try {
         const dirFiles = await window.electronAPI.readDirectory(workspacePath);
         setFiles(dirFiles);
-        syncArtifactsFromFiles(dirFiles);
 
         setSelectedFile((currentSelected) => {
           if (!currentSelected) return null;
@@ -200,7 +122,7 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
         console.error('[useWorkspace] Failed to refresh files:', err);
       }
     }
-  }, [workspacePath, syncArtifactsFromFiles]);
+  }, [workspacePath]);
 
   const saveFileContent = useCallback(async (filePath: string, content: string): Promise<boolean> => {
     if (!filePath) return false;
@@ -211,7 +133,6 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
           if (selectedFileRef.current?.path === filePath) {
             setFileContent(content);
           }
-          invalidateArtifactByPath(filePath);
           return true;
         }
         return false;
@@ -224,10 +145,9 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
       if (selectedFileRef.current?.path === filePath) {
         setFileContent(content);
       }
-      invalidateArtifactByPath(filePath);
       return true;
     }
-  }, [invalidateArtifactByPath]);
+  }, []);
 
   return {
     workspacePath,
@@ -237,11 +157,6 @@ export function useWorkspace(options?: UseWorkspaceOptions) {
     fileContent,
     activeTab,
     setActiveTab,
-    artifacts,
-    selectedArtifactId,
-    selectArtifact,
-    reloadArtifact,
-    invalidateArtifactByPath,
     openFolderDialog,
     selectFile,
     refreshFiles,

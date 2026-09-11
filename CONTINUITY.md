@@ -14,6 +14,25 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-10 — Remove Artifacts & Plan, Add Live Preview Globe Button & Full-width Canvas Browser
+- **State:**
+  - **Remove Artifacts & Plan:** Xóa bỏ hoàn toàn tính năng Artifacts & Plan (`ArtifactViewer.tsx`, `artifactDiscovery.ts`, `verify-artifacts-hydration.mjs`), gỡ bỏ logic quét 50 file trong `useWorkspace.ts`, loại bỏ `DEMO_ARTIFACTS` và types không dùng (`ArtifactType`, `ArtifactDocument`), dọn sạch 6 i18n keys thừa (`artifact.*`). Giữ nguyên vẹn `ArtifactsOverview.tsx` (tab Changes).
+  - **Live Preview Globe Button in CodeEditor:** Thêm icon Địa cầu (Globe) trên thanh công cụ `CodeEditor.tsx` khi mở file HTML (sử dụng predicate dùng chung `isHtmlFile` hỗ trợ case-insensitive `.html`, `.htm`, `.xhtml`). Bấm icon sẽ kích hoạt Live Preview.
+  - **Full-width Browser on Canvas:** CanvasContainer tích hợp tab Trình duyệt Web full-width với `BrowserPanel` cô lập trên partition `persist:omp-agent-preview`. Hỗ trợ lazy-mount (`hasVisitedBrowser`) và `previewNonce` để tự động refresh khi bấm lại icon Địa cầu.
+  - **Session-Level Webview Security:** Cấu hình `onBeforeRequest` cho `file://*/*` trên cả 2 partition `persist:omp-agent-browser` và `persist:omp-agent-preview`, đảm bảo chỉ cho phép nạp file nằm trong `workspacePath` của dự án (chặn đứng mọi truy cập trái phép qua `loadURL`, `src` hay subresource). Giải quyết cả target file và workspace thành canonical realpath bất đồng bộ (không block Electron main thread), chặn đứng nguy cơ symlink escape directory traversal. Hoãn kích hoạt bộ lọc partition cho tới khi `app.whenReady()` hoàn tất để tránh lỗi gọi `session.fromPartition` sớm. Phân biệt rành mạch guest webview qua danh tính session để `WebviewGuestRegistry` không bị ghi đè, bảo vệ trọn vẹn hạ tầng agent driving và clean-slate.
+  - **Verification:**
+    - `npm run test:browser-panel`: 7/7 passed (bao gồm symlink escape & deferred whenReady registration).
+    - `npm run test:browser-cdp-driver`: 41/41 passed.
+    - `npm run test:clean-slate`: 76/76 passed.
+    - `npm run test:fast-session-switching`: 72/72 passed.
+    - `npm run test:commit-assistant`: 13/13 passed.
+    - `npm run test:file-preview-links`, `test:editor-save`, `test:center-chat-layout`, `test:unsaved-guard`, `test:git-timeline`: 100% passed.
+    - `npm run test:i18n`: 3608 passed, 0 failed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi TypeCheck.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng cho người dùng trải nghiệm thực tế.
+- **Refs:** `src/components/Canvas/CanvasContainer.tsx`, `src/components/Canvas/CodeEditor.tsx`, `electron/webview-security.ts`, `src/utils/fileLanguage.ts`, `src/utils/urlHelper.ts`
+
 ## 2026-09-10 — Tool Call Sources & Outputs Popover, Native Webview CDP Driving & Clean Slate Reset
 - **State:**
   - **Chat Tool Calls & Subagents Grouping (`ChatTurnContextCard`):** Đóng gói toàn bộ tool calls trong cùng một turn (cả streaming trực tiếp qua `activeToolCalls` lẫn lịch sử đã hoàn thành `msg.toolCalls`) thành `ChatTurnContextCard` nhỏ gọn (< 50px mặc định). Hỗ trợ Popover 2 ngăn **Sources** và **Outputs**, chuyển file trực tiếp tới editor hoặc Inspector Diff, hiển thị spinner và nhãn tool đang chạy khi streaming.

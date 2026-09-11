@@ -13,11 +13,12 @@ import {
   RotateCcw,
   X,
   GitCommit,
+  Globe,
 } from 'lucide-react';
 import { WorkspaceFile, ThemeMode, GitCommitSummary } from '../../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { FileTimelineDrawer } from './FileTimelineDrawer';
-import { getFileLanguage, getLanguageLabel, isMarkdownFile } from '../../utils/fileLanguage';
+import { getFileLanguage, getLanguageLabel, isMarkdownFile, isHtmlFile } from '../../utils/fileLanguage';
 import { useI18n } from '../../i18n/I18nProvider';
 
 interface CodeEditorProps {
@@ -27,6 +28,7 @@ interface CodeEditorProps {
   onSaveFile?: (filePath: string, content: string) => Promise<boolean>;
   onDirtyChange?: (dirty: boolean) => void;
   onDraftChange?: (draft: string) => void;
+  onOpenLivePreview?: () => void;
 }
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -36,6 +38,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   onSaveFile,
   onDirtyChange,
   onDraftChange,
+  onOpenLivePreview,
 }) => {
   const { t } = useI18n();
   const [editorValue, setEditorValue] = useState<string>(content);
@@ -194,7 +197,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const isMarkdown = isMarkdownFile(file.name);
   const language = getFileLanguage(file.name);
   const languageLabel = getLanguageLabel(file.name);
-
+  const isHtml = Boolean(file?.path && isHtmlFile(file.path));
   return (
     <div className="flex-1 flex flex-col h-full bg-background overflow-hidden">
       {/* Editor Header Bar */}
@@ -258,6 +261,19 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Live Preview Button for HTML files */}
+          {isHtml && onOpenLivePreview && (
+            <button
+              type="button"
+              onClick={onOpenLivePreview}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium bg-surface text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 border border-amber-500/30 hover:bg-amber-500/10 transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-2xs"
+              title={t('editor.livePreview')}
+            >
+              <Globe className="w-3.5 h-3.5 shrink-0" />
+              <span>{t('editor.livePreview')}</span>
+            </button>
           )}
 
           {/* Timeline Toggle Button */}

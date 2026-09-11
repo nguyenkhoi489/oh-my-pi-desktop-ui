@@ -1,9 +1,87 @@
-/**
- * Webview security hardening for Electron guest webcontents.
- */
 
-import type { App, WebContents } from 'electron';
+import type { App, WebContents, Session } from 'electron';
+import electronPkg from 'electron';
+import path from 'path';
+import fs from 'fs';
 
+interface ElectronWithSession {
+  session?: {
+    fromPartition?: (partition: string) => Session;
+  };
+}
+const electron = (typeof electronPkg === 'object' && electronPkg !== null
+  ? ('default' in electronPkg ? (electronPkg.default as ElectronWithSession) : (electronPkg as ElectronWithSession))
+  : {}) as ElectronWithSession;
+const electronSession = electron.session;
+
+const canonicalWsCache = new Map<string, string>();
+
+export function clearCanonicalWsCache(): void {
+  canonicalWsCache.clear();
+}
+
+async function getCanonicalWs(wsPath: string): Promise<string> {
+  const cached = canonicalWsCache.get(wsPath);
+  if (cached) return cached;
+  const real = await fs.promises.realpath(wsPath);
+  if (canonicalWsCache.size >= 50) {
+    canonicalWsCache.clear();
+  }
+  canonicalWsCache.set(wsPath, real);
+  return real;
+}
+
+export function isSafeFileUrlSync(urlStr: string, workspacePath?: string | null): boolean {
+  if (!workspacePath) return false;
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== 'file:') return false;
+    const pathname = decodeURIComponent(parsed.pathname).replace(/^\/([a-zA-Z]:)/, '$1');
+    const resolvedPath = path.resolve(pathname);
+    const resolvedWs = path.resolve(workspacePath);
+    const relative = path.relative(resolvedWs, resolvedPath);
+    return !relative.startsWith('..') && !path.isAbsolute(relative);
+  } catch {
+    return false;
+  }
+}
+
+export async function isSafeFileUrl(urlStr: string, workspacePath?: string | null): Promise<boolean> {
+  if (!isSafeFileUrlSync(urlStr, workspacePath)) {
+    return false;
+  }
+  try {
+    const parsed = new URL(urlStr);
+    const pathname = decodeURIComponent(parsed.pathname).replace(/^\/([a-zA-Z]:)/, '$1');
+    const resolvedPath = path.resolve(pathname);
+    const resolvedWs = path.resolve(workspacePath!);
+
+    const [canonicalWs, canonicalPath] = await Promise.all([
+      getCanonicalWs(resolvedWs),
+      fs.promises.realpath(resolvedPath),
+    ]);
+
+    const relative = path.relative(canonicalWs, canonicalPath);
+    return !relative.startsWith('..') && !path.isAbsolute(relative);
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedWebviewNavigation(urlStr: string, getWorkspacePath?: () => string | null | undefined): boolean {
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'about:') {
+      return true;
+    }
+    if (parsed.protocol === 'file:') {
+      return isSafeFileUrlSync(urlStr, getWorkspacePath?.());
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
 export interface WebviewPreferences {
   preload?: string;
   partition?: string;
@@ -20,6 +98,7 @@ export interface WebviewAttachParams {
   src?: string;
   partition?: string;
   allowpopups?: boolean;
+  'data-role'?: string;
   [key: string]: unknown;
 }
 
@@ -71,6 +150,8 @@ export interface ElectronAppWithEvents {
     event: string,
     listener: (event: unknown, ...args: unknown[]) => void
   ): unknown;
+  isReady?(): boolean;
+  whenReady?(): Promise<void>;
 }
 export class WebviewGuestRegistry {
   private static guestContents: WebContents | null = null;
@@ -94,16 +175,64 @@ export class WebviewGuestRegistry {
 }
 
 
-/**
- * Attaches security lockdown handlers for all webviews created in the Electron application.
- */
+export function installSessionSecurityFilters(
+  sessionProvider?: { fromPartition?: (partition: string) => Session | unknown },
+  getWorkspacePath?: () => string | null | undefined
+): void {
+  const sessionApi = (sessionProvider || electronSession) as {
+    fromPartition?: (partition: string) => {
+      webRequest?: {
+        onBeforeRequest?: (
+          filter: { urls: string[] },
+          listener: (details: { url: string }, callback: (response: { cancel: boolean }) => void) => void
+        ) => void;
+      };
+    };
+  };
+
+  if (!sessionApi?.fromPartition) return;
+
+  for (const partition of ['persist:omp-agent-browser', 'persist:omp-agent-preview']) {
+    try {
+      const s = sessionApi.fromPartition(partition);
+      if (s?.webRequest?.onBeforeRequest) {
+        s.webRequest.onBeforeRequest({ urls: ['file://*/*'] }, (details, callback) => {
+          void isSafeFileUrl(details.url, getWorkspacePath?.())
+            .then((allowed) => {
+              callback({ cancel: !allowed });
+            })
+            .catch(() => {
+              callback({ cancel: true });
+            });
+        });
+      }
+    } catch (err) {
+      console.error('[WebviewSecurity] Failed to attach onBeforeRequest for', partition, err);
+    }
+  }
+}
+
 export function configureWebviewSecurity(
   appInstance: App | ElectronAppWithEvents,
-  openExternalFn?: (url: string) => void | Promise<unknown>
+  openExternalFn?: (url: string) => void | Promise<unknown>,
+  getWorkspacePath?: () => string | null | undefined,
+  sessionProvider?: { fromPartition?: (partition: string) => Session | unknown }
 ): void {
+  // Defer session-level partition filter installation until the Electron app is ready
+  const appWithReady = appInstance as { isReady?: () => boolean; whenReady?: () => Promise<void> };
+  const setupFilters = () => installSessionSecurityFilters(sessionProvider, getWorkspacePath);
+
+  if (typeof appWithReady.isReady === 'function' && appWithReady.isReady()) {
+    setupFilters();
+  } else if (typeof appWithReady.whenReady === 'function') {
+    void appWithReady.whenReady().then(setupFilters).catch((err) => {
+      console.error('[WebviewSecurity] Failed waiting for app.whenReady', err);
+    });
+  } else {
+    setupFilters();
+  }
   // Cast to standard event-emitter interface for uniform registration
   const emitter = appInstance as ElectronAppWithEvents;
-
   emitter.on('web-contents-created', (_event: unknown, rawContents: unknown) => {
     const contents = rawContents as HostWebContents & Partial<GuestWebContents>;
     if (!contents || typeof contents.on !== 'function') return;
@@ -120,31 +249,35 @@ export function configureWebviewSecurity(
       webPreferences.webSecurity = true;
       webPreferences.allowRunningInsecureContent = false;
 
-      // Force dedicated persistent partition
-      webPreferences.partition = 'persist:omp-agent-browser';
-      params.partition = 'persist:omp-agent-browser';
+      // Force dedicated persistent partition (preserving preview partition for canvas preview)
+      const isPreview = params.partition === 'persist:omp-agent-preview' || params['data-role'] === 'preview';
+      const targetPartition = isPreview ? 'persist:omp-agent-preview' : 'persist:omp-agent-browser';
+      webPreferences.partition = targetPartition;
+      params.partition = targetPartition;
 
       // Unconditionally deny popup window creation
       params.allowpopups = false;
 
       // Block dangerous schemes on initial attachment
-      if (params.src) {
-        try {
-          const parsed = new URL(params.src);
-          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:' && parsed.protocol !== 'about:') {
-            waEvent.preventDefault();
-          }
-        } catch {
-          waEvent.preventDefault();
-        }
+      if (params.src && !isAllowedWebviewNavigation(params.src, getWorkspacePath)) {
+        waEvent.preventDefault();
       }
     });
 
     if (typeof contents.getType === 'function' && contents.getType() === 'webview') {
-      WebviewGuestRegistry.setGuest(contents);
+      const isPreview = Boolean(
+        electronSession?.fromPartition &&
+        contents.session &&
+        contents.session === electronSession.fromPartition('persist:omp-agent-preview')
+      );
+      if (!isPreview) {
+        WebviewGuestRegistry.setGuest(contents);
+      }
       if (typeof contents.on === 'function') {
         contents.on('destroyed', () => {
-          WebviewGuestRegistry.clearGuest(contents);
+          if (!isPreview) {
+            WebviewGuestRegistry.clearGuest(contents);
+          }
         });
       }
       // Deny all permission requests and permission checks for guest webview sessions
@@ -174,12 +307,7 @@ export function configureWebviewSecurity(
       }
 
       contents.on('will-navigate', (navEvent, navigationUrl) => {
-        try {
-          const parsed = new URL(navigationUrl);
-          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:' && parsed.protocol !== 'about:') {
-            navEvent.preventDefault();
-          }
-        } catch {
+        if (!isAllowedWebviewNavigation(navigationUrl, getWorkspacePath)) {
           navEvent.preventDefault();
         }
       });

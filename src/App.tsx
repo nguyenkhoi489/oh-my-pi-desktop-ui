@@ -466,11 +466,6 @@ export function App() {
     fileContent,
     activeTab,
     setActiveTab,
-    artifacts,
-    selectedArtifactId,
-    selectArtifact,
-    reloadArtifact,
-    invalidateArtifactByPath,
     openFolderDialog,
     selectFile,
     refreshFiles,
@@ -737,12 +732,10 @@ export function App() {
     const leftPending = Boolean(prev && prev.id === activeDiff.id && prev.status === 'pending' && activeDiff.status !== 'pending');
     if (!isNewDiff && !leftPending) return;
 
-    invalidateArtifactByPath(activeDiff.filePath);
-
     if (activeDiff.op === 'create' || activeDiff.op === 'delete') {
       refreshFiles();
     }
-  }, [activeDiff, refreshFiles, invalidateArtifactByPath]);
+  }, [activeDiff, refreshFiles]);
 
   const handleRestartEngine = async () => {
     if (window.electronAPI) {
@@ -1084,10 +1077,6 @@ export function App() {
               onDirtyChange={setIsEditorDirty}
               onDraftChange={setEditorDraftContent}
               theme={theme}
-              artifacts={artifacts}
-              selectedArtifactId={selectedArtifactId}
-              onSelectArtifact={selectArtifact}
-              onReloadArtifact={reloadArtifact}
               workspacePath={workspacePath}
               availableModels={availableModels}
               selectedModel={selectedModel}

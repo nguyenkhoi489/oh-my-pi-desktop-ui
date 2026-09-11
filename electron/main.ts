@@ -1645,7 +1645,11 @@ ipcMain.handle('git:file-at-commit', async (_, commitHash: string, filePath: str
     return { success: false, content: null, error: err?.message };
   }
 });
-configureWebviewSecurity(app, (url) => shell.openExternal(url));
+configureWebviewSecurity(
+  app,
+  (url) => shell.openExternal(url),
+  () => (ompBridge ? ompBridge.getWorkspacePath() : null)
+);
 
 app.whenReady().then(() => {
   createWindow();
