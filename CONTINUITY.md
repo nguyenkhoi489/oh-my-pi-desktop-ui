@@ -14,6 +14,55 @@ Entry template:
 - **Next:** ranked next steps
 - **Refs:** report/journal/plan paths
 ```
+## 2026-09-11 — Turn Duration & Processing Time Observability Complete
+- **State:**
+  - Hoàn tất 100% cả 4 giai đoạn của tính năng hiển thị thời gian xử lý lượt (Turn Duration Observability) đạt chuẩn CLI parity.
+  - Phase 1: Tạo `src/utils/timeFormat.ts` (`formatDuration`, `patchAssistantTurnDuration`) và mở rộng kiểu dữ liệu `ChatMessage`, `RuntimeSessionData`, `ActiveStateSnapshot` với các trường `durationMs`, `modelDurationMs`, `durationKind`.
+  - Phase 2: Thêm bộ tích lũy `currentTurnModelDuration` trong `electron/omp-bridge.ts`, gom thời gian API model từ mọi bước gọi tool, bổ sung `rawTurnCursor` tính `durationMs` ước tính khi nạp lịch sử, đồng thời bảo toàn phân luồng đa runtime trong `src/utils/runtimeDemux.ts` và `src/hooks/useOmpRpc.ts`.
+  - Phase 3: Tạo leaf component memoized `ElapsedDuration.tsx` (interval 200ms riêng biệt không re-render cha), tích hợp đồng hồ bấm giờ trực tiếp trên `AgentActivityIndicator`, đồng hồ đang stream và badge thời gian hoàn tất trong `ChatHistory.tsx` cùng tooltip tường minh.
+  - Phase 4: Thêm đầy đủ i18n keys cho cả `shared/i18n/vi.ts` và `shared/i18n/en.ts` (3620/3620 passed trong `test:i18n`). Xây dựng bộ test suite độc lập `scripts/verify-turn-duration.mjs` kiểm tra 6 kịch bản (65/65 passed) và gắn vào `package.json`.
+  - Xác minh thành công cả hai lệnh kiểm tra kiểu `npx tsc --noEmit` và `npx tsc -p tsconfig.node.json --noEmit` (0 lỗi).
+- **In-flight:** Không có. Tính năng đã hoàn thành và sẵn sàng sử dụng.
+- **Next:** Người dùng trải nghiệm tính năng trên giao diện OMP Agent Desktop.
+- **Refs:** `plans/260911-1129-turn-duration-observability/plan.md`, `scripts/verify-turn-duration.mjs`
+
+## 2026-09-11 — Plan: Turn Duration & Processing Time Observability
+- **State:**
+  - Hoàn thiện bản kế hoạch kỹ thuật 4 giai đoạn (`plans/260911-1129-turn-duration-observability/`) giải quyết bài toán hiển thị thời gian xử lý từ lúc bắt đầu đến khi kết thúc (CLI-parity).
+  - Tách bạch dứt khoát giữa `durationMs` (Turn Wall Time đo từ `turn_start` đến `idle`) và `modelDurationMs` (Cumulative Model API Duration).
+  - Bổ sung cờ xuất xứ `durationKind?: 'measured' | 'estimated'` trên `ChatMessage` để phân biệt thời gian đo trực tiếp với độ lệch ước tính từ file lịch sử `.jsonl`.
+  - Thiết kế bộ tích lũy Bridge `currentTurnModelDuration` gom toàn bộ thời gian gọi tool không kèm text.
+  - Thiết kế cursor nạp lịch sử an toàn (`rawTurnCursor`), bỏ qua ước tính cho các tin nhắn `queued` / `steering`.
+  - Thiết kế khởi tạo thời gian phía foreground trên bước nhảy `idle → busy` và cách ly hoàn toàn đa runtime song song.
+  - Thiết kế component con memoized `ElapsedDuration` tự quản lý interval 200ms để giữ vững hiệu năng 60fps cho `ChatHistory`.
+  - Tách hàm thuần túy `patchAssistantTurnDuration` dùng chung cho cả demux và hook, tương thích 100% với harness Node ESM của repo (không cần React testing library/hooks mocks).
+  - Thiết kế role guard (`msg.role === 'assistant'`) chặn `fileMention` làm lệch ID tin nhắn cần patch duration.
+  - Kế hoạch kiểm thử tự động với `scripts/verify-turn-duration.mjs` bao phủ 6 kịch bản (biên format, đa runtime, foreground follow-up, abort an toàn, nạp lịch sử, file-attachment turn) và 100% i18n parity.
+- **In-flight:** Kế hoạch đã được xác thực (`ak plan validate: valid`), chờ người dùng kích hoạt triển khai (`ak:cook`).
+- **Next:**
+  1. Chạy `/ak:cook plans/260911-1129-turn-duration-observability` để thực thi Phase 1 (Format utilities & Data Model Contracts).
+  2. Triển khai Phase 2 (Bridge Translation & Runtime Demux Logic).
+  3. Triển khai Phase 3 (UI Live Stopwatch & Completed Badges).
+  4. Triển khai Phase 4 (Automated Tests & i18n).
+- **Refs:** `plans/260911-1129-turn-duration-observability/plan.md`, `plans/260911-1129-turn-duration-observability/phase-*.md`
+
+## 2026-09-11 — Fix Webview GUEST_VIEW_MANAGER_CALL ERR_ABORTED (-3) & In-Page Anchor Navigation Loops
+- **State:**
+  - **Root Cause Resolution:** Khắc phục triệt để lỗi IPC Electron `GUEST_VIEW_MANAGER_CALL: ERR_ABORTED (-3)` và Chromium Mojo `Message 2 rejected by interface blink.mojom.Widget` khi xem file tài liệu HTML có anchor links (`#packages`, `#architecture`, `#database`, `#pipelines`) hoặc khi mở In-App Browser (`http://localhost:5173/`).
+  - **Decoupled `<webview>` Static `src`:** Chuyển `<webview src={initialSrcRef.current}>` sang sử dụng ref khởi tạo cố định thay vì reactive `src={url}` re-binding trong React, ngăn chặn React tự động ghi đè thuộc tính DOM `src` khi re-render (việc ghi đè `src` kích hoạt top-level navigation kép làm Chromium abort điều hướng in-flight).
+  - **In-Page Anchor Loop Defense:** Ngắt vòng lặp phản hồi giữa `did-navigate-in-page` và `loadURL`. Khi nhấp anchor link nội bộ `#hash`, thanh địa chỉ và trạng thái URL cập nhật tức thì mà không kích hoạt lại top-level `loadURL` hay reload webview ngoài ý muốn.
+  - **Navigation Deduplication & Abort Suppression:** Hàm `navigateTo()` trong `BrowserPanel.tsx` tự động bỏ qua nếu webview đã ở đúng URL mục tiêu; bổ sung `.catch(...)` bắt và triệt tiêu mã lỗi bình thường `ERR_ABORTED (-3)` khi điều hướng bị thay thế.
+  - **URL Normalizer & File Path Extraction:** Cập nhật `normalizeUrl` và `extractFilePath` trong `src/utils/urlHelper.ts` hỗ trợ toàn diện `file://` URLs chứa hash fragments (`#hash`) và query params (`?query`), không còn bị chuyển đổi nhầm thành Google Search URL hay làm hỏng kiểm tra `isHtml`.
+  - **Canvas Preview Fallback:** Cập nhật `CanvasContainer.tsx` truyền `initialUrl={previewUrl || 'about:blank'}` ngăn chặn việc vô tình tải nhầm `http://localhost:5173` trên partition `persist:omp-agent-preview`.
+  - **Verification:**
+    - `scripts/verify-browser-panel.mjs`: 8/8 passed (bao gồm Test 8 kiểm tra navigation loop defense và anchor URL safety).
+    - `scripts/verify-browser-cdp-driver.mjs`: 41/41 passed.
+    - `scripts/verify-clean-slate-and-artifacts.mjs`: 76/76 passed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 lỗi TypeCheck.
+- **In-flight:** Không có.
+- **Next:** Sẵn sàng cho người dùng trải nghiệm thực tế.
+- **Refs:** `plans/reports/debug-260911-1105-webview-guest-view-abort.md`, `src/components/Inspector/BrowserPanel.tsx`, `src/utils/urlHelper.ts`, `src/components/Canvas/CanvasContainer.tsx`, `scripts/verify-browser-panel.mjs`
+
 ## 2026-09-10 — Remove Artifacts & Plan, Add Live Preview Globe Button & Full-width Canvas Browser
 - **State:**
   - **Remove Artifacts & Plan:** Xóa bỏ hoàn toàn tính năng Artifacts & Plan (`ArtifactViewer.tsx`, `artifactDiscovery.ts`, `verify-artifacts-hydration.mjs`), gỡ bỏ logic quét 50 file trong `useWorkspace.ts`, loại bỏ `DEMO_ARTIFACTS` và types không dùng (`ArtifactType`, `ArtifactDocument`), dọn sạch 6 i18n keys thừa (`artifact.*`). Giữ nguyên vẹn `ArtifactsOverview.tsx` (tab Changes).
@@ -1842,3 +1891,34 @@ Entry template:
     - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit` passed with 0 errors.
 - **In-flight:** None.
 - **Next:** Ready for subagent execution in OMP-Agent.
+
+## 2026-09-11 — Webview Anchor Navigation Feedback Loop & GUEST_VIEW_MANAGER_CALL Abort Fix
+- **State:** Diagnosed and resolved terminal error storm (`GUEST_VIEW_MANAGER_CALL: ERR_ABORTED (-3)` & `blink.mojom.Widget` rejection) during webview anchor link navigation:
+  - **Root Cause:**
+    - `<webview src={url}>` had dual competing navigation authorities: React JSX DOM attribute re-binding on every render + imperative `wv.loadURL(normalized)`.
+    - On clicking anchor links (`#packages`, `#architecture`, `#database`, `#pipelines`), webview fired `did-navigate-in-page`. The listener called `setUrl(navEvent.url)`. React re-rendered `<webview src={url}>`. In Electron, assigning `src` initiates a top-level guest navigation via `GUEST_VIEW_MANAGER_CALL`. Chromium immediately aborted the duplicate navigation with `ERR_ABORTED (-3)`.
+    - When aborted mid-flight, `RenderWidgetHost` mojo endpoints were severed while input/focus messages were in transit, triggering `Message 2 rejected by interface blink.mojom.Widget`.
+  - **Changes:**
+    - `src/components/Inspector/BrowserPanel.tsx`:
+      - Established single imperative navigation authority: `<webview>` uses static `src={initialSrcRef.current}` set once on mount. React re-renders never touch `<webview src>`.
+      - `navigateTo(targetUrl, force = false)` handles all programmatic navigations via `wv.loadURL`. Supports `force = true` on `urlNonce` change for same-URL refresh (Live Preview globe button).
+      - Guarded DOM readiness: checks `isDomReadyRef.current` before calling `wv.getURL()`; queues pending navigations if called before `dom-ready`.
+      - Traps and suppresses normal navigation replacement error `ERR_ABORTED (-3)` in `wv.loadURL().catch()`.
+      - Fixed `onDidFailLoad` to safely ignore error code -3 on main frame.
+    - `src/components/Canvas/CanvasContainer.tsx`:
+      - Added activeTab refs to prevent double-incrementing `previewNonce` on first visit.
+      - Set fallback `initialUrl={previewUrl || 'about:blank'}` to avoid loading localhost on preview partition.
+    - `scripts/verify-browser-panel.mjs`:
+      - Added Test 8 verifying static initial src contract and in-page anchor loops mitigation.
+    - `scripts/verify-webview-live.mjs`:
+      - Added live Electron verification suite running actual Electron binary (v34.5.8) with isolated userData.
+      - Models the bug in an informational negative baseline, and strictly proves 0 errors in stderr (0 GUEST_VIEW_MANAGER_CALL, 0 blink.mojom.Widget), 4/4 anchor navigation sequence, and same-URL refresh under the fix.
+  - **Verification:**
+    - `npm run test:webview-live`: 100% SUCCESS.
+    - `npm run test:browser-panel`: 8/8 passed.
+    - `npm run test:browser-cdp-driver`: 41/41 passed.
+    - `npm run test:clean-slate`: 76/76 passed.
+    - `npm run test:file-preview-links`: 18/18 passed.
+    - `npx tsc --noEmit` & `npx tsc -p tsconfig.node.json --noEmit`: 0 errors.
+- **In-flight:** None.
+- **Next:** Ready for live user interaction with presentation and documentation webviews.

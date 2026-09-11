@@ -226,6 +226,7 @@ export class OmpBridge {
   private chunkReassembler: RpcChunkReassembler = new RpcChunkReassembler();
   private thinkingAccumulator: ThinkingAccumulator = new ThinkingAccumulator();
   private currentTurnId: string | null = null;
+  private currentTurnModelDuration: number = 0;
   private workspacePath: string | null = null;
   private activeToolCalls: Map<string, ToolCall> = new Map();
   private writeSnapshots: Map<string, string | null> = new Map();
@@ -2558,6 +2559,7 @@ export class OmpBridge {
   public translateHistoryMessages(rawMessages: AgentMessage[]): ChatMessage[] {
     const result: ChatMessage[] = [];
     const toolCallsMap = new Map<string, ToolCall>();
+    let rawTurnCursor: { userTimestamp: number; isQueuedOrSteering: boolean } | null = null;
 
     for (let i = 0; i < rawMessages.length; i++) {
       const msg = rawMessages[i];
@@ -2610,12 +2612,19 @@ export class OmpBridge {
         }
 
         if (userText.trim() || role === 'user') {
+          rawTurnCursor = {
+            userTimestamp: timestamp,
+            isQueuedOrSteering: Boolean(
+              msg && typeof msg === 'object' && ((msg as any).queued || (msg as any).steering)
+            ),
+          };
           result.push({
             id: `msg-user-${timestamp}-${i}`,
             role: 'user',
             content: userText,
             timestamp,
             steering: Boolean(msg && typeof msg === 'object' && 'steering' in msg && msg.steering) || undefined,
+            queued: Boolean(msg && typeof msg === 'object' && 'queued' in msg && (msg as any).queued) || undefined,
           });
           continue;
         }
@@ -2665,6 +2674,10 @@ export class OmpBridge {
         const textParts: string[] = [];
         let thinkingBlock: ThinkingBlock | undefined;
         const toolCalls: ToolCall[] = [];
+        const currentDuration =
+          typeof (msg as any).duration === 'number' && (msg as any).duration > 0
+            ? (msg as any).duration
+            : undefined;
 
         const rawContent = (msg as any).content;
         if (typeof rawContent === 'string') {
@@ -2772,12 +2785,28 @@ export class OmpBridge {
             if (errorMessage) lastMsg.errorMessage = errorMessage;
           }
           lastMsg.timestamp = timestamp;
+          if (currentDuration !== undefined) {
+            lastMsg.modelDurationMs = (lastMsg.modelDurationMs || 0) + currentDuration;
+          }
+          if (rawTurnCursor && !rawTurnCursor.isQueuedOrSteering && timestamp > rawTurnCursor.userTimestamp) {
+            lastMsg.durationMs = timestamp - rawTurnCursor.userTimestamp;
+            lastMsg.durationKind = 'estimated';
+          }
         } else {
+          const modelDurationMs = currentDuration !== undefined ? currentDuration : undefined;
+          let durationMs: number | undefined;
+          let durationKind: 'measured' | 'estimated' | undefined;
+          if (rawTurnCursor && !rawTurnCursor.isQueuedOrSteering && timestamp > rawTurnCursor.userTimestamp) {
+            durationMs = timestamp - rawTurnCursor.userTimestamp;
+            durationKind = 'estimated';
+          }
           result.push({
             id: `msg-assistant-${timestamp}-${i}`,
             role: 'assistant',
             content: textParts.join('\n'),
             timestamp,
+            ...(modelDurationMs !== undefined ? { modelDurationMs } : {}),
+            ...(durationMs !== undefined ? { durationMs, durationKind } : {}),
             ...(thinkingBlock ? { thinking: thinkingBlock } : {}),
             ...(toolCalls.length > 0 ? { toolCalls } : {}),
             ...(isError ? { isError: true, stopReason, ...(errorMessage ? { errorMessage } : {}) } : {}),
@@ -3365,10 +3394,12 @@ export class OmpBridge {
         this.thinkingAccumulator.reset();
         this.activeToolCalls.clear();
         this.writeSnapshots.clear();
+        this.currentTurnModelDuration = 0;
         break;
 
       case 'turn_start':
         this.currentTurnId = (frame as TurnStartEvent).turnId || String(Date.now());
+        this.currentTurnModelDuration = 0;
         this.setStatus('thinking');
         if (this.retryState.isRetrying) {
           this.retryState = { isRetrying: false };
@@ -3562,6 +3593,9 @@ export class OmpBridge {
           this.emit('omp:message-complete', chatMessage);
         } else
         if (msg && msg.role === 'assistant') {
+          if (typeof msg.duration === 'number' && msg.duration > 0) {
+            this.currentTurnModelDuration += msg.duration;
+          }
           const textParts: string[] = [];
           if (Array.isArray(msg.content)) {
             for (const block of msg.content) {
@@ -3607,6 +3641,7 @@ export class OmpBridge {
               stopReason,
               errorMessage,
               isError: Boolean(isError),
+              modelDurationMs: this.currentTurnModelDuration > 0 ? this.currentTurnModelDuration : undefined,
             };
             this.emit('omp:message-complete', chatMessage);
           }
@@ -3659,6 +3694,7 @@ export class OmpBridge {
           this.retryState = { isRetrying: false };
             this.emit('omp:retry-state', this.retryState);
         }
+        this.currentTurnModelDuration = 0;
         break;
 
       case 'agent_end':
@@ -3673,6 +3709,7 @@ export class OmpBridge {
         }
         this.activeToolCalls.clear();
         this.writeSnapshots.clear();
+        this.currentTurnModelDuration = 0;
         for (const id of this.pendingUiRequests.keys()) {
             this.emit('omp:ui-request-cancel', id);
         }

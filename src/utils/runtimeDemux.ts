@@ -6,6 +6,7 @@ import type {
   OmpAgentStatus,
   OmpEventEnvelope,
 } from '../types/index.ts';
+import { patchAssistantTurnDuration } from './timeFormat.ts';
 
 export interface RuntimeSessionData {
   runtimeId: string;
@@ -19,6 +20,8 @@ export interface RuntimeSessionData {
   currentStreamText: string;
   activeDiff: FileDiffItem | null;
   lastActiveAt: number;
+  turnStartedAt?: number | null;
+  currentTurnAssistantId?: string | null;
 }
 
 export interface ActiveStateSnapshot {
@@ -28,6 +31,8 @@ export interface ActiveStateSnapshot {
   currentStreamText: string;
   activeDiff: FileDiffItem | null;
   status: OmpAgentStatus;
+  turnStartedAt?: number | null;
+  currentTurnAssistantId?: string | null;
 }
 
 // Khoi tao session state mac dinh cho mot runtime
@@ -48,6 +53,8 @@ export function createEmptyRuntimeSession(
     currentStreamText: '',
     activeDiff: null,
     lastActiveAt: Date.now(),
+    turnStartedAt: null,
+    currentTurnAssistantId: null,
   };
 }
 
@@ -80,6 +87,24 @@ export function handleRuntimeEnvelope(
     if (isBackground && wasBusy && newStatus === 'idle') {
       updated.attention = true;
     }
+
+    if (newStatus === 'thinking' || newStatus === 'streaming' || newStatus === 'executing_tool') {
+      if (!updated.turnStartedAt) {
+        updated.turnStartedAt = Date.now();
+      }
+    } else if (newStatus === 'idle') {
+      if (isBackground && updated.turnStartedAt && updated.currentTurnAssistantId) {
+        const turnDuration = Date.now() - updated.turnStartedAt;
+        updated.messages = patchAssistantTurnDuration(
+          updated.messages,
+          updated.currentTurnAssistantId,
+          turnDuration,
+          'measured'
+        );
+      }
+      updated.turnStartedAt = null;
+      updated.currentTurnAssistantId = null;
+    }
     updated.status = newStatus;
   }
 
@@ -105,6 +130,9 @@ export function handleRuntimeEnvelope(
       }
     } else if (channel === 'omp:message-complete') {
       const msg = payload as ChatMessage;
+      if (msg && msg.role === 'assistant') {
+        updated.currentTurnAssistantId = msg.id;
+      }
       updated.messages.push(msg);
       updated.currentStreamText = '';
       updated.currentThinking = null;
@@ -138,6 +166,8 @@ export function saveActiveSessionToMap(
       currentStreamText: activeState.currentStreamText,
       activeDiff: activeState.activeDiff,
       status: activeState.status,
+      turnStartedAt: activeState.turnStartedAt !== undefined ? activeState.turnStartedAt : (current.turnStartedAt ?? null),
+      currentTurnAssistantId: activeState.currentTurnAssistantId !== undefined ? activeState.currentTurnAssistantId : (current.currentTurnAssistantId ?? null),
       lastActiveAt: Date.now(),
     },
   };
@@ -157,6 +187,8 @@ export function restoreSessionFromMap(
       currentStreamText: '',
       activeDiff: null,
       status: 'idle',
+      turnStartedAt: null,
+      currentTurnAssistantId: null,
     };
   }
   return {
@@ -166,5 +198,7 @@ export function restoreSessionFromMap(
     currentStreamText: target.currentStreamText,
     activeDiff: target.activeDiff,
     status: target.status,
+    turnStartedAt: target.turnStartedAt ?? null,
+    currentTurnAssistantId: target.currentTurnAssistantId ?? null,
   };
 }

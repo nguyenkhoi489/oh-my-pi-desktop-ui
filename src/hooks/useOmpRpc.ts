@@ -77,6 +77,7 @@ import {
   createEmptyRuntimeSession,
   RuntimeSessionData,
 } from '../utils/runtimeDemux';
+import { patchAssistantTurnDuration } from '../utils/timeFormat';
 export function useOmpRpc() {
   const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI);
   const [status, setStatus] = useState<OmpAgentStatus>('idle');
@@ -112,6 +113,9 @@ export function useOmpRpc() {
   const [followUpQueue, setFollowUpQueue] = useState<FollowUpQueueItem[]>([]);
   const followUpQueueRef = useRef<FollowUpQueueItem[]>([]);
   const lastStatusRef = useRef<OmpAgentStatus>('idle');
+  const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
+  const activeTurnStartedAtRef = useRef<number | null>(null);
+  const activeCurrentTurnAssistantIdRef = useRef<string | null>(null);
   const pendingFollowUpsRef = useRef(0);
   const [availableModels, setAvailableModels] = useState<OmpModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState<OmpModelInfo | null>(null);
@@ -485,6 +489,9 @@ export function useOmpRpc() {
           setActiveToolCalls([]);
           setActiveDiff(null);
           activeDiffRef.current = null;
+          activeTurnStartedAtRef.current = null;
+          activeCurrentTurnAssistantIdRef.current = null;
+          setTurnStartedAt(null);
           setUiRequestQueue([]);
           uiRequestQueueRef.current = [];
           setNotifications([]);
@@ -595,7 +602,9 @@ export function useOmpRpc() {
             setActiveToolCalls([]);
             setActiveDiff(null);
             activeDiffRef.current = null;
-            setUiRequestQueue([]);
+            activeTurnStartedAtRef.current = null;
+            activeCurrentTurnAssistantIdRef.current = null;
+            setTurnStartedAt(null);
             setFollowUpQueue([]);
             uiRequestQueueRef.current = [];
             setNotifications([]);
@@ -638,7 +647,9 @@ export function useOmpRpc() {
       setActiveToolCalls([]);
       setActiveDiff(null);
       activeDiffRef.current = null;
-      setUiRequestQueue([]);
+      activeTurnStartedAtRef.current = null;
+      activeCurrentTurnAssistantIdRef.current = null;
+      setTurnStartedAt(null);
       setFollowUpQueue([]);
       uiRequestQueueRef.current = [];
       followUpQueueRef.current = [];
@@ -808,6 +819,8 @@ export function useOmpRpc() {
               currentStreamText: currentStreamTextRef.current,
               activeDiff: activeDiffRef.current,
               status: lastStatusRef.current,
+              turnStartedAt: activeTurnStartedAtRef.current,
+              currentTurnAssistantId: activeCurrentTurnAssistantIdRef.current,
             });
           }
 
@@ -822,7 +835,9 @@ export function useOmpRpc() {
             setActiveDiff(restored.activeDiff);
             setStatus(restored.status);
             lastStatusRef.current = restored.status;
-
+            activeTurnStartedAtRef.current = restored.turnStartedAt ?? null;
+            activeCurrentTurnAssistantIdRef.current = restored.currentTurnAssistantId ?? null;
+            setTurnStartedAt(restored.turnStartedAt ?? null);
             const updatedMap = {
               ...currentMap,
               [targetRuntimeId]: {
@@ -932,7 +947,22 @@ export function useOmpRpc() {
       const leftIdle = lastStatusRef.current === 'idle' && newStatus !== 'idle';
       lastStatusRef.current = newStatus;
       setStatus(newStatus);
+      if (leftIdle) {
+        if (activeTurnStartedAtRef.current === null) {
+          const now = Date.now();
+          activeTurnStartedAtRef.current = now;
+          setTurnStartedAt(now);
+        }
+      }
       if (newStatus === 'idle') {
+        if (activeTurnStartedAtRef.current !== null && activeCurrentTurnAssistantIdRef.current !== null) {
+          const turnDuration = Date.now() - activeTurnStartedAtRef.current;
+          const assistantId = activeCurrentTurnAssistantIdRef.current;
+          setMessages((prev) => patchAssistantTurnDuration(prev, assistantId, turnDuration, 'measured'));
+        }
+        activeTurnStartedAtRef.current = null;
+        activeCurrentTurnAssistantIdRef.current = null;
+        setTurnStartedAt(null);
         refreshEngineState();
         refreshSessions();
         refreshCommands();
@@ -1022,6 +1052,9 @@ export function useOmpRpc() {
         ...msg,
         toolCalls: rawMsgTools || (currentTools.length > 0 ? [...currentTools] : undefined),
       };
+      if (finalMsg.role === 'assistant') {
+        activeCurrentTurnAssistantIdRef.current = finalMsg.id;
+      }
       setMessages((prev) => {
         // Guard against duplicate fileMention if same files already exist
         if (finalMsg.role === 'fileMention') {
@@ -1198,7 +1231,10 @@ export function useOmpRpc() {
         content: prompt,
         timestamp: Date.now(),
       };
-
+      const now = Date.now();
+      activeTurnStartedAtRef.current = now;
+      activeCurrentTurnAssistantIdRef.current = null;
+      setTurnStartedAt(now);
       // Simulate attached context card in browser preview when engine is absent
       const newMessages: ChatMessage[] = [];
       if (!window.electronAPI && contextFiles && contextFiles.length > 0) {
@@ -1471,6 +1507,9 @@ export function useOmpRpc() {
     }
     setStatus('idle');
     lastStatusRef.current = 'idle';
+    activeTurnStartedAtRef.current = null;
+    activeCurrentTurnAssistantIdRef.current = null;
+    setTurnStartedAt(null);
   }, []);
 
   const respondPermission = useCallback(
@@ -2368,6 +2407,7 @@ export function useOmpRpc() {
     startSay,
     stopSay,
     activeRuntimeId,
+    turnStartedAt,
     runtimeStates,
     switchRuntime,
     clearRuntimeAttention,

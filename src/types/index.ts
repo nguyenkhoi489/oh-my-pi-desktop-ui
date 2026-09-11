@@ -41,6 +41,9 @@ export interface ChatMessage {
   stopReason?: string | null;
   errorMessage?: string;
   isError?: boolean;
+  durationMs?: number;
+  modelDurationMs?: number;
+  durationKind?: 'measured' | 'estimated';
 }
 
 export interface FileDiffItem {

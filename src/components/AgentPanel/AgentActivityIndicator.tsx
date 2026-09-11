@@ -1,17 +1,20 @@
 import React from 'react';
 import { RotateCw, Zap } from 'lucide-react';
 import { OmpAgentStatus, ToolCall } from '../../types';
+import { ElapsedDuration } from './ElapsedDuration';
 import { useI18n } from '../../i18n/I18nProvider';
 
 interface AgentActivityIndicatorProps {
   status: OmpAgentStatus;
   activeToolCalls?: ToolCall[];
+  turnStartedAt?: number | null;
 }
 
 // Render agent activity status strip right above composer
 const AgentActivityIndicatorComponent: React.FC<AgentActivityIndicatorProps> = ({
   status,
   activeToolCalls,
+  turnStartedAt,
 }) => {
   const { t } = useI18n();
   if (status === 'idle' || status === 'waiting_permission') return null;
@@ -45,9 +48,12 @@ const AgentActivityIndicatorComponent: React.FC<AgentActivityIndicatorProps> = (
   }
 
   return (
-    <div className="px-4 py-2 border-t border-border bg-surface/60 flex items-center gap-2 shrink-0 animate-fade-in">
-      <span className="flex items-center justify-center w-4 shrink-0">{icon}</span>
-      <span className={`text-xs font-medium truncate ${tone}`}>{label}</span>
+    <div className="px-4 py-2 border-t border-border bg-surface/60 flex items-center justify-between gap-2 shrink-0 animate-fade-in">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="flex items-center justify-center w-4 shrink-0">{icon}</span>
+        <span className={`text-xs font-medium truncate ${tone}`}>{label}</span>
+      </div>
+      <ElapsedDuration turnStartedAt={turnStartedAt} className="text-xs font-mono text-slate-400 dark:text-zinc-500 shrink-0 flex items-center gap-1" />
     </div>
   );
 };

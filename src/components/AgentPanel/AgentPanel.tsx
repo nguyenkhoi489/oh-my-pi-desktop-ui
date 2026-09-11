@@ -81,6 +81,7 @@ export interface AgentPanelProps {
   diffFiles?: FileDiffItem[];
   subagents?: OmpSubagentInfo[];
   onSelectDiff?: (index: number) => void;
+  turnStartedAt?: number | null;
 }
 
 const AgentPanelComponent: React.FC<AgentPanelProps> = ({
@@ -130,6 +131,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
   approvalMode,
   onSelectApprovalMode,
   onOpenStatsPanel,
+  turnStartedAt,
 }) => {
   const { t } = useI18n();
   const handleRetry = useCallback((prompt?: string) => {
@@ -193,6 +195,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
             onOpenBrowser={onOpenBrowser}
             onRetry={handleRetry}
             onRepairSession={onRepairSession}
+            turnStartedAt={turnStartedAt}
           />
 
           {/* Engine Status & Widgets Strip */}
@@ -234,7 +237,7 @@ const AgentPanelComponent: React.FC<AgentPanelProps> = ({
           )}
 
           {/* Agent activity indicator, rendered above composer */}
-          <AgentActivityIndicator status={status} activeToolCalls={activeToolCalls} />
+          <AgentActivityIndicator status={status} activeToolCalls={activeToolCalls} turnStartedAt={turnStartedAt} />
 
           {/* Floating Changes Card */}
           {floatingChanges && (floatingChanges.filesChanged > 0 || (floatingChanges.insertions || 0) > 0 || (floatingChanges.deletions || 0) > 0) && (

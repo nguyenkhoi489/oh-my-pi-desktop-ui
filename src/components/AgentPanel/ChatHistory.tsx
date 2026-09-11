@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   RotateCcw,
   Wrench,
+  Clock,
 } from 'lucide-react';
 import { ChatMessage, ThinkingBlock, ToolCall, OmpAgentStatus, FileDiffItem, OmpSubagentInfo } from '../../types';
 import { ThinkingCard } from './ThinkingCard';
@@ -24,6 +25,8 @@ import { ImageLightboxModal } from './ImageLightboxModal';
 import { AttachmentImage } from '../Common/AttachmentImage';
 import { stripAnsi } from '../../../shared/text/strip-ansi';
 import { useI18n } from '../../i18n/I18nProvider';
+import { formatDuration } from '../../utils/timeFormat';
+import { ElapsedDuration } from './ElapsedDuration';
 
 interface ChatHistoryProps {
   messages: ChatMessage[];
@@ -39,6 +42,7 @@ interface ChatHistoryProps {
   onOpenBrowser?: (url: string) => void;
   onRetry?: (prompt?: string) => void;
   onRepairSession?: () => void;
+  turnStartedAt?: number | null;
 }
 
 interface ErrorAssistantCardProps {
@@ -235,6 +239,7 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
   onRetry,
   onRepairSession,
   onOpenBrowser,
+  turnStartedAt,
 }) => {
   const { t } = useI18n();
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
@@ -464,6 +469,19 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
                 <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
                   OMP Agent
                 </span>
+                {typeof msg.durationMs === 'number' && msg.durationMs > 0 && (
+                  <span
+                    className="flex items-center gap-1 text-[11px] font-mono text-slate-400 dark:text-zinc-500 ml-1 select-none"
+                    title={
+                      msg.durationKind === 'estimated'
+                        ? t('chatHistory.durationEstimated')
+                        : t('chatHistory.duration')
+                    }
+                  >
+                    <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                    <span>{formatDuration(msg.durationMs)}</span>
+                  </span>
+                )}
               </div>
               {msg.content && msg.content.trim().length > 0 && (
                 <button
@@ -570,6 +588,10 @@ const ChatHistoryComponent: React.FC<ChatHistoryProps> = ({
             <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
               OMP Agent
             </span>
+            <ElapsedDuration
+              turnStartedAt={turnStartedAt}
+              className="flex items-center gap-1 text-[11px] font-mono text-blue-500/80 dark:text-blue-400/80 ml-1 select-none"
+            />
           </div>
           <div className="p-3.5 rounded-2xl text-[13.5px] leading-relaxed text-slate-800 dark:text-zinc-200 min-w-0 max-w-full overflow-hidden break-words">
             <MarkdownRenderer content={currentStreamText} isStreaming={true} onOpenUrl={onOpenBrowser} onOpenFile={onOpenFile} />

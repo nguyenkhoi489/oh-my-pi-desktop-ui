@@ -337,6 +337,7 @@ export function App() {
     runtimeStates,
     switchRuntime,
     resetChat,
+    turnStartedAt,
   } = useOmpRpc();
 
   // Principle #1: When app loads, if OMP is not installed, open the Requirement Modal
@@ -1063,6 +1064,7 @@ export function App() {
                 setRightSidebarView('inspector');
                 setInspectorTab('changes');
               }}
+              turnStartedAt={turnStartedAt}
             />
           ) : (
             <CanvasContainer
@@ -1183,6 +1185,7 @@ export function App() {
                 approvalMode={approvalMode}
                 onSelectApprovalMode={setApprovalMode}
                 onOpenStatsPanel={() => setIsStatsPanelOpen(true)}
+                turnStartedAt={turnStartedAt}
               />
             )}
           </div>
